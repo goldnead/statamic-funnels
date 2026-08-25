@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.3.1
+
+### Fixed
+
+- **No funnel was walkable. Every step answered 419 Page Expired.** The step renderer used a plain
+  Laravel `view()`, which does not run Statamic's cascade — and the cascade is where `csrf_field`
+  comes from. So the four `{{ csrf_field }}` in the shipped template rendered to an empty string,
+  every form posted without a token, and Laravel rejected it. The addon's core function, walking a
+  funnel, did not work at all.
+
+  It survived because the suite posted to the advance route directly with a hand-made session, which
+  proves the route and says nothing about the page. `tests/Feature/AFunnelIsWalkableTest.php` now
+  reads the token off the rendered page and posts it back, the way a browser does — the two halves
+  are finally joined up.
+
+  Verified on a running installation afterwards: entry → capture → offer → decline → next step, all
+  302s.
+
 ## 1.3.0
 
 ### What's fixed

@@ -205,7 +205,19 @@ class FunnelController
         // addon's own template and there is nothing here to collide with. A
         // site writing its own template should read `funnel:` — that is the
         // documented shape, and the only one that is safe on an entry.
-        return view($view, ['funnel' => $context] + $context);
+        //
+        // `csrf_field` has to be handed over explicitly. A plain Laravel
+        // `view()` does not run Statamic's cascade, which is where that
+        // variable normally comes from — so the four `{{ csrf_field }}` in the
+        // shipped template rendered to nothing, every form posted without a
+        // token, and **every step of every funnel answered 419 Page Expired**.
+        // The addon's own core function was not walkable, and it looked like a
+        // session problem rather than a missing variable.
+        return view($view, [
+            'funnel' => $context,
+            'csrf_field' => csrf_field(),
+            'csrf_token' => csrf_token(),
+        ] + $context);
     }
 
     /**
