@@ -5,13 +5,19 @@ namespace Goldnead\StatamicFunnels\Http\Controllers\Cp;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
 use Goldnead\StatamicFunnels\Support\GraphWriter;
+use Goldnead\StatamicFunnels\Support\PreviewToken;
+use Goldnead\StatamicFunnels\Support\StepOrder;
+use Goldnead\StatamicFunnels\Support\StepStats;
 use Goldnead\StatamicOffers\Models\Offer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Statamic\Facades\Collection;
+use Statamic\Facades\Entry as EntryFacade;
 use Statamic\Facades\Form;
+use Statamic\Facades\Site;
 use Statamic\Http\Controllers\CP\CpController;
 
 /**
@@ -23,6 +29,9 @@ use Statamic\Http\Controllers\CP\CpController;
  */
 class FunnelsController extends CpController
 {
+    /** How many entries one picker request returns. */
+    protected const ENTRY_LIMIT = 100;
+
     public function __construct(
         protected StepRegistry $registry,
         protected GraphWriter $writer,
@@ -93,6 +102,10 @@ class FunnelsController extends CpController
                 ])->values()->all(),
             ],
             'library' => $this->registry->library(),
+            // Where people stop. Passed with the page so the canvas can show it
+            // on the cards themselves: a drop-off number in a report somewhere
+            // else is a number nobody looks at.
+            'stats' => StepStats::forFunnel($funnel),
             // Translated here, not in the browser. Statamic's JavaScript `__()`
             // only knows core and application strings; an addon's language file
             // never reaches it, so a label written in JS renders as the raw key
@@ -112,7 +125,136 @@ class FunnelsController extends CpController
                 'value' => $offer->handle,
                 'label' => $offer->name.($offer->amount() ? ' · '.$offer->amount().' '.$offer->currency() : ''),
             ])->all(),
+            // Entries are not sent whole. A site with five thousand pages would
+            // put five thousand rows into the page payload for a field most
+            // steps never use, so the picker searches instead — and gets the
+            // ones already chosen up front, so a saved step shows a title
+            // rather than an id.
+            'entries' => $this->entryOptions(null, $funnel),
+            'entriesUrl' => cp_route('utilities.funnels.entries'),
+            'previewUrl' => cp_route('utilities.funnels.preview', $funnel->id),
+            // The same device list the Control Panel's own Live Preview offers,
+            // read from the same config key. A funnel preview that invented its
+            // own three widths would disagree with the entry preview one screen
+            // over, and the user would be right to trust neither.
+            'devices' => collect(config('statamic.live_preview.devices', []))
+                ->map(fn ($size, $name) => [
+                    'name' => $name,
+                    'width' => $size['width'] ?? null,
+                    'height' => $size['height'] ?? null,
+                ])->values()->all(),
         ]);
+    }
+
+    /**
+     * Mint a pass and say where to point the iframe.
+     *
+     * The graph comes from the editor, not from the table, so the preview shows
+     * what is on screen rather than what was last saved. That is the whole
+     * point: a preview of the saved version answers a question nobody asked.
+     */
+    public function preview(Request $request, Funnel $funnel)
+    {
+        $this->authorizeAccess();
+
+        $data = $request->validate([
+            'node_key' => ['required', 'string', 'max:64'],
+            // The pass from the last refresh, so this one overwrites it instead
+            // of leaving another copy of the graph on disk.
+            'token' => ['nullable', 'string', 'max:128'],
+            'nodes' => ['array'],
+            'nodes.*.node_key' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
+            'nodes.*.type' => ['required', 'string', 'max:64'],
+            'nodes.*.label' => ['nullable', 'string', 'max:191'],
+            'nodes.*.config' => ['nullable', 'array'],
+            'nodes.*.disabled' => ['nullable', 'boolean'],
+            'edges' => ['array'],
+            'edges.*.from_node_key' => ['required', 'string', 'max:64'],
+            'edges.*.to_node_key' => ['required', 'string', 'max:64'],
+            'edges.*.from_output' => ['nullable', 'string', 'max:64'],
+        ]);
+
+        $graph = ['nodes' => $data['nodes'] ?? [], 'edges' => $data['edges'] ?? []];
+
+        $token = PreviewToken::mint($funnel, $graph, $data['token'] ?? null);
+
+        return response()->json([
+            'token' => $token,
+            'url' => route('statamic-funnels.preview', [
+                'funnel' => $funnel->handle,
+                'nodeKey' => $data['node_key'],
+            ]).'?token='.$token,
+            // The order the stepper walks. Worked out on the server because it
+            // is the same walk the front end does, and two implementations of
+            // "what comes next" is one too many.
+            'order' => StepOrder::keys($graph['nodes'], $graph['edges']),
+        ]);
+    }
+
+    /** What the entry picker searches. */
+    public function entries(Request $request)
+    {
+        $this->authorizeAccess();
+
+        return response()->json([
+            'options' => $this->entryOptions((string) $request->query('search', '')),
+        ]);
+    }
+
+    /**
+     * Entries as picker options.
+     *
+     * Only what a visitor could actually be shown: published entries in
+     * collections that have a route. A step pointing at a routeless entry would
+     * render, but nothing about it would be a page, and the picker offering it
+     * is the kind of choice that only shows up as a bug later.
+     *
+     * @return list<array<string, string>>
+     */
+    protected function entryOptions(?string $search = null, ?Funnel $funnel = null): array
+    {
+        $collections = Collection::all()
+            ->filter(fn ($collection) => $collection->route(Site::default()->handle()) !== null)
+            ->map(fn ($collection) => $collection->handle())
+            ->values();
+
+        if ($collections->isEmpty()) {
+            return [];
+        }
+
+        $query = EntryFacade::query()
+            ->whereIn('collection', $collections->all())
+            ->where('published', true);
+
+        if ($search !== null && $search !== '') {
+            $query->where('title', 'like', '%'.$search.'%');
+        }
+
+        $entries = $query->orderBy('title')->limit(self::ENTRY_LIMIT)->get();
+
+        // Whatever the funnel already points at, even if the search or the
+        // limit would have left it out. Otherwise editing an unrelated step
+        // silently blanks a picker that had a value.
+        if ($funnel) {
+            $chosen = $funnel->steps
+                ->map(fn ($step) => $step->config['entry'] ?? null)
+                ->filter(fn ($id) => is_string($id) && $id !== '')
+                ->reject(fn ($id) => $entries->contains(fn ($entry) => $entry->id() === $id))
+                ->map(fn ($id) => EntryFacade::find($id))
+                ->filter();
+
+            $entries = $entries->merge($chosen);
+        }
+
+        return $entries
+            ->map(fn ($entry) => [
+                'value' => (string) $entry->id(),
+                'label' => (string) $entry->get('title', $entry->slug()),
+                'group' => (string) ($entry->collection()->title() ?? $entry->collection()->handle()),
+            ])
+            ->sortBy(fn (array $option) => $option['group'].$option['label'])
+            ->values()
+            ->all();
     }
 
     public function update(Request $request, Funnel $funnel)
@@ -180,8 +322,27 @@ class FunnelsController extends CpController
             ],
             'fields' => [
                 'label' => __('statamic-funnels::nodes.field_label'),
+                'entryPlaceholder' => __('statamic-funnels::nodes.field_entry_placeholder'),
+            ],
+            'stats' => [
+                'visits' => __('statamic-funnels::messages.stats_visits'),
+                'continued' => __('statamic-funnels::messages.stats_continued'),
+                'rate' => __('statamic-funnels::messages.stats_rate'),
+            ],
+            'preview' => [
+                'previous' => __('statamic-funnels::messages.preview_previous'),
+                'next' => __('statamic-funnels::messages.preview_next'),
+                'steps' => __('statamic-funnels::messages.preview_steps'),
+                'close' => __('statamic-funnels::messages.preview_close'),
+                'loading' => __('statamic-funnels::messages.preview_loading'),
+                'failed' => __('statamic-funnels::messages.preview_failed'),
+                'retry' => __('statamic-funnels::messages.preview_retry'),
+                'empty' => __('statamic-funnels::messages.preview_empty'),
+                'frame' => __('statamic-funnels::messages.preview_frame'),
+                'responsive' => __('statamic-funnels::messages.preview_responsive'),
             ],
             'ui' => [
+                'preview' => __('statamic-funnels::messages.preview'),
                 'draft' => __('statamic-funnels::messages.draft'),
                 'live' => __('statamic-funnels::messages.live'),
                 'handle' => __('statamic-funnels::messages.field_handle'),

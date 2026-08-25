@@ -40,6 +40,34 @@ return [
 
     'styles' => true,
 
+    /*
+    |--------------------------------------------------------------------------
+    | A field for a code
+    |--------------------------------------------------------------------------
+    |
+    | Whether an offer page shows a box to type a coupon into. On by default,
+    | because a site that has no coupons has nothing to type and loses nothing.
+    | Off is for sites that never discount and would rather not put the idea in
+    | anybody's head.
+    |
+    */
+
+    'coupons' => true,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Where a step's own template may live
+    |--------------------------------------------------------------------------
+    |
+    | A step can name its own Antlers template. Empty means anywhere under the
+    | views directory; a folder name confines it, which is worth doing on a site
+    | where the people editing funnels are not the people who write templates.
+    | A namespaced name (`vendor::view`) is refused either way.
+    |
+    */
+
+    'template_prefix' => '',
+
     'integrations' => [
         // Hand a captured address to goldnead/statamic-leadhub as a contact.
         'leadhub' => false,

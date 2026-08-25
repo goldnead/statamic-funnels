@@ -8,7 +8,7 @@
  *
  * They are unlayered, and unlayered CSS beats anything in a layer — including
  * every themed rule below. The visible symptom was a minimap that stayed a
- * white box in dark mode, because `@vue-flow/minimap` paints `background: #fff`
+ * white box in dark mode, because `@vue-flow/minimap` paints a fixed light background
  * and nothing in `addon-utilities` can outrank it.
  *
  * The automations editor has never imported them either; the canvas gets its
@@ -48,6 +48,28 @@
     .sa-node--page   { --sa-chip-color: var(--sa-color-page); }
     .sa-node--offer  { --sa-chip-color: var(--sa-color-offer); }
     .sa-node--finish { --sa-chip-color: var(--sa-color-finish); }
+
+    /* The stepper's stops. Same colour per kind as the node cards, because the
+       two are the same set of things and a second colour scheme for them would
+       be a puzzle. */
+    .sa-stop {
+        @apply shrink-0 rounded-full border border-transparent px-2.5 py-1 text-xs font-medium
+               text-gray-600 dark:text-gray-300 whitespace-nowrap
+               hover:bg-gray-100 dark:hover:bg-gray-800;
+    }
+    .sa-stop::before {
+        content: '';
+        @apply me-1.5 inline-block size-1.5 rounded-full align-middle;
+        background: var(--sa-chip-color, var(--theme-color-gray-400));
+    }
+    .sa-stop--on {
+        @apply border-content-border bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100;
+    }
+    .sa-stop--entry   { --sa-chip-color: var(--sa-color-entry); }
+    .sa-stop--page    { --sa-chip-color: var(--sa-color-page); }
+    .sa-stop--capture { --sa-chip-color: var(--sa-color-page); }
+    .sa-stop--offer   { --sa-chip-color: var(--sa-color-offer); }
+    .sa-stop--finish  { --sa-chip-color: var(--sa-color-finish); }
 
     .sa-icon-chip--entry  { --sa-chip-color: var(--sa-color-entry); }
     .sa-icon-chip--page   { --sa-chip-color: var(--sa-color-page); }

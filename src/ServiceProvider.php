@@ -103,6 +103,8 @@ class ServiceProvider extends AddonServiceProvider
             ->docsUrl('https://github.com/goldnead/statamic-funnels#readme')
             ->routes(function ($router) {
                 $router->post('/', [FunnelsController::class, 'store'])->name('store');
+                $router->get('entries', [FunnelsController::class, 'entries'])->name('entries');
+                $router->post('{funnel}/preview', [FunnelsController::class, 'preview'])->name('preview');
                 $router->get('{funnel}/edit', [FunnelsController::class, 'edit'])->name('edit');
                 $router->patch('{funnel}', [FunnelsController::class, 'update'])->name('update');
                 $router->delete('{funnel}', [FunnelsController::class, 'destroy'])->name('destroy');

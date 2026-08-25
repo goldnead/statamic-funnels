@@ -48,6 +48,80 @@ One entry per funnel, because a path has one beginning.
 **Declining is an answer, not a failure.** Most visitors decline; a funnel that treats that as an
 error has nowhere to send them, so the canvas draws both branches and the editor nags about neither.
 
+### Landing pages: point a step at an entry
+
+A step can name a **Statamic entry**, and then that entry *is* the page: its own template, its own
+layout, its own page builder, whatever sets and fields the site has defined. The funnel does not
+render it, it delivers it, through Statamic's own response — so password protection, `private`
+entries and the entry's `redirect` field all keep working.
+
+There is no landing page builder in this addon and there should not be one. Statamic has Bard,
+Replicator and the blueprint the site already uses; a second, worse builder inside an addon is the
+wrong thing to maintain.
+
+The funnel adds its context under a single key, `funnel`:
+
+```antlers
+{{# In any template a step points at. #}}
+{{ if funnel:action }}
+    <form method="POST" action="{{ funnel:action }}">
+        {{ csrf_field }}
+        <button type="submit">Weiter</button>
+    </form>
+{{ /if }}
+```
+
+| Available | What it is |
+|---|---|
+| `funnel:handle`, `funnel:title` | The funnel |
+| `funnel:step:key`, `:type`, `:label`, `:slug` | The step being shown |
+| `funnel:action` | Where the form posts to move on |
+| `funnel:offer` | The offer on an offer step, price included |
+| `funnel:visit:name`, `:email` | What the visitor has told you so far |
+| `funnel:preview` | `true` when the Control Panel is looking |
+
+**One key, not a dozen loose ones**, and that is load-bearing rather than tidy: Statamic merges view
+data *over* an entry's own fields, so a funnel that handed over a flat `body` would blank the `body`
+of the very page it was rendering. Namespacing makes the collision impossible.
+
+An entry that is unpublished falls back to the step's own fields rather than breaking the walk. One
+pulled into draft should not take a running funnel down with it.
+
+### Looking at it before it is live
+
+The editor has a **Preview**. It walks the funnel step by step: the stepper follows the graph, one
+branch to its end and then the other, with the device sizes from `config/live_preview.php`.
+
+What it shows is the graph **on screen**, not the one in the table, so an unsaved headline is
+visible immediately. It works on an unpublished funnel, which is the point. And it writes nothing:
+no visit, no step event, and no impression against an offer — an editor clicking through their own
+funnel twenty times must not move the acceptance rate the offers screen is judged by.
+
+Behind it is a real `Statamic\Facades\Token`, minted only by somebody with the funnels permission,
+reused across a session rather than reissued per keystroke, and good for fifteen minutes.
+
+### Where people stop
+
+Every step card in the editor carries three figures: how many visitors reached it, how many carried
+on from it, and the share. Counted **per visitor**, not per page load, so a reload does not flatter
+a step. A step nobody has reached shows nothing at all, and the last step of a walk shows no rate —
+a thank-you page is not converting at 0 %, it is the end.
+
+### Order bumps and coupon codes
+
+An offer can carry other offers as tick-boxes beside the order button (`bumps` on the offer), and
+the page can take a coupon code. Both are settled on the server:
+
+- Only bumps the **offer** lists can be ticked. The form says which boxes were checked; the offer
+  says which boxes exist, and only the intersection is bought.
+- A coupon code is a *string* from the browser; what it is worth is looked up. The rule that no
+  amount ever comes from a request is intact.
+- A code's last use is claimed with a conditional update, so two people typing it at the same
+  moment cannot both have it. If the loser was mid-purchase, they pay full price rather than
+  failing — a sale lost to a race is worse than a discount missed.
+
+Set `coupons` to `false` to leave the field off the page entirely.
+
 ### URLs
 
 ```
@@ -117,7 +191,7 @@ funnel addon must not start writing into somebody's CRM.
 | `statamic-payments` | takes the money, decides what "paid" means |
 | `statamic-offers` | says what a thing costs *here* |
 | `statamic-leadhub` | receives a captured address as a contact |
-| `statamic-automations` | hears `FunnelStepEntered`, `FunnelOfferAccepted`, `FunnelCompleted` |
+| `statamic-automations` | four trigger nodes: step entered, form submitted, offer accepted, funnel completed |
 | Statamic forms | are the form; this addon never grew its own |
 
 ## Configuration
@@ -128,6 +202,8 @@ funnel addon must not start writing into somebody's CRM.
 | `styles` | `true` | Off for a site with its own design. The markup keeps its class names either way. |
 | `integrations.leadhub` | `false` | On, captured addresses go to LeadHub as contacts. |
 | `integrations.entitlements` | `false` | Off because the payment addon offers the same bridge, and two addons granting the same thing is worse than neither. |
+| `coupons` | `true` | Off leaves the code field off every offer page. |
+| `template_prefix` | `''` | A folder name confines what a step may name as its template. A namespaced name is refused either way. |
 
 ## Multi-site
 

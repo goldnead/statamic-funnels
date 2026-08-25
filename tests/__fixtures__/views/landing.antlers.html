@@ -1,0 +1,9 @@
+{{# A stand-in for a site's own landing page: its own template, its own data,
+    and the funnel's context available on top. #}}
+<h1>{{ title }}</h1>
+
+{{ if funnel:action }}
+    <form method="POST" action="{{ funnel:action }}">
+        <button type="submit">{{ trans key="statamic-funnels::messages.continue" }}</button>
+    </form>
+{{ /if }}

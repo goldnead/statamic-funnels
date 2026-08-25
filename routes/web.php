@@ -16,6 +16,20 @@ $prefix = trim((string) config('statamic-funnels.route_prefix', 'f'), '/');
 Route::get($prefix.'/{funnel}', [FunnelController::class, 'entry'])
     ->name('statamic-funnels.entry');
 
+/*
+ * The Control Panel looking at a step.
+ *
+ * Above the `{slug}` route on purpose: `_preview` would otherwise be read as
+ * the slug of a step, and the first funnel with a step slugged `_preview`
+ * would be a puzzle nobody enjoys.
+ *
+ * Needs a pass minted in the Control Panel. No pass, no page — not a 403 but a
+ * 404, because from outside there is nothing here.
+ */
+Route::get($prefix.'/{funnel}/_preview/{nodeKey}', [FunnelController::class, 'preview'])
+    ->middleware('throttle:60,1')
+    ->name('statamic-funnels.preview');
+
 Route::get($prefix.'/{funnel}/{slug}', [FunnelController::class, 'step'])
     ->name('statamic-funnels.step');
 

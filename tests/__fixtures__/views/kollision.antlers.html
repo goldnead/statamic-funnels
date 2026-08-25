@@ -1,0 +1,5 @@
+{{# Uses the field names most page blueprints use, on purpose: this is the
+    template that catches the funnel context overwriting the entry's own data. #}}
+<h1>{{ headline }}</h1>
+<div>{{ body }}</div>
+{{ if funnel:action }}<form method="POST" action="{{ funnel:action }}"><button>weiter</button></form>{{ /if }}

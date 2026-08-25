@@ -45,6 +45,36 @@
                 <form method="POST" action="{{ action }}" class="funnel-offer__accept">
                     {{ csrf_field }}
                     <input type="hidden" name="accept" value="1">
+
+                    {{# The tick-boxes beside the order button. Which ones exist
+                        is decided by the offer, never by this page: a template
+                        that could add one could add anything. #}}
+                    {{ if offer:bumps }}
+                        <fieldset class="funnel-offer__bumps">
+                            <legend>{{ trans key="statamic-funnels::messages.bumps_legend" }}</legend>
+                            {{ offer:bumps }}
+                                <label class="funnel-bump">
+                                    <input type="checkbox" name="bumps[]" value="{{ handle }}">
+                                    <span class="funnel-bump__text">
+                                        <strong>{{ headline }}</strong>
+                                        {{ if body }}<span class="funnel-bump__body">{{ body | markdown }}</span>{{ /if }}
+                                    </span>
+                                    <span class="funnel-bump__price">
+                                        +{{ amount }} {{ currency }}
+                                        {{ if compare_at }}<s>{{ compare_at }} {{ currency }}</s>{{ /if }}
+                                    </span>
+                                </label>
+                            {{ /offer:bumps }}
+                        </fieldset>
+                    {{ /if }}
+
+                    {{ if offer:coupons }}
+                        <label class="funnel-offer__coupon">
+                            <span>{{ trans key="statamic-funnels::messages.coupon_label" }}</span>
+                            <input type="text" name="coupon" autocomplete="off" spellcheck="false">
+                        </label>
+                    {{ /if }}
+
                     <label>
                         <input type="checkbox" name="confirmed" value="1" required>
                         <span>{{ trans key="statamic-funnels::messages.order_confirmation" }}</span>

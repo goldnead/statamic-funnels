@@ -48,6 +48,26 @@ abstract class StepType
         return [];
     }
 
+    /**
+     * The fields every step with a URL has.
+     *
+     * A step shows a **page**, and there are two ways to say what that page is:
+     * point at a Statamic entry, or write a headline and a bit of text. The
+     * entry wins, and it is the one that matters — a landing page belongs in the
+     * page builder the site already has, not in a textarea inside an addon.
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected static function pageSchema(): array
+    {
+        return [
+            ['handle' => 'entry', 'type' => 'entry', 'label' => __('statamic-funnels::nodes.field_entry'), 'instructions' => __('statamic-funnels::nodes.field_entry_help')],
+            ['handle' => 'template', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_template'), 'instructions' => __('statamic-funnels::nodes.field_template_help')],
+            ['handle' => 'headline', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_headline')],
+            ['handle' => 'body', 'type' => 'textarea', 'label' => __('statamic-funnels::nodes.field_body')],
+        ];
+    }
+
     /** Whether a visitor stands on this step, and it therefore needs a URL. */
     public static function isPage(): bool
     {

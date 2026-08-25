@@ -51,11 +51,8 @@ class OfferStep extends StepType
 
     public static function schema(): array
     {
-        return [
+        return array_merge([
             ['handle' => 'offer', 'type' => 'offer', 'label' => __('statamic-funnels::nodes.field_offer'), 'instructions' => __('statamic-funnels::nodes.field_offer_help')],
-            ['handle' => 'template', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_template'), 'instructions' => __('statamic-funnels::nodes.field_template_help')],
-            ['handle' => 'headline', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_headline')],
-            ['handle' => 'body', 'type' => 'textarea', 'label' => __('statamic-funnels::nodes.field_body')],
-        ];
+        ], self::pageSchema());
     }
 }

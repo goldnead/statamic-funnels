@@ -49,11 +49,8 @@ class CaptureStep extends StepType
 
     public static function schema(): array
     {
-        return [
+        return array_merge([
             ['handle' => 'form', 'type' => 'form', 'label' => __('statamic-funnels::nodes.field_form'), 'instructions' => __('statamic-funnels::nodes.field_form_help')],
-            ['handle' => 'template', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_template'), 'instructions' => __('statamic-funnels::nodes.field_template_help')],
-            ['handle' => 'headline', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_headline')],
-            ['handle' => 'body', 'type' => 'textarea', 'label' => __('statamic-funnels::nodes.field_body')],
-        ];
+        ], self::pageSchema());
     }
 }

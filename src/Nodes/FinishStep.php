@@ -48,11 +48,8 @@ class FinishStep extends StepType
 
     public static function schema(): array
     {
-        return [
-            ['handle' => 'template', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_template'), 'instructions' => __('statamic-funnels::nodes.field_template_help')],
-            ['handle' => 'headline', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_headline')],
-            ['handle' => 'body', 'type' => 'textarea', 'label' => __('statamic-funnels::nodes.field_body')],
+        return array_merge(self::pageSchema(), [
             ['handle' => 'redirect', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_redirect'), 'instructions' => __('statamic-funnels::nodes.field_redirect_help')],
-        ];
+        ]);
     }
 }

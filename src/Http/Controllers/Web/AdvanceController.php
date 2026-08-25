@@ -10,6 +10,7 @@ use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicOffers\Models\Offer;
+use Goldnead\StatamicOffers\Support\Basket;
 use Goldnead\StatamicPayments\Models\Payment;
 use Goldnead\StatamicPayments\Support\Checkout;
 use Goldnead\StatamicPayments\Support\FollowUp;
@@ -127,6 +128,15 @@ class AdvanceController
             return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
         }
 
+        // What was actually ticked and typed, checked against the offer rather
+        // than believed. The browser says which boxes were checked; the offer
+        // says which boxes exist, and only their intersection is bought.
+        $basket = Basket::make(
+            $offer,
+            array_values(array_filter((array) $request->input('bumps', []), 'is_string')),
+            config('statamic-funnels.coupons', true) ? (string) $request->input('coupon', '') : null,
+        );
+
         $prefix = (string) config('statamic-offers.handle_prefix', 'offer:');
         $buyHandle = $prefix.$offer->handle;
 
@@ -183,12 +193,12 @@ class AdvanceController
                 : $this->waiting($funnel, $step);
         }
 
-        $result = $this->checkout->start($buyHandle, [
+        $result = $this->checkout->start($basket->handles(), [
             'email' => $visit->email,
             'name' => $visit->name,
         ], $accepted?->slug
             ? route('statamic-funnels.step', [$funnel->handle, $accepted->slug])
-            : route('statamic-funnels.entry', $funnel->handle));
+            : route('statamic-funnels.entry', $funnel->handle), $basket->discount());
 
         if (! $result) {
             return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);

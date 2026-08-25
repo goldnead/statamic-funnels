@@ -1,9 +1,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { Head, router } from '@statamic/cms/inertia';
-import { Header, Button, Badge, Field, Input, Select, Textarea, Switch, Heading } from '@statamic/cms/ui';
+import { Header, Button, Badge, Field, Input, Select, Textarea, Switch, Heading, Combobox } from '@statamic/cms/ui';
 import { Canvas, NodeLibrary, setNodeOutputSpecs, useHistory } from '@goldnead/flow-canvas';
 import { nodeIcon, withLabels } from '../../support/nodeKinds.js';
+import PreviewPanel from '../../components/PreviewPanel.vue';
 
 /**
  * The funnel editor.
@@ -21,6 +22,11 @@ const props = defineProps({
     publicUrl: { type: String, required: true },
     forms: { type: Array, default: () => [] },
     offers: { type: Array, default: () => [] },
+    entries: { type: Array, default: () => [] },
+    entriesUrl: { type: String, default: '' },
+    previewUrl: { type: String, default: '' },
+    devices: { type: Array, default: () => [] },
+    stats: { type: Object, default: () => ({}) },
     labels: { type: Object, default: () => ({}) },
 });
 
@@ -47,6 +53,7 @@ const selectedKey = ref(null);
 const showLibrary = ref(true);
 const pendingTarget = ref(null);
 const saving = ref(false);
+const showPreview = ref(false);
 
 // The history reads and writes the graph through these two, so a restored
 // snapshot lands where the canvas is looking. Called without them it destructures
@@ -162,12 +169,83 @@ function save() {
     });
 }
 
+/**
+ * Where people stop, on the cards themselves.
+ *
+ * A step nobody has reached shows nothing rather than zeroes: the difference
+ * between "nobody yet" and "everybody left here" is the only reason to put
+ * numbers on a card at all.
+ */
+const nodeStats = computed(() => {
+    const out = {};
+
+    for (const [key, row] of Object.entries(props.stats ?? {})) {
+        if (!row || !row.visits) continue;
+
+        out[key] = [
+            { key: 'visits', icon: 'eye', value: row.visits, label: t('stats', 'visits', 'Visitors here') },
+            // The last step of a walk has nowhere to carry on to. Showing it a
+            // "0 / 0 %" would say it is losing everybody, when in fact it is
+            // where they were meant to end up.
+            ...(row.terminal
+                ? []
+                : [
+                      { key: 'continued', icon: 'arrow-right', value: row.continued, tone: 'done', label: t('stats', 'continued', 'Carried on') },
+                      {
+                          key: 'rate',
+                          icon: 'chart-line',
+                          // Already a string, so the card shows it as given
+                          // rather than rounding it into thousands.
+                          value: row.rate === null ? null : `${row.rate}%`,
+                          label: t('stats', 'rate', 'Share who carried on'),
+                      },
+                  ]),
+        ];
+    }
+
+    return out;
+});
+
 /** Options for a config field, where the field asks for something the site has. */
 function optionsFor(field) {
     if (field.type === 'form') return props.forms;
     if (field.type === 'offer') return props.offers;
 
     return [];
+}
+
+// The entry picker searches the server rather than filtering a list that was
+// sent with the page. A site with thousands of pages should not pay for them in
+// every editor load, and `ignoreFilter` is what stops the Combobox from also
+// filtering the answer it just received.
+const entryOptions = ref([...props.entries]);
+let entrySearchTimer = null;
+
+function searchEntries(query) {
+    if (!props.entriesUrl) return;
+
+    clearTimeout(entrySearchTimer);
+    entrySearchTimer = setTimeout(async () => {
+        try {
+            const url = `${props.entriesUrl}?search=${encodeURIComponent(query ?? '')}`;
+            const response = await fetch(url, { headers: { Accept: 'application/json' } });
+            if (!response.ok) return;
+            const body = await response.json();
+            // Keep whatever is currently chosen in the list. Dropping it would
+            // blank the field's own label while the menu is open.
+            const chosen = entryOptions.value.filter(
+                (option) => option.value === selected.value?.config?.entry,
+            );
+            const fresh = body.options ?? [];
+            entryOptions.value = [
+                ...fresh,
+                ...chosen.filter((c) => !fresh.some((f) => f.value === c.value)),
+            ];
+        } catch {
+            // A failed search leaves the previous options standing, which is
+            // more useful than an empty menu.
+        }
+    }, 250);
 }
 </script>
 
@@ -180,6 +258,13 @@ function optionsFor(field) {
             <Badge v-else color="green" :text="t('ui', 'live', 'Live')" />
             <Button icon="arrow-left" :text="t('ui', 'undo', 'Undo')" :disabled="!history.canUndo.value" @click="undo" />
             <Button icon="arrow-right" :text="t('ui', 'redo', 'Redo')" :disabled="!history.canRedo.value" @click="redo" />
+            <Button
+                icon="eye"
+                :text="t('ui', 'preview', 'Preview')"
+                :variant="showPreview ? 'filled' : 'default'"
+                :disabled="!previewUrl"
+                @click="showPreview = !showPreview"
+            />
             <Button variant="primary" :text="t('ui', 'save', 'Save')" :disabled="saving" @click="save" />
         </Header>
 
@@ -198,7 +283,21 @@ function optionsFor(field) {
                 @cancel-pick="pendingTarget = null"
             />
 
-            <div class="min-w-0 flex-1 rounded-lg border border-content-border">
+            <PreviewPanel
+                v-if="showPreview"
+                class="min-w-0 flex-1"
+                :preview-url="previewUrl"
+                :nodes="graph.nodes"
+                :edges="graph.edges"
+                :devices="devices"
+                :kinds="KINDS"
+                :labels="labels.preview ?? {}"
+                :selected-key="selectedKey"
+                @select="selectedKey = $event"
+                @close="showPreview = false"
+            />
+
+            <div v-else class="min-w-0 flex-1 rounded-lg border border-content-border">
                 <Canvas
                     :kinds="KINDS"
                     :node-icon="nodeIcon"
@@ -207,6 +306,7 @@ function optionsFor(field) {
                     :edges="graph.edges"
                     :library="library"
                     :selected-key="selectedKey"
+                    :node-stats="nodeStats"
                     :pending-target="pendingTarget"
                     @select="selectedKey = $event"
                     @toggle-pick="pendingTarget = $event; showLibrary = true"
@@ -229,8 +329,19 @@ function optionsFor(field) {
                     :instructions="field.instructions"
                     class="mb-4"
                 >
+                    <Combobox
+                        v-if="field.type === 'entry'"
+                        v-model="selected.config[field.handle]"
+                        :options="entryOptions"
+                        :placeholder="t('fields', 'entryPlaceholder', 'Search pages…')"
+                        searchable
+                        clearable
+                        ignore-filter
+                        @search="searchEntries"
+                        @update:model-value="record(`entry:${selected.node_key}`)"
+                    />
                     <Select
-                        v-if="field.type === 'form' || field.type === 'offer'"
+                        v-else-if="field.type === 'form' || field.type === 'offer'"
                         v-model="selected.config[field.handle]"
                         :options="optionsFor(field)"
                     />
