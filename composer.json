@@ -11,7 +11,7 @@
   "require": {
     "php": "^8.2",
     "statamic/cms": "^6.0",
-    "goldnead/statamic-flow-canvas": "^1.0",
+    "goldnead/statamic-flow-canvas": "^1.0.4",
     "goldnead/statamic-offers": "^1.0.1",
     "goldnead/statamic-payments": "^1.3"
   },
