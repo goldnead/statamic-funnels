@@ -62,6 +62,18 @@ class FunnelController
         $visit = $this->walk->visit($funnel);
         $this->walk->enter($visit, $step);
 
+        // Reaching the end *is* the end. Waiting for a form submit on a page
+        // that has no form meant `completed_at` was never set in the ordinary
+        // path: `FunnelCompleted` never fired, and "carry on where you left
+        // off" sent people back to the thank-you page for ever.
+        if ($step->type === 'finish') {
+            $this->walk->complete($visit, $step);
+
+            if ($redirect = $step->config('redirect')) {
+                return redirect()->away((string) $redirect);
+            }
+        }
+
         $data = [
             'funnel' => [
                 'handle' => $funnel->handle,

@@ -75,12 +75,16 @@ class StepRegistry
                 'icon' => $class::icon(),
                 'kind' => $class::kind(),
                 'schema' => $class::schema(),
-                // The shape the shared canvas evaluates to draw one handle per
-                // way out. Version 1 of the same grammar the automations addon
-                // ships, because both editors read it with the same file.
+                // The grammar the shared canvas evaluates, not a shape of our
+                // own: `clauses`, each with the outputs that apply. Anything
+                // else resolves to a single `default`, and an offer would draw
+                // one handle where it declared two — with the branches already
+                // wired underneath, going nowhere.
                 'outputs' => [
                     'version' => 1,
-                    'static' => $class::outputs(),
+                    'clauses' => [
+                        ['outputs' => $class::outputs()],
+                    ],
                 ],
             ];
         }

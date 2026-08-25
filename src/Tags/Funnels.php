@@ -35,10 +35,18 @@ class Funnels extends Tags
             return $this->parseNoResults();
         }
 
-        $visit = app(FunnelWalk::class)->visit($funnel);
+        // Looks only. This tag sits on ordinary pages, and starting a walk from
+        // one would set a cookie and write a row for every visitor and every
+        // crawler, for a funnel they never entered.
+        $visit = app(FunnelWalk::class)->existingVisit($funnel);
+
+        if (! $visit || $visit->completed_at) {
+            return $this->parseNoResults();
+        }
+
         $step = $visit->current_node_key ? $funnel->stepByKey($visit->current_node_key) : null;
 
-        if (! $step || $visit->completed_at) {
+        if (! $step) {
             return $this->parseNoResults();
         }
 

@@ -24,6 +24,27 @@ class FunnelWalk
 
     public function __construct(protected Request $request) {}
 
+    /**
+     * An existing walk, or null.
+     *
+     * For anything that only wants to *look* — a "carry on where you left off"
+     * link on an ordinary page. Creating one there would set a cookie and write
+     * a row for every visitor and every crawler, for a funnel nobody entered.
+     */
+    public function existingVisit(Funnel $funnel): ?FunnelVisit
+    {
+        $token = $this->request->cookie(self::COOKIE);
+
+        if (! is_string($token) || ! $this->looksLikeToken($token)) {
+            return null;
+        }
+
+        return FunnelVisit::query()
+            ->where('funnel_id', $funnel->id)
+            ->where('token', $token)
+            ->first();
+    }
+
     /** The walk this request belongs to, started if it is the first step. */
     public function visit(Funnel $funnel): FunnelVisit
     {
@@ -47,7 +68,7 @@ class FunnelWalk
     {
         $existing = $this->request->cookie(self::COOKIE);
 
-        if (is_string($existing) && preg_match('/^[A-Za-z0-9]{32}$/', $existing)) {
+        if (is_string($existing) && $this->looksLikeToken($existing)) {
             return $existing;
         }
 
@@ -55,6 +76,11 @@ class FunnelWalk
         cookie()->queue(cookie(self::COOKIE, $token, 60 * 24 * 30, null, null, null, true, false, 'Lax'));
 
         return $token;
+    }
+
+    protected function looksLikeToken(string $value): bool
+    {
+        return preg_match('/^[A-Za-z0-9]{32}$/', $value) === 1;
     }
 
     /** Record arrival at a step, once per step per walk. */

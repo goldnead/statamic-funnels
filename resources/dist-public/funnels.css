@@ -16,6 +16,7 @@
     --funnel-muted: #5c6672;
     --funnel-line: #e2e6ea;
     --funnel-accent: #0e5c63;
+    --funnel-surface: #ffffff;
     --funnel-radius: 0.6rem;
     --funnel-width: 34rem;
 
@@ -63,7 +64,7 @@
     border: 1px solid var(--funnel-line);
     border-radius: var(--funnel-radius);
     font: inherit;
-    background: #fff;
+    background: var(--funnel-surface);
 }
 
 .funnel-step input:focus-visible {
@@ -73,7 +74,7 @@
 
 .funnel-step button[type="submit"] {
     background: var(--funnel-ink);
-    color: #fff;
+    color: var(--funnel-surface);
     border: 0;
     border-radius: var(--funnel-radius);
     padding: 0.75rem 1.4rem;
@@ -86,7 +87,7 @@
     border: 1px solid var(--funnel-line);
     border-radius: 0.9rem;
     padding: 1.5rem;
-    background: #fff;
+    background: var(--funnel-surface);
 }
 
 .funnel-offer__price {
@@ -142,15 +143,18 @@
         --funnel-accent: #56b6bf;
     }
 
+    .funnel-step {
+        --funnel-surface: #161a1f;
+    }
+
     .funnel-step input[type="text"],
     .funnel-step input[type="email"],
     .funnel-offer {
-        background: #161a1f;
         color: inherit;
     }
 
     .funnel-step button[type="submit"] {
         background: var(--funnel-accent);
-        color: #0e1114;
+        color: #0e1114; /* the one literal: text on the accent, which is fixed */
     }
 }

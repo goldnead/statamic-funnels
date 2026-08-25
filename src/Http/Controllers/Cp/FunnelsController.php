@@ -40,6 +40,7 @@ class FunnelsController extends CpController
                 ->map(fn (Funnel $funnel) => $this->row($funnel))
                 ->all(),
             'createUrl' => cp_route('utilities.funnels.store'),
+            'indexUrl' => cp_route('utilities.funnels'),
         ]);
     }
 

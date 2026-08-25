@@ -1,9 +1,9 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, router } from '@statamic/cms/inertia';
 import {
     Header, Button, Badge, EmptyStateMenu, EmptyStateItem, DocsCallout,
-    CommandPaletteItem, Stack, Heading, Field, Input,
+    CommandPaletteItem, Stack, Heading, Field, Input, ConfirmationModal,
 } from '@statamic/cms/ui';
 
 /**
@@ -16,6 +16,9 @@ import {
 const props = defineProps({
     funnels: { type: Array, default: () => [] },
     createUrl: { type: String, required: true },
+    // Built with `cp_route()` on the server. A hard-coded `/cp/...` breaks on
+    // every site that has moved its Control Panel, which Statamic invites.
+    indexUrl: { type: String, required: true },
 });
 
 const open = ref(false);
@@ -31,8 +34,24 @@ function create() {
     });
 }
 
-function remove(funnel) {
-    router.delete(funnel.delete_url, { preserveScroll: true });
+/**
+ * Deleting asks first.
+ *
+ * A funnel takes its visits and its record of who got how far with it. Core
+ * asks before every destructive action, and a screen that deletes on one click
+ * is the one in the Control Panel that does not.
+ */
+const deleting = ref(null);
+
+const deletePrompt = computed(() => deleting.value
+    ? __('statamic-funnels::messages.delete_body', { title: deleting.value.title, visits: deleting.value.visits_count })
+    : '');
+
+function confirmRemove() {
+    const funnel = deleting.value;
+    deleting.value = null;
+
+    if (funnel) router.delete(funnel.delete_url, { preserveScroll: true });
 }
 </script>
 
@@ -46,7 +65,7 @@ function remove(funnel) {
 
         <CommandPaletteItem
             :text="[__('Utilities'), __('statamic-funnels::messages.utility_title')]"
-            url="/cp/utilities/funnels"
+            :url="indexUrl"
             icon="hierarchy"
             prioritize
         />
@@ -64,7 +83,7 @@ function remove(funnel) {
             <div
                 v-for="funnel in funnels"
                 :key="funnel.id"
-                class="flex items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900"
+                class="flex items-center gap-4 rounded-lg border border-content-border bg-content-bg p-4"
             >
                 <div class="min-w-0 flex-1">
                     <a :href="funnel.edit_url" class="font-medium hover:text-primary">{{ funnel.title }}</a>
@@ -84,13 +103,26 @@ function remove(funnel) {
                 </span>
 
                 <Button icon="edit" :text="__('Edit')" :href="funnel.edit_url" />
-                <Button icon="trash" variant="ghost" :text="__('Delete')" @click="remove(funnel)" />
+                <Button icon="trash" variant="ghost" :text="__('Delete')" @click="deleting = funnel" />
             </div>
         </div>
 
+        <!-- `:open`, not `v-if`: the modal owns its own visibility and focus
+             trap, and mounting it conditionally means it never opens — which
+             looks exactly like a Delete button that does nothing. -->
+        <ConfirmationModal
+            :open="deleting !== null"
+            :title="__('statamic-funnels::messages.delete_title')"
+            :body-text="deletePrompt"
+            :button-text="__('Delete')"
+            danger
+            @update:open="deleting = $event ? deleting : null"
+            @confirm="confirmRemove"
+        />
+
         <Stack v-model:open="open" size="narrow">
-            <div class="flex h-full flex-col bg-white dark:bg-gray-900">
-                <div class="border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+            <div class="flex h-full flex-col bg-content-bg">
+                <div class="border-b border-content-border px-6 py-4">
                     <Heading :text="__('statamic-funnels::messages.new_funnel')" size="lg" />
                 </div>
 
@@ -105,7 +137,7 @@ function remove(funnel) {
                     </Field>
                 </div>
 
-                <div class="border-t border-gray-200 px-6 py-4 dark:border-gray-800">
+                <div class="border-t border-content-border px-6 py-4">
                     <div class="flex justify-end gap-2">
                         <Button :text="__('Cancel')" @click="open = false" />
                         <Button variant="primary" :text="__('Create')" :disabled="saving || !title" @click="create" />

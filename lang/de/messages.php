@@ -24,4 +24,6 @@ return [
     'order_button' => 'Zahlungspflichtig bestellen',
     'order_confirmation' => 'Ich bestelle kostenpflichtig und stimme zu, dass die Lieferung sofort beginnt. Damit erlischt mein Widerrufsrecht.',
     'offer_unavailable' => 'Dieses Angebot ist gerade nicht verfügbar.',
+    'delete_title' => 'Funnel löschen?',
+    'delete_body' => '„:title" wird gelöscht, samt :visits Besuchen und allem, was darin steht. Das lässt sich nicht rückgängig machen.',
 ];

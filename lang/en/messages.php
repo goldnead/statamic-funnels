@@ -24,4 +24,6 @@ return [
     'order_button' => 'Order with payment obligation',
     'order_confirmation' => 'I am placing a binding order and agree that delivery begins at once, which ends my right of withdrawal.',
     'offer_unavailable' => 'This offer is not available right now.',
+    'delete_title' => 'Delete this funnel?',
+    'delete_body' => '“:title” goes, along with :visits visits and everything recorded in them. This cannot be undone.',
 ];

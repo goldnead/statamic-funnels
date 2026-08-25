@@ -88,11 +88,21 @@ function newKey(type) {
 /**
  * Adding a node.
  *
+ * The library emits a **handle**, not the entry — the same contract the
+ * automations editor consumes. Treating it as an object produced nodes typed
+ * `undefined`, which fell back to the ordinary kind, showed a blank card, and
+ * then failed validation on save: the editor looked like it worked and stored
+ * nothing.
+ *
  * The edge is drawn immediately, from whichever "+" was armed. A node that
  * appears unconnected and has to be wired afterwards is how a graph editor
  * turns into a puzzle.
  */
-function addNode(entry) {
+function addNode(handle) {
+    const entry = Object.values(props.library).flat().find((m) => m.handle === handle);
+
+    if (!entry) return;
+
     record();
 
     const key = newKey(entry.handle);
@@ -188,7 +198,7 @@ function optionsFor(field) {
                 @cancel-pick="pendingTarget = null"
             />
 
-            <div class="min-w-0 flex-1 rounded-lg border border-gray-200 dark:border-gray-800">
+            <div class="min-w-0 flex-1 rounded-lg border border-content-border">
                 <Canvas
                     :kinds="KINDS"
                     :node-icon="nodeIcon"
@@ -205,7 +215,7 @@ function optionsFor(field) {
                 />
             </div>
 
-            <div v-if="selected" class="w-80 shrink-0 overflow-y-auto rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <div v-if="selected" class="w-80 shrink-0 overflow-y-auto rounded-lg border border-content-border p-4">
                 <Heading :text="selected.label || selectedType?.label" size="sm" class="mb-4" />
 
                 <Field :label="t('fields', 'label', 'Label')" class="mb-4">
@@ -234,7 +244,7 @@ function optionsFor(field) {
             </div>
         </div>
 
-        <div class="flex items-center gap-4 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
+        <div class="flex items-center gap-4 border-t border-content-border px-4 py-3">
             <Field :label="t('ui', 'handle', 'Handle')" class="w-64">
                 <Input v-model="graph.handle" class="font-mono" />
             </Field>

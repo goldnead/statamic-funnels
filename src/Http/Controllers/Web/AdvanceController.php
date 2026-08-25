@@ -7,6 +7,7 @@ use Goldnead\StatamicFunnels\Events\FunnelOfferAccepted;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
+use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicOffers\Models\Offer;
 use Goldnead\StatamicPayments\Models\Payment;
@@ -41,6 +42,13 @@ class AdvanceController
         abort_unless($step && ! $step->disabled, 404);
 
         $visit = $this->walk->visit($model);
+
+        // You can only leave a step you are standing on. Every page is directly
+        // reachable by URL — it has to be, because the provider and half the
+        // emails link straight into the middle of a flow — but *advancing* from
+        // one nobody entered is how somebody skips a form, or takes the
+        // accepted branch of an offer they never saw.
+        abort_unless($visit->hasReached($step->node_key), 403);
 
         return match ($step->type) {
             'offer' => $this->offer($request, $model, $step, $visit),
@@ -139,12 +147,22 @@ class AdvanceController
                 return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
             }
 
-            $visit->record($step->node_key, FunnelStepEvent::ACCEPTED, ['payment_id' => $payment->getKey()]);
-            FunnelOfferAccepted::dispatch($visit, $step, $payment);
+            $this->rememberPending($visit, $step, $payment);
+
+            // A recurring charge is usually accepted now and settled later, so
+            // the payment comes back `pending` more often than not. Moving on
+            // here would be the one thing this whole family is written against:
+            // treating acceptance as payment. The webhook decides, exactly as
+            // on the checkout path — `AdvanceOnPayment` picks it up.
+            if (! $payment->isPaid()) {
+                return $this->waiting($funnel, $step);
+            }
 
             $next = $this->walk->advance($visit, $step, 'accepted', FunnelStepEvent::ACCEPTED, [
                 'payment_id' => $payment->getKey(),
             ]);
+
+            FunnelOfferAccepted::dispatch($visit->fresh() ?? $visit, $step, $payment);
 
             return $this->go($funnel, $next);
         }
@@ -154,6 +172,16 @@ class AdvanceController
         // dropped halfway through a purchase — and the rest of the funnel, the
         // part that was meant to follow the sale, never happens.
         $accepted = $funnel->nextStep($step->node_key, 'accepted');
+
+        // Not twice. A second submit — a double click, a reloaded confirmation,
+        // an impatient visitor — would start a second payment and overwrite the
+        // first one's id on the visit. The webhook of the first would then find
+        // nothing: the money arrives and the walk stands still.
+        if ($existing = $this->pendingPaymentFor($visit, $step)) {
+            return $existing->isPaid()
+                ? $this->go($funnel, $funnel->nextStep($step->node_key, 'accepted'))
+                : $this->waiting($funnel, $step);
+        }
 
         $result = $this->checkout->start($buyHandle, [
             'email' => $visit->email,
@@ -166,16 +194,52 @@ class AdvanceController
             return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
         }
 
-        // The walk remembers which payment it started, so the webhook can find
-        // its way back here when the money actually arrives.
-        $visit->forceFill([
-            'payment_id' => $result->payment->getKey(),
-            'meta' => array_merge($visit->meta ?? [], ['pending_step' => $step->node_key]),
-        ])->save();
+        $this->rememberPending($visit, $step, $result->payment);
 
         // Off to the provider. Nothing is accepted yet — only the webhook
         // decides that, exactly as everywhere else in this family.
         return redirect()->away($result->checkoutUrl);
+    }
+
+    /**
+     * Note which payment this step started.
+     *
+     * Kept per step as well as on the visit: a walk can pay more than once —
+     * the thing they came for, then an upsell — and a single `payment_id` would
+     * point at the newest one while the older one's webhook was still in
+     * flight.
+     */
+    protected function rememberPending(FunnelVisit $visit, FunnelStep $step, Payment $payment): void
+    {
+        $meta = $visit->meta ?? [];
+        $meta['pending_step'] = $step->node_key;
+        $meta['payments'][$step->node_key] = $payment->getKey();
+
+        $visit->forceFill([
+            'payment_id' => $payment->getKey(),
+            'meta' => $meta,
+        ])->save();
+    }
+
+    protected function pendingPaymentFor(FunnelVisit $visit, FunnelStep $step): ?Payment
+    {
+        $id = data_get($visit->meta, 'payments.'.$step->node_key);
+
+        if (! $id) {
+            return null;
+        }
+
+        $payment = Payment::find($id);
+
+        // A refused charge is not a reason to stop somebody buying: they got
+        // nothing, so they may try again.
+        return $payment && $payment->status !== Payment::STATUS_FAILED ? $payment : null;
+    }
+
+    /** Sent back to the offer with a note that the money is on its way. */
+    protected function waiting(Funnel $funnel, FunnelStep $step)
+    {
+        return back()->with('statamic-funnels.waiting', $step->node_key);
     }
 
     protected function go(Funnel $funnel, ?FunnelStep $next)

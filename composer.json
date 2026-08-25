@@ -3,13 +3,17 @@
   "description": "Funnels for Statamic: a path a visitor walks, drawn on the same canvas as the automations editor. Pages, forms, offers and payments in one flow.",
   "type": "statamic-addon",
   "license": "proprietary",
-  "authors": [{ "name": "Adrian Goldner" }],
+  "authors": [
+    {
+      "name": "Adrian Goldner"
+    }
+  ],
   "require": {
     "php": "^8.2",
     "statamic/cms": "^6.0",
     "goldnead/statamic-flow-canvas": "^1.0",
-    "goldnead/statamic-offers": "@dev",
-    "goldnead/statamic-payments": "@dev"
+    "goldnead/statamic-offers": "^1.0.1",
+    "goldnead/statamic-payments": "^1.3"
   },
   "require-dev": {
     "larastan/larastan": "^3.0",
@@ -17,20 +21,27 @@
     "orchestra/testbench": "^10.0 || ^11.0",
     "phpunit/phpunit": "^11.0 || ^12.0"
   },
-  "autoload": { "psr-4": { "Goldnead\\StatamicFunnels\\": "src" } },
-  "autoload-dev": { "psr-4": { "Goldnead\\StatamicFunnels\\Tests\\": "tests" } },
+  "autoload": {
+    "psr-4": {
+      "Goldnead\\StatamicFunnels\\": "src"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Goldnead\\StatamicFunnels\\Tests\\": "tests"
+    }
+  },
   "extra": {
     "statamic": {
       "name": "Statamic Funnels",
       "description": "A path a visitor walks: pages, forms, offers and payments in one flow."
     },
-    "laravel": { "providers": ["Goldnead\\StatamicFunnels\\ServiceProvider"] }
+    "laravel": {
+      "providers": [
+        "Goldnead\\StatamicFunnels\\ServiceProvider"
+      ]
+    }
   },
-  "repositories": [
-    { "type": "path", "url": "../statamic-flow-canvas", "options": { "symlink": true } },
-    { "type": "path", "url": "../statamic-offers", "options": { "symlink": true } },
-    { "type": "path", "url": "../statamic-payments", "options": { "symlink": true } }
-  ],
   "minimum-stability": "stable",
   "prefer-stable": true
 }
