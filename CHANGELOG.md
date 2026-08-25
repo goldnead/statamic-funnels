@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.1.0 — 2026-08-25
+
+### Landing pages come from Statamic, not from here
+
+- **A step can point at an entry.** Then that entry *is* the page: its own template, its own layout,
+  the site's own page builder. Delivered through Statamic's `DataResponse`, so password protection,
+  private entries and the entry's `redirect` field keep working.
+- The funnel's context lives under **one** key, `funnel`. It used to be spread flat, and Statamic
+  merges view data *over* an entry's fields — a step handing over `body` blanked the `body` of the
+  page it was rendering. Invisible unless the page happens to use that field name, which most page
+  blueprints do.
+- An unpublished entry falls back to the step's own fields rather than breaking the walk.
+
+### Preview, with a stepper
+
+- **Preview** in the editor walks the funnel step by step. The stepper follows the graph depth-first,
+  one branch to its end and then the other; device sizes come from `config/live_preview.php`.
+- Shows the **unsaved** graph, works on an unpublished funnel, and **writes nothing**: no visit, no
+  step event, and no impression against an offer.
+- Backed by a real `Statamic\Facades\Token`, mintable only with the funnels permission, reused per
+  session and good for 15 minutes.
+
+### Where people stop
+
+- Every step card carries visitors, continued and the share, counted **per visitor** rather than per
+  page load. A step nobody reached shows nothing; a last step shows no rate.
+
+### Selling more on one page
+
+- **Order bumps**: an offer's `bumps` become tick-boxes beside the order button. Only bumps the offer
+  lists can be ticked, whatever the form posts.
+- **Coupon codes**: a field on the offer page. The code is a string from the browser; what it is
+  worth is looked up. Switch it off with `coupons => false`.
+
+### Security
+
+- A step's `template` can no longer name an arbitrary view of the application. Namespaces are
+  refused and the location is confinable with `template_prefix`.
+- The preview iframe is sandboxed, and the preview route is throttled.
+
+### Requires
+
+- `goldnead/statamic-offers` ^1.1, `goldnead/statamic-payments` ^1.4, `goldnead/statamic-flow-canvas` ^1.1
+
 ## 1.0.0
 
 ### Found by a reviewer before release, and worth naming

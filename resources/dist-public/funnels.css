@@ -102,8 +102,13 @@
 }
 
 /* The order confirmation sits with its checkbox, not on its own line: the
-   agreement and the box that records it are one statement. */
-.funnel-offer__accept label {
+   agreement and the box that records it are one statement.
+   
+   `> label` and not `label`, because a bump is a label inside this form too and
+   `.funnel-offer__accept label` (one class, one type) outranks `.funnel-bump`
+   (one class). Written without the child combinator, this rule quietly turned
+   every bump back into a flex row and the price column stopped being one. */
+.funnel-offer__accept > label {
     display: flex;
     gap: 0.6rem;
     align-items: flex-start;
@@ -111,15 +116,133 @@
     color: var(--funnel-muted);
 }
 
-.funnel-offer__accept label > span {
+.funnel-offer__accept > label > span {
     display: inline;
     font-weight: 400;
     margin: 0;
 }
 
-.funnel-offer__accept input[type="checkbox"] {
+.funnel-offer__accept > label input[type="checkbox"] {
     margin-top: 0.3rem;
     flex-shrink: 0;
+}
+
+/* The tick-boxes beside the order button. A bump is a small decision made in
+   passing, so it reads as one line with a price on the right, not as a second
+   product page. */
+.funnel-offer__bumps {
+    border: 1px solid var(--funnel-line);
+    border-radius: var(--funnel-radius, 0.5rem);
+    padding: 0.9rem 1rem;
+    margin: 1.1rem 0;
+    display: grid;
+    gap: 0.9rem;
+}
+
+.funnel-offer__bumps legend {
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--funnel-muted);
+    padding: 0 0.4rem;
+}
+
+/* Two classes deep, deliberately. `.funnel-step label` further up is one class
+   plus one type and therefore outranks a single class — a bump is a label
+   inside a funnel step, so a lone `.funnel-bump` loses every time and the whole
+   grid quietly falls back to a block. Same reason for the coupon row below. */
+.funnel-offer__bumps .funnel-bump {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.2rem 0.7rem;
+    align-items: start;
+    font-size: 0.92rem;
+    cursor: pointer;
+}
+
+.funnel-offer__bumps .funnel-bump input[type="checkbox"] {
+    margin-top: 0.2rem;
+    flex-shrink: 0;
+}
+
+.funnel-offer__bumps .funnel-bump__text {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.funnel-offer__bumps .funnel-bump__body {
+    color: var(--funnel-muted);
+    font-size: 0.86rem;
+}
+
+.funnel-offer__bumps .funnel-bump__body p {
+    margin: 0;
+}
+
+/* The price stays on the price side even when the description wraps. */
+.funnel-offer__bumps .funnel-bump__price {
+    grid-column: 3;
+    grid-row: 1;
+    /* Pinned to the right edge rather than left where the text ends: two bumps
+       with titles of different lengths would otherwise put their prices in two
+       different places, and a price column that is not a column is harder to
+       read than no column at all. */
+    justify-self: end;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.funnel-offer__bumps .funnel-bump__price s {
+    color: var(--funnel-muted);
+    font-weight: 400;
+    margin-left: 0.35rem;
+}
+
+/* One line, because a coupon field that looks like the main event invites
+   everybody to go looking for a code they do not have. Two classes, for the
+   same specificity reason as the bumps above. */
+.funnel-offer__accept .funnel-offer__coupon {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    font-size: 0.88rem;
+    color: var(--funnel-muted);
+    margin: 0 0 1.1rem;
+}
+
+.funnel-offer__accept .funnel-offer__coupon input {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 14rem;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--funnel-line);
+    border-radius: var(--funnel-radius, 0.5rem);
+    font: inherit;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+@media (max-width: 30rem) {
+    .funnel-bump {
+        grid-template-columns: auto 1fr;
+    }
+
+    .funnel-offer__bumps .funnel-bump__price {
+        grid-column: 2;
+        grid-row: 2;
+    }
+
+    .funnel-offer__coupon {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.35rem;
+    }
+
+    .funnel-offer__accept .funnel-offer__coupon input {
+        max-width: none;
+    }
 }
 
 /* Declining is an answer, not a mistake — so it is quiet, not hidden. */
