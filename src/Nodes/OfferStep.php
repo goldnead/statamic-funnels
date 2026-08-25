@@ -2,6 +2,8 @@
 
 namespace Goldnead\StatamicFunnels\Nodes;
 
+use Goldnead\StatamicFunnels\Support\Countdown;
+
 /**
  * The step where money can change hands.
  *
@@ -53,6 +55,11 @@ class OfferStep extends StepType
     {
         return array_merge([
             ['handle' => 'offer', 'type' => 'offer', 'label' => __('statamic-funnels::nodes.field_offer'), 'instructions' => __('statamic-funnels::nodes.field_offer_help')],
+            // A deadline, and one that actually holds: past it the step refuses
+            // to be accepted, not merely stops drawing a clock.
+            ['handle' => 'countdown', 'type' => 'select', 'options' => Countdown::kinds(), 'label' => __('statamic-funnels::nodes.field_countdown'), 'instructions' => __('statamic-funnels::nodes.field_countdown_help')],
+            ['handle' => 'countdown_until', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_countdown_until'), 'instructions' => __('statamic-funnels::nodes.field_countdown_until_help')],
+            ['handle' => 'countdown_hours', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_countdown_hours'), 'instructions' => __('statamic-funnels::nodes.field_countdown_hours_help')],
         ], self::pageSchema());
     }
 }

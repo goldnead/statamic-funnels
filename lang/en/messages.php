@@ -42,4 +42,8 @@ return [
     'stats_rate' => 'Share who carried on',
     'bumps_legend' => 'Add to your order',
     'coupon_label' => 'Coupon code (optional)',
+    'offer_expired' => 'This offer has closed.',
+    'countdown_remaining' => 'Ends in',
+    'countdown_over' => 'This offer has closed.',
+    'stats_split' => 'Split test',
 ];

@@ -122,6 +122,58 @@ the page can take a coupon code. Both are settled on the server:
 
 Set `coupons` to `false` to leave the field off the page entirely.
 
+### A deadline that holds
+
+An offer step can carry one, and it is **enforced on the server**: past it the step refuses to be
+accepted, whatever a stale tab still shows. A countdown that only counts is a lie told in
+Javascript, and a visitor who reloads past one learns that every deadline on the site is decoration.
+
+| Kind | What it means |
+|---|---|
+| `fixed` | One moment for everybody. A launch that closes on Friday. |
+| `rolling` | A window per visitor, from the first time **they** see the step. |
+
+The rolling one is what people mean by "evergreen", and it needs saying out loud: the deadline is
+per visitor, written to their walk on first sight, and somebody who clears cookies gets a new one.
+That is a property of the mechanism. Enforcing it otherwise would mean identifying people.
+
+The shipped page draws it and ticks it (`funnels.js`, no build step, no dependency). A site with its
+own front end reads `funnel:countdown` and does its own:
+
+```antlers
+{{ if funnel:countdown }}
+    <p data-funnel-countdown="{{ funnel:countdown:ends_at }}">
+        {{ if funnel:countdown:expired }}Vorbei.{{ else }}<time data-funnel-clock>{{ funnel:countdown:seconds }}</time>{{ /if }}
+    </p>
+{{ /if }}
+```
+
+**Declining still works after the deadline.** A closed offer is not a closed funnel, and somebody
+standing on an expired page must be able to move on rather than being stuck.
+
+### Testing two versions of a page
+
+Any step can run one. Set a share for B and fill in only the fields B changes:
+
+| Field | |
+|---|---|
+| `split_share` | A whole percentage for B. Empty or 0 means no test. |
+| `variant_entry` | A different page |
+| `variant_headline`, `variant_body` | Different words |
+
+Three properties it has, and each is the reason such a thing is usually worthless without it:
+
+- **Stable.** A visitor sees the same version every time, decided once from their walk token and the
+  step key. Splitting per render would show somebody A, then B, then A, and the numbers underneath
+  would be about nothing.
+- **Per step, not per funnel.** Two tests can run at once without one deciding the other.
+- **Recorded.** The version is written onto the arrival, so the drop-off numbers can be split by it.
+  A test that cannot be counted is a coin toss with extra steps.
+
+The result shows in the editor, on the step where the test is set up — a split report on another
+screen is a report nobody opens. Only fields B actually sets are swapped: a test that changes one
+headline must not silently blank the body.
+
 ### URLs
 
 ```

@@ -127,6 +127,31 @@
     flex-shrink: 0;
 }
 
+/* The deadline. Quiet rather than shouty: it is a fact about the offer, and a
+   page that yells it undermines the fact. Tabular figures so the seconds do not
+   shift the line left and right once a second. */
+.funnel-countdown {
+    display: flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    margin: 0 0 1.1rem;
+    font-size: 0.9rem;
+    color: var(--funnel-muted);
+}
+
+.funnel-countdown__clock {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--funnel-ink, inherit);
+}
+
+/* Once it is over the page is wrong about what can be bought, and the script
+   is on its way to reload. Saying so beats a row of zeroes. */
+.funnel-countdown[data-funnel-countdown-over] {
+    color: var(--funnel-ink, inherit);
+    font-weight: 600;
+}
+
 /* The tick-boxes beside the order button. A bump is a small decision made in
    passing, so it reads as one line with a price on the right, not as a second
    product page. */

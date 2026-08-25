@@ -27,6 +27,7 @@ const props = defineProps({
     previewUrl: { type: String, default: '' },
     devices: { type: Array, default: () => [] },
     stats: { type: Object, default: () => ({}) },
+    splits: { type: Object, default: () => ({}) },
     labels: { type: Object, default: () => ({}) },
 });
 
@@ -210,9 +211,23 @@ const nodeStats = computed(() => {
 function optionsFor(field) {
     if (field.type === 'form') return props.forms;
     if (field.type === 'offer') return props.offers;
+    // A field that carries its own list, like the deadline's three kinds. The
+    // labels come from the server with everything else; the raw handles would
+    // read as `rolling` in a German Control Panel.
+    if (field.type === 'select') {
+        return (field.options ?? []).map((value) => ({
+            value,
+            label: labels.value.options?.[value] ?? value,
+        }));
+    }
 
     return [];
 }
+
+const labels = computed(() => props.labels ?? {});
+
+/** The two versions of the selected step, when it is running a test. */
+const selectedSplit = computed(() => (selectedKey.value ? (props.splits?.[selectedKey.value] ?? null) : null));
 
 // The entry picker searches the server rather than filtering a list that was
 // sent with the page. A site with thousands of pages should not pay for them in
@@ -322,6 +337,25 @@ function searchEntries(query) {
                     <Input v-model="selected.label" @update:model-value="record(`label:${selected.node_key}`)" />
                 </Field>
 
+                <!-- Which version is winning, right where the test is set up.
+                     A split report on another screen is a report nobody opens. -->
+                <div v-if="selectedSplit" class="mb-4 rounded-lg border border-content-border p-3">
+                    <p class="mb-2 text-2xs font-medium uppercase tracking-wide text-gray-500">
+                        {{ t('stats', 'split', 'Split test') }}
+                    </p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div v-for="(row, key) in selectedSplit" :key="key">
+                            <p class="text-xs font-medium text-gray-500">{{ key.toUpperCase() }}</p>
+                            <p class="text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                                {{ row.rate === null ? '–' : `${row.rate}%` }}
+                            </p>
+                            <p class="text-2xs text-gray-500">
+                                {{ row.continued }} / {{ row.visits }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
                 <Field
                     v-for="field in selectedType?.schema ?? []"
                     :key="field.handle"
@@ -341,7 +375,7 @@ function searchEntries(query) {
                         @update:model-value="record(`entry:${selected.node_key}`)"
                     />
                     <Select
-                        v-else-if="field.type === 'form' || field.type === 'offer'"
+                        v-else-if="field.type === 'form' || field.type === 'offer' || field.type === 'select'"
                         v-model="selected.config[field.handle]"
                         :options="optionsFor(field)"
                     />

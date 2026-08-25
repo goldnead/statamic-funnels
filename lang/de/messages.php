@@ -42,4 +42,8 @@ return [
     'stats_rate' => 'Anteil, der weiterging',
     'bumps_legend' => 'Zur Bestellung hinzufügen',
     'coupon_label' => 'Gutscheincode (freiwillig)',
+    'offer_expired' => 'Dieses Angebot ist abgelaufen.',
+    'countdown_remaining' => 'Endet in',
+    'countdown_over' => 'Dieses Angebot ist abgelaufen.',
+    'stats_split' => 'A/B-Test',
 ];

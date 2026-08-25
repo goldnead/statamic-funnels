@@ -8,6 +8,7 @@ use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicFunnels\Support\Countdown;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicOffers\Models\Offer;
 use Goldnead\StatamicOffers\Support\Basket;
@@ -108,6 +109,14 @@ class AdvanceController
             $next = $this->walk->advance($visit, $step, 'declined', FunnelStepEvent::DECLINED);
 
             return $this->go($funnel, $next);
+        }
+
+        // The deadline, enforced. A countdown that only counts is a lie told in
+        // Javascript: the number runs out, the visitor reloads, and the offer is
+        // still there. Checked before anything else on the accepting path, so a
+        // late order cannot start a payment.
+        if (Countdown::expired($step, $visit)) {
+            return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_expired')]);
         }
 
         $request->validate([

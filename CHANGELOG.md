@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.2.0 — 2026-08-25
+
+### A deadline that is real
+
+- **Countdown on an offer step**, enforced on the server. Past it the step refuses to be accepted,
+  whatever a stale tab still shows. `fixed` is one moment for everybody; `rolling` is a window per
+  visitor, written to their walk on first sight so a reload does not extend it.
+- Declining still works after the deadline. A closed offer is not a closed funnel.
+- An unreadable date is treated as **no** deadline rather than one that has passed: a typo in the
+  Control Panel should leave an offer buyable, not close it for everybody.
+- The shipped page ticks it with `funnels.js` — no build step, no dependency, and loaded only on a
+  step that has a clock.
+
+### Testing two versions
+
+- **Split test per step.** A share for B and only the fields B changes. Stable per visitor,
+  decided from the walk token and the step key, and **recorded onto the arrival** so the drop-off
+  numbers can be read per version.
+- The result shows in the editor beside the fields that configure it.
+- A share of 0 or 100, or a B with nothing different in it, is not a test and is not recorded as one.
+
 ## 1.1.0 — 2026-08-25
 
 ### Landing pages come from Statamic, not from here

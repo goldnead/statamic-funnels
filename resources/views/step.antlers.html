@@ -9,6 +9,9 @@
     properties — a site restyles a funnel by setting six variables rather than
     fighting a stylesheet. #}}
 {{ if funnel:styles }}<link rel="stylesheet" href="{{ funnel:styles }}">{{ /if }}
+{{# Only where there is a clock to tick. A page without a deadline loads no
+    script at all. #}}
+{{ if countdown && funnel:scripts }}<script src="{{ funnel:scripts }}" defer></script>{{ /if }}
 
 <div class="funnel-step" data-funnel="{{ funnel:handle }}" data-step="{{ step:key }}" data-step-type="{{ step:type }}">
     {{ if headline }}<h1>{{ headline }}</h1>{{ /if }}
@@ -35,6 +38,19 @@
     {{ if step:type == "offer" }}
         {{ if offer }}
             <div class="funnel-offer">
+                {{# A deadline that the server also keeps. The number below is
+                    right at render time; the script ticks it from `ends_at`,
+                    because a tab left open for an hour has a stale one. #}}
+                {{ if countdown }}
+                    <p class="funnel-countdown" data-funnel-countdown="{{ countdown:ends_at }}">
+                        {{ if countdown:expired }}
+                            {{ trans key="statamic-funnels::messages.countdown_over" }}
+                        {{ else }}
+                            <span class="funnel-countdown__label">{{ trans key="statamic-funnels::messages.countdown_remaining" }}</span>
+                            <time class="funnel-countdown__clock" datetime="{{ countdown:ends_at }}" data-funnel-clock>{{ countdown:seconds }}</time>
+                        {{ /if }}
+                    </p>
+                {{ /if }}
                 <h2>{{ offer:headline }}</h2>
                 {{ if offer:body }}<div>{{ offer:body | markdown }}</div>{{ /if }}
                 <p class="funnel-offer__price">
@@ -42,7 +58,7 @@
                     {{ if offer:compare_at }}<s>{{ offer:compare_at }} {{ offer:currency }}</s>{{ /if }}
                 </p>
 
-                <form method="POST" action="{{ action }}" class="funnel-offer__accept">
+                <form method="POST" action="{{ action }}" class="funnel-offer__accept" {{ if countdown:expired }}hidden{{ /if }}>
                     {{ csrf_field }}
                     <input type="hidden" name="accept" value="1">
 

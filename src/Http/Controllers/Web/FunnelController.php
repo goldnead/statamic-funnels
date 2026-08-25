@@ -6,8 +6,10 @@ use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
+use Goldnead\StatamicFunnels\Support\Countdown;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\PreviewToken;
+use Goldnead\StatamicFunnels\Support\Split;
 use Goldnead\StatamicOffers\Models\Offer;
 use Illuminate\Http\Request;
 use Statamic\Contracts\Entries\Entry;
@@ -124,6 +126,12 @@ class FunnelController
         // because the shipped template has no `body` field of its own and the
         // playground page happened to call its field `sections`. Namespacing is
         // what makes a collision impossible rather than unlikely.
+        // Which version this visitor gets, decided once per walk per step. In a
+        // preview there is no visitor, so it is always A and nothing is written:
+        // an editor clicking through their own funnel must not be counted into
+        // their own experiment.
+        $variant = Split::variantFor($step, $preview ? null : $visit);
+
         $context = [
             'handle' => $funnel->handle,
             'title' => $funnel->title,
@@ -131,6 +139,12 @@ class FunnelController
             // what somebody with their own design does.
             'styles' => config('statamic-funnels.styles', true)
                 ? asset('vendor/statamic-funnels/funnels.css')
+                : null,
+            // The ticking script, and only where a step actually has a clock.
+            // Same switch as the stylesheet: a site with its own front end
+            // turns both off and loses nothing but the drawing.
+            'scripts' => config('statamic-funnels.styles', true)
+                ? asset('vendor/statamic-funnels/funnels.js')
                 : null,
             'step' => [
                 'key' => $step->node_key,
@@ -145,11 +159,20 @@ class FunnelController
             'action' => route('statamic-funnels.advance', [$funnel->handle, $step->node_key]),
             'form' => $step->config('form'),
             'offer' => $this->offerFor($step, $preview),
+            // Null when this step has no deadline. A template that has to test
+            // for it is a template that behaves the same either way.
+            'countdown' => Countdown::forTemplate($step, $preview ? null : $visit),
             'visit' => ['email' => $visit->email, 'name' => $visit->name],
             // Templates can say so. Statamic's own preview sets `live_preview`;
             // this is the same idea under this addon's own name.
             'preview' => $preview,
+            // So a template can style or measure the two apart if it wants to.
+            'variant' => $variant,
         ];
+
+        // B's overrides, where B has any. Applied to the bag rather than to the
+        // step, so nothing about the saved graph changes when somebody looks.
+        $context = Split::apply($step, $variant, $context);
 
         // A step can point at a Statamic entry, and then *that* is the page:
         // its own template, its own content, its own page builder. The funnel
@@ -165,13 +188,13 @@ class FunnelController
         // not: it skipped `protect()`, `handlePrivateEntries()` and the entry's
         // `redirect` field, so a password-protected or date-gated page went out
         // in the clear the moment a funnel step pointed at it.
-        if ($entry = $this->entryFor($step)) {
+        if ($entry = $this->entryFor($step, $context['entry'] ?? null)) {
             return (new DataResponse($entry))
                 ->with(['funnel' => $context])
                 ->toResponse(request());
         }
 
-        $template = $this->templateFor($step);
+        $template = $this->templateFor($step, $context['template'] ?? null);
 
         // A named template if the site has one, and a shipped fallback if not.
         // The fallback matters more than it looks: a funnel that renders nothing
@@ -195,9 +218,9 @@ class FunnelController
      * trace. A namespace is refused outright and the name has to look like a
      * template name.
      */
-    protected function templateFor(FunnelStep $step): ?string
+    protected function templateFor(FunnelStep $step, mixed $named = null): ?string
     {
-        $template = trim((string) $step->config('template'));
+        $template = trim((string) ($named ?? $step->config('template')));
 
         if ($template === '' || str_contains($template, '::')) {
             return null;
@@ -219,9 +242,9 @@ class FunnelController
      * page pulled back into draft should make the funnel fall back to its own
      * rendering, not break the walk for everybody mid-purchase.
      */
-    protected function entryFor(FunnelStep $step): ?Entry
+    protected function entryFor(FunnelStep $step, mixed $id = null): ?Entry
     {
-        $id = $step->config('entry');
+        $id ??= $step->config('entry');
 
         if (! is_string($id) || $id === '') {
             return null;

@@ -106,6 +106,10 @@ class FunnelsController extends CpController
             // on the cards themselves: a drop-off number in a report somewhere
             // else is a number nobody looks at.
             'stats' => StepStats::forFunnel($funnel),
+            // Only for steps actually running a test. A funnel where every card
+            // sprouted an A and a B would bury the one number that matters
+            // under two that say the same thing.
+            'splits' => StepStats::byVariant($funnel),
             // Translated here, not in the browser. Statamic's JavaScript `__()`
             // only knows core and application strings; an addon's language file
             // never reaches it, so a label written in JS renders as the raw key
@@ -324,10 +328,18 @@ class FunnelsController extends CpController
                 'label' => __('statamic-funnels::nodes.field_label'),
                 'entryPlaceholder' => __('statamic-funnels::nodes.field_entry_placeholder'),
             ],
+            // The words for the deadline's three kinds. Handles in a config
+            // panel read as `rolling`, which is not a word anybody chose.
+            'options' => [
+                'none' => __('statamic-funnels::nodes.countdown_none'),
+                'fixed' => __('statamic-funnels::nodes.countdown_fixed'),
+                'rolling' => __('statamic-funnels::nodes.countdown_rolling'),
+            ],
             'stats' => [
                 'visits' => __('statamic-funnels::messages.stats_visits'),
                 'continued' => __('statamic-funnels::messages.stats_continued'),
                 'rate' => __('statamic-funnels::messages.stats_rate'),
+                'split' => __('statamic-funnels::messages.stats_split'),
             ],
             'preview' => [
                 'previous' => __('statamic-funnels::messages.preview_previous'),

@@ -81,6 +81,77 @@ class StepStats
     }
 
     /**
+     * The same numbers, split by which version people were shown.
+     *
+     * Only for steps that are actually running a test — a funnel where every
+     * card sprouted an A and a B would bury the one number that matters under
+     * two that are the same.
+     *
+     * @return array<string, array<string, array{visits: int, continued: int, rate: float|null}>>
+     */
+    public static function byVariant(Funnel $funnel): array
+    {
+        $visitIds = $funnel->visits()->select('id');
+
+        $targets = [];
+
+        foreach ($funnel->edges as $edge) {
+            $targets[$edge->from_node_key][] = $edge->to_node_key;
+        }
+
+        $out = [];
+
+        foreach ($funnel->steps as $step) {
+            if (! Split::running($step)) {
+                continue;
+            }
+
+            $rows = FunnelStepEvent::query()
+                ->whereIn('visit_id', $visitIds)
+                ->where('node_key', $step->node_key)
+                ->where('event', FunnelStepEvent::ENTERED)
+                ->get(['visit_id', 'payload']);
+
+            $seen = [Split::A => [], Split::B => []];
+
+            foreach ($rows as $row) {
+                $variant = $row->payload['variant'] ?? Split::A;
+
+                if (! isset($seen[$variant])) {
+                    continue;
+                }
+
+                $seen[$variant][$row->visit_id] = true;
+            }
+
+            $next = $targets[$step->node_key] ?? [];
+
+            foreach ($seen as $variant => $ids) {
+                $visits = count($ids);
+
+                $continued = $visits > 0 && $next !== []
+                    ? FunnelStepEvent::query()
+                        ->whereIn('visit_id', array_keys($ids))
+                        ->whereIn('node_key', $next)
+                        ->where('event', FunnelStepEvent::ENTERED)
+                        ->distinct()
+                        ->count('visit_id')
+                    : 0;
+
+                $out[$step->node_key][$variant] = [
+                    'visits' => $visits,
+                    'continued' => $continued,
+                    // Same rule as everywhere else: no visitors, no rate. Two
+                    // versions at "0 %" would look like a decision.
+                    'rate' => $visits > 0 && $next !== [] ? round($continued / $visits * 100, 1) : null,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * How many visitors who reached this step also reached one it leads to.
      *
      * @param  list<string>  $targets

@@ -65,6 +65,27 @@ abstract class StepType
             ['handle' => 'template', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_template'), 'instructions' => __('statamic-funnels::nodes.field_template_help')],
             ['handle' => 'headline', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_headline')],
             ['handle' => 'body', 'type' => 'textarea', 'label' => __('statamic-funnels::nodes.field_body')],
+            ...self::splitSchema(),
+        ];
+    }
+
+    /**
+     * The second version, for a step that is running a test.
+     *
+     * Only the fields B actually sets are swapped in. A test that changes one
+     * headline must not silently blank the body, and having to copy every field
+     * into the variant to change one of them is how a test ends up comparing
+     * two things that differ in ways nobody meant.
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected static function splitSchema(): array
+    {
+        return [
+            ['handle' => 'split_share', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_split_share'), 'instructions' => __('statamic-funnels::nodes.field_split_share_help')],
+            ['handle' => 'variant_entry', 'type' => 'entry', 'label' => __('statamic-funnels::nodes.field_variant_entry'), 'instructions' => __('statamic-funnels::nodes.field_variant_entry_help')],
+            ['handle' => 'variant_headline', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_variant_headline')],
+            ['handle' => 'variant_body', 'type' => 'textarea', 'label' => __('statamic-funnels::nodes.field_variant_body')],
         ];
     }
 

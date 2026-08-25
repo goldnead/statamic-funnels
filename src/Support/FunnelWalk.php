@@ -94,7 +94,15 @@ class FunnelWalk
             return;
         }
 
-        $visit->record($step->node_key, FunnelStepEvent::ENTERED);
+        // Which version they were shown, written onto the arrival itself. A
+        // split test that is not recorded is a coin toss with extra steps, and
+        // the arrival is the only row that exists for every visitor whether or
+        // not they go on.
+        $payload = Split::running($step)
+            ? ['variant' => Split::variantFor($step, $visit)]
+            : [];
+
+        $visit->record($step->node_key, FunnelStepEvent::ENTERED, $payload);
 
         FunnelStepEntered::dispatch($visit, $step);
     }
