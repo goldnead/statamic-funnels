@@ -1,9 +1,56 @@
+/* Statamic's token layer first: bare Tailwind would give colours that ignore
+   the user's theme, which is how an addon starts looking like a different
+   product two releases later. */
 @import "@statamic/cms/tailwind.css";
 @source "../js";
 
-/* The shared canvas brings its own styles through the flow library; these are
-   only the bits a funnel adds on top. */
-@import "@vue-flow/core/dist/style.css";
-@import "@vue-flow/core/dist/theme-default.css";
-@import "@vue-flow/controls/dist/style.css";
-@import "@vue-flow/minimap/dist/style.css";
+/* Vue Flow's shipped stylesheets are deliberately **not** imported.
+ *
+ * They are unlayered, and unlayered CSS beats anything in a layer — including
+ * every themed rule below. The visible symptom was a minimap that stayed a
+ * white box in dark mode, because `@vue-flow/minimap` paints `background: #fff`
+ * and nothing in `addon-utilities` can outrank it.
+ *
+ * The automations editor has never imported them either; the canvas gets its
+ * layout from the shared `canvas.css`, and everything that has to follow the
+ * Control Panel's theme therefore can.
+ */
+
+@layer addon-theme {
+    /* The canvas's shared accents, and this addon's own per-kind colours. The
+       package draws the boxes; naming their colours is the host's job, because
+       the host is what declares the kinds. */
+    @import "@goldnead/flow-canvas/canvas-theme.css";
+
+    :root {
+        --sa-color-entry: var(--color-blue-500, #3b82f6);
+        --sa-color-page: var(--color-emerald-500, #10b981);
+        --sa-color-offer: var(--color-amber-500, #f59e0b);
+        --sa-color-finish: var(--color-purple-500, #a855f7);
+    }
+
+    .dark {
+        --sa-color-entry: var(--color-blue-400, #60a5fa);
+        --sa-color-page: var(--color-emerald-400, #34d399);
+        --sa-color-offer: var(--color-amber-400, #fbbf24);
+        --sa-color-finish: var(--color-purple-400, #c084fc);
+    }
+}
+
+@layer addon-utilities {
+    /* Everything the canvas draws that has no `@statamic/cms/ui` equivalent.
+       Shared, so this editor and the automations editor cannot drift apart —
+       which is the whole reason the package exists. */
+    @import "@goldnead/flow-canvas/canvas.css";
+
+    /* One line per kind of this addon's own. */
+    .sa-node--entry  { --sa-chip-color: var(--sa-color-entry); }
+    .sa-node--page   { --sa-chip-color: var(--sa-color-page); }
+    .sa-node--offer  { --sa-chip-color: var(--sa-color-offer); }
+    .sa-node--finish { --sa-chip-color: var(--sa-color-finish); }
+
+    .sa-icon-chip--entry  { --sa-chip-color: var(--sa-color-entry); }
+    .sa-icon-chip--page   { --sa-chip-color: var(--sa-color-page); }
+    .sa-icon-chip--offer  { --sa-chip-color: var(--sa-color-offer); }
+    .sa-icon-chip--finish { --sa-chip-color: var(--sa-color-finish); }
+}
