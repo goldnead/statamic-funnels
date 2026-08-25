@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0
+
+### What's fixed
+
+- **The offer page printed the price in English.** `1249.50` on a German site is not a badly styled
+  number, it is a different one: in German the dot groups thousands. The step now carries both
+  shapes — `amount_local` for the page, `amount` unchanged for anything that parses — and the
+  bundled template uses the readable one. Requires `goldnead/statamic-offers` 1.2.
+
 ## 1.2.0 — 2026-08-25
 
 ### A deadline that is real

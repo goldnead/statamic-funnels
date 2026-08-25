@@ -54,7 +54,7 @@
                 <h2>{{ offer:headline }}</h2>
                 {{ if offer:body }}<div>{{ offer:body | markdown }}</div>{{ /if }}
                 <p class="funnel-offer__price">
-                    <strong>{{ offer:amount }} {{ offer:currency }}</strong>
+                    <strong>{{ offer:amount_local }} {{ offer:currency }}</strong>
                     {{ if offer:compare_at }}<s>{{ offer:compare_at }} {{ offer:currency }}</s>{{ /if }}
                 </p>
 
@@ -76,7 +76,7 @@
                                         {{ if body }}<span class="funnel-bump__body">{{ body | markdown }}</span>{{ /if }}
                                     </span>
                                     <span class="funnel-bump__price">
-                                        +{{ amount }} {{ currency }}
+                                        +{{ amount_local }} {{ currency }}
                                         {{ if compare_at }}<s>{{ compare_at }} {{ currency }}</s>{{ /if }}
                                     </span>
                                 </label>

@@ -307,8 +307,13 @@ class FunnelController
             'name' => $offer->name,
             'headline' => $offer->headline ?: $offer->name,
             'body' => $offer->body,
+            // Two shapes on purpose: `amount` keeps the dot for anything that
+            // parses, `amount_local` is what a person reads. A German page
+            // showing "249.00" is a machine talking.
             'amount' => $offer->amount(),
+            'amount_local' => $offer->amountLocal(),
             'compare_at' => $offer->compareAt(),
+            'compare_at_local' => $offer->compareAtLocal(),
             'currency' => $offer->currency(),
             'button_label' => $offer->button_label,
             // The tick-boxes beside the order button. Named by the offer, not
@@ -320,7 +325,9 @@ class FunnelController
                 'headline' => $bump->headline ?: $bump->name,
                 'body' => $bump->body,
                 'amount' => $bump->amount(),
+                'amount_local' => $bump->amountLocal(),
                 'compare_at' => $bump->compareAt(),
+                'compare_at_local' => $bump->compareAtLocal(),
                 'currency' => $bump->currency(),
             ], $offer->bumpOffers()),
             // Whether the page should show a field for a code at all.

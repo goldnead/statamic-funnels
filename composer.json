@@ -12,7 +12,7 @@
     "php": "^8.2",
     "statamic/cms": "^6.0",
     "goldnead/statamic-flow-canvas": "^1.1",
-    "goldnead/statamic-offers": "^1.1",
+    "goldnead/statamic-offers": "^1.2",
     "goldnead/statamic-payments": "^1.6"
   },
   "require-dev": {
