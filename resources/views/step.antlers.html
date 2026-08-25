@@ -42,7 +42,7 @@
                     right at render time; the script ticks it from `ends_at`,
                     because a tab left open for an hour has a stale one. #}}
                 {{ if countdown }}
-                    <p class="funnel-countdown" data-funnel-countdown="{{ countdown:ends_at }}">
+                    <p class="funnel-countdown" data-funnel-countdown="{{ countdown:ends_at }}"{{ if countdown:expired }} data-funnel-countdown-over{{ /if }}>
                         {{ if countdown:expired }}
                             {{ trans key="statamic-funnels::messages.countdown_over" }}
                         {{ else }}
