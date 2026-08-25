@@ -1,0 +1,73 @@
+{{#
+    The shipped step template.
+
+    Deliberately plain and deliberately present: a funnel that renders nothing
+    until somebody has written four templates never gets tried out. Every step
+    can name its own template instead, and most sites will.
+#}}
+{{# The shipped styling. One stylesheet, all values overridable as custom
+    properties — a site restyles a funnel by setting six variables rather than
+    fighting a stylesheet. #}}
+{{ if funnel:styles }}<link rel="stylesheet" href="{{ funnel:styles }}">{{ /if }}
+
+<div class="funnel-step" data-funnel="{{ funnel:handle }}" data-step="{{ step:key }}" data-step-type="{{ step:type }}">
+    {{ if headline }}<h1>{{ headline }}</h1>{{ /if }}
+    {{ if body }}<div class="funnel-step__body">{{ body | markdown }}</div>{{ /if }}
+
+    {{# A form step: a native Statamic form, with this addon only noting who it was. #}}
+    {{ if step:type == "capture" }}
+        <form method="POST" action="{{ action }}" class="funnel-form">
+            {{ csrf_field }}
+            <label>
+                <span>{{ trans key="statamic-funnels::messages.field_name" }}</span>
+                <input type="text" name="name" value="{{ visit:name }}">
+            </label>
+            <label>
+                <span>{{ trans key="statamic-funnels::messages.field_email" }}</span>
+                <input type="email" name="email" value="{{ visit:email }}" required>
+            </label>
+            <button type="submit">{{ trans key="statamic-funnels::messages.continue" }}</button>
+        </form>
+    {{ /if }}
+
+    {{# An offer step. The order button carries its own wording and its own
+        confirmation, because saving the card details does not save the consent. #}}
+    {{ if step:type == "offer" }}
+        {{ if offer }}
+            <div class="funnel-offer">
+                <h2>{{ offer:headline }}</h2>
+                {{ if offer:body }}<div>{{ offer:body | markdown }}</div>{{ /if }}
+                <p class="funnel-offer__price">
+                    <strong>{{ offer:amount }} {{ offer:currency }}</strong>
+                    {{ if offer:compare_at }}<s>{{ offer:compare_at }} {{ offer:currency }}</s>{{ /if }}
+                </p>
+
+                <form method="POST" action="{{ action }}" class="funnel-offer__accept">
+                    {{ csrf_field }}
+                    <input type="hidden" name="accept" value="1">
+                    <label>
+                        <input type="checkbox" name="confirmed" value="1" required>
+                        <span>{{ trans key="statamic-funnels::messages.order_confirmation" }}</span>
+                    </label>
+                    <button type="submit">{{ if offer:button_label }}{{ offer:button_label }}{{ else }}{{ trans key="statamic-funnels::messages.order_button" }}{{ /if }}</button>
+                </form>
+
+                <form method="POST" action="{{ action }}" class="funnel-offer__decline">
+                    {{ csrf_field }}
+                    <input type="hidden" name="accept" value="0">
+                    <button type="submit">{{ trans key="statamic-funnels::messages.decline" }}</button>
+                </form>
+            </div>
+        {{ else }}
+            <p class="funnel-offer__missing">{{ trans key="statamic-funnels::messages.offer_unavailable" }}</p>
+        {{ /if }}
+    {{ /if }}
+
+    {{# Any other step just carries on. #}}
+    {{ if step:type == "entry" || step:type == "page" }}
+        <form method="POST" action="{{ action }}">
+            {{ csrf_field }}
+            <button type="submit">{{ trans key="statamic-funnels::messages.continue" }}</button>
+        </form>
+    {{ /if }}
+</div>

@@ -1,0 +1,27 @@
+<?php
+
+return [
+    'utility_title' => 'Funnels',
+    'utility_nav' => 'Funnels',
+    'utility_description' => 'Paths visitors walk: pages, forms, offers, payments.',
+    'empty_heading' => 'No funnels yet',
+    'empty_title' => 'Nothing here yet',
+    'empty_description' => 'A funnel is a path with pages on it. Make one and draw it.',
+    'new_funnel' => 'New funnel',
+    'field_title' => 'Title',
+    'field_title_help' => 'For you. The URL is derived from it and can be changed later.',
+    'field_handle' => 'Handle',
+    'field_published' => 'Live',
+    'draft' => 'Draft',
+    'live' => 'Live',
+    'steps' => 'steps',
+    'visits' => 'visits',
+    'saved' => 'Saved.',
+    'field_name' => 'Name',
+    'field_email' => 'Email',
+    'continue' => 'Continue',
+    'decline' => 'No thanks',
+    'order_button' => 'Order with payment obligation',
+    'order_confirmation' => 'I am placing a binding order and agree that delivery begins at once, which ends my right of withdrawal.',
+    'offer_unavailable' => 'This offer is not available right now.',
+];

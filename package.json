@@ -1,0 +1,19 @@
+{
+    "private": true,
+    "type": "module",
+    "scripts": { "build": "vite build", "dev": "vite" },
+    "dependencies": {
+        "@goldnead/flow-canvas": "file:./vendor/goldnead/statamic-flow-canvas/resources/js",
+        "@statamic/cms": "file:./vendor/statamic/cms/resources/dist-package",
+        "@vue-flow/background": "^1.3.0",
+        "@vue-flow/controls": "^1.1.2",
+        "@vue-flow/core": "^1.41.0",
+        "@vue-flow/minimap": "^1.5.0"
+    },
+    "devDependencies": {
+        "@tailwindcss/vite": "^4.0.0",
+        "laravel-vite-plugin": "^3.0.0",
+        "tailwindcss": "^4.0.0",
+        "vite": "^8.0.0"
+    }
+}

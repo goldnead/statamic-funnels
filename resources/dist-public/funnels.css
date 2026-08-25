@@ -1,0 +1,156 @@
+/*
+ * The shipped look.
+ *
+ * Deliberately small and deliberately overridable: every value is a custom
+ * property under `.funnel-step`, so a site restyles a funnel by setting six
+ * variables rather than fighting a stylesheet. Nothing here is loaded unless a
+ * template asks for it.
+ *
+ * It exists because the alternative — shipping no styling at all — makes the
+ * first funnel somebody builds look broken, and a thing that looks broken does
+ * not get tried a second time.
+ */
+
+.funnel-step {
+    --funnel-ink: #14181d;
+    --funnel-muted: #5c6672;
+    --funnel-line: #e2e6ea;
+    --funnel-accent: #0e5c63;
+    --funnel-radius: 0.6rem;
+    --funnel-width: 34rem;
+
+    max-width: var(--funnel-width);
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 4rem;
+    color: var(--funnel-ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6;
+}
+
+.funnel-step h1 {
+    font-size: clamp(1.6rem, 4vw, 2.2rem);
+    line-height: 1.15;
+    text-wrap: balance;
+    margin: 0 0 0.75rem;
+}
+
+.funnel-step h2 {
+    font-size: 1.2rem;
+    margin: 0 0 0.5rem;
+}
+
+.funnel-step__body {
+    color: var(--funnel-muted);
+    margin-bottom: 1.75rem;
+}
+
+.funnel-step label {
+    display: block;
+    margin-bottom: 1rem;
+}
+
+.funnel-step label > span {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.3rem;
+}
+
+.funnel-step input[type="text"],
+.funnel-step input[type="email"] {
+    width: 100%;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid var(--funnel-line);
+    border-radius: var(--funnel-radius);
+    font: inherit;
+    background: #fff;
+}
+
+.funnel-step input:focus-visible {
+    outline: 2px solid var(--funnel-accent);
+    outline-offset: 1px;
+}
+
+.funnel-step button[type="submit"] {
+    background: var(--funnel-ink);
+    color: #fff;
+    border: 0;
+    border-radius: var(--funnel-radius);
+    padding: 0.75rem 1.4rem;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.funnel-offer {
+    border: 1px solid var(--funnel-line);
+    border-radius: 0.9rem;
+    padding: 1.5rem;
+    background: #fff;
+}
+
+.funnel-offer__price {
+    font-size: 1.15rem;
+    margin: 0 0 1.25rem;
+}
+
+.funnel-offer__price s {
+    color: var(--funnel-muted);
+    font-weight: 400;
+    margin-left: 0.4rem;
+}
+
+/* The order confirmation sits with its checkbox, not on its own line: the
+   agreement and the box that records it are one statement. */
+.funnel-offer__accept label {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    font-size: 0.9rem;
+    color: var(--funnel-muted);
+}
+
+.funnel-offer__accept label > span {
+    display: inline;
+    font-weight: 400;
+    margin: 0;
+}
+
+.funnel-offer__accept input[type="checkbox"] {
+    margin-top: 0.3rem;
+    flex-shrink: 0;
+}
+
+/* Declining is an answer, not a mistake — so it is quiet, not hidden. */
+.funnel-offer__decline {
+    margin-top: 1rem;
+}
+
+.funnel-offer__decline button[type="submit"] {
+    background: none;
+    color: var(--funnel-muted);
+    padding: 0.4rem 0;
+    font-weight: 400;
+    text-decoration: underline;
+}
+
+@media (prefers-color-scheme: dark) {
+    .funnel-step {
+        --funnel-ink: #e7ebef;
+        --funnel-muted: #a0aab5;
+        --funnel-line: #2a3138;
+        --funnel-accent: #56b6bf;
+    }
+
+    .funnel-step input[type="text"],
+    .funnel-step input[type="email"],
+    .funnel-offer {
+        background: #161a1f;
+        color: inherit;
+    }
+
+    .funnel-step button[type="submit"] {
+        background: var(--funnel-accent);
+        color: #0e1114;
+    }
+}

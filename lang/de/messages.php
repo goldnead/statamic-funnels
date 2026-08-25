@@ -1,0 +1,27 @@
+<?php
+
+return [
+    'utility_title' => 'Funnels',
+    'utility_nav' => 'Funnels',
+    'utility_description' => 'Wege, die Besucher gehen: Seiten, Formulare, Angebote, Zahlungen.',
+    'empty_heading' => 'Noch keine Funnels',
+    'empty_title' => 'Hier ist noch nichts',
+    'empty_description' => 'Ein Funnel ist ein Weg mit Seiten darauf. Leg einen an und zeichne ihn.',
+    'new_funnel' => 'Neuer Funnel',
+    'field_title' => 'Titel',
+    'field_title_help' => 'Nur für dich. Die Adresse wird daraus abgeleitet und lässt sich später ändern.',
+    'field_handle' => 'Kennung',
+    'field_published' => 'Live',
+    'draft' => 'Entwurf',
+    'live' => 'Live',
+    'steps' => 'Schritte',
+    'visits' => 'Besuche',
+    'saved' => 'Gespeichert.',
+    'field_name' => 'Name',
+    'field_email' => 'E-Mail',
+    'continue' => 'Weiter',
+    'decline' => 'Nein danke',
+    'order_button' => 'Zahlungspflichtig bestellen',
+    'order_confirmation' => 'Ich bestelle kostenpflichtig und stimme zu, dass die Lieferung sofort beginnt. Damit erlischt mein Widerrufsrecht.',
+    'offer_unavailable' => 'Dieses Angebot ist gerade nicht verfügbar.',
+];
