@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.4.0 — 2026-08-26
+
+### Fixed — ein leerer Split-Anteil startete heimlich einen Test
+
+`Split::share()` gab bei einem leeren Anteilsfeld **50** zurück. README und Feldhilfe sagen beide,
+ein leeres Feld heiße kein Test.
+
+Wer also eine B-Variante schrieb und den Anteil für später ließ — die naheliegendste Bedienung —
+schickte ab dem Speichern **die Hälfte aller Besucher** auf eine Fassung, die er für unveröffentlicht
+hielt. Nichts auf dem Bildschirm widersprach, und die Zahlen kamen zurück wie ein gewollter Versuch.
+
+Leer heißt jetzt aus. Die Alternative wäre gewesen, das Feld pflichtig zu machen, sobald eine
+Variante Inhalt hat; „aus" ist die weniger überraschende Antwort. Eine halbfertige Konfiguration soll
+nichts tun, nicht etwas.
+
+Was sich nicht ändert: ein Anteil, den jemand getippt hat, läuft weiter — festgehalten in einem
+eigenen Test, weil ein Fix, der auch konfigurierte Tests abschaltet, wertlos wäre.
+
 ## 1.3.1
 
 ### Fixed

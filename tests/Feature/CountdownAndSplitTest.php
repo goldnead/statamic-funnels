@@ -217,6 +217,44 @@ class CountdownAndSplitTest extends TestCase
         }
     }
 
+    /**
+     * An empty share means off, and it used to mean fifty-fifty.
+     *
+     * The most natural way to work — write the B version first, set the share
+     * afterwards — silently started a live test on half of all visitors, on a
+     * version its author believed unpublished. Both the README and the field
+     * help said an empty share was no test; only the code disagreed, and
+     * nothing on the screen showed it. The numbers came back looking like a
+     * deliberate experiment.
+     */
+    #[Test]
+    public function an_empty_share_is_not_a_test_even_with_a_variant_written(): void
+    {
+        foreach ([null, ''] as $leer) {
+            $funnel = Funnel::create(['handle' => 'leer'.(int) is_string($leer), 'title' => 'L', 'published' => true]);
+            $step = $funnel->steps()->create([
+                'node_key' => 'offer_1', 'type' => 'offer',
+                'config' => ['split_share' => $leer, 'variant_headline' => 'Fassung B'],
+            ]);
+
+            $this->assertSame(0, Split::share($step));
+            $this->assertFalse(Split::running($step), 'leerer Anteil: '.var_export($leer, true));
+        }
+    }
+
+    /**
+     * And the half that must not change: a share somebody actually typed still
+     * runs. Turning empty into "off" would be worthless if it also turned a
+     * configured test off.
+     */
+    #[Test]
+    public function a_share_that_was_typed_still_runs(): void
+    {
+        $funnel = $this->funnel(['split_share' => 50, 'variant_headline' => 'Fassung B']);
+
+        $this->assertTrue(Split::running($this->step($funnel, 'offer_1')));
+    }
+
     #[Test]
     public function a_visitor_sees_the_same_version_every_time(): void
     {

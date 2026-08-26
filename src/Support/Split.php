@@ -53,8 +53,19 @@ class Split
     {
         $raw = $step->config('split_share');
 
+        // Empty means off, and it used to mean 50.
+        //
+        // The README and the field help both say an empty share is no test.
+        // The code said fifty-fifty — so somebody who wrote a B variant and
+        // left the share for later sent half of everybody to a version they
+        // believed unpublished. Nothing on the screen contradicted it, and the
+        // numbers came back looking like a deliberate experiment.
+        //
+        // The other candidate was making the field mandatory once a variant
+        // has content. Off is the less surprising answer: a half-finished
+        // configuration should do nothing, not something.
         if ($raw === null || $raw === '') {
-            return 50;
+            return 0;
         }
 
         return max(0, min(100, (int) $raw));
