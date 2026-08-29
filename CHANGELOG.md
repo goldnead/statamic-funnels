@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.5.0 — 2026-08-29
+
+### Neu: die Zahlen dieses Addons erscheinen in Insights
+
+`statamic-insights` ist ab 1.1.0 keine Umsatzauswertung mehr, sondern die Auswertungs-Schicht der
+Familie: jedes Addon meldet an, was es zählen kann, und bekommt dafür Zeitraum, Vergleich mit dem
+Vorzeitraum, Diagramm, Aufteilungen und zwei fertige Schirme.
+
+Die Kopplung ist in **beide** Richtungen freiwillig. Ohne Insights fehlt hier nichts; ohne dieses
+Addon fehlt dort nur seine Gruppe. `suggest`, nie `require`.
+
+Jede Zahl hält sich an die Hausregeln des Vertrags: **null ist nicht null** (eine Quote ohne Nenner
+hat keine Antwort und zeigt keine 0 %), `available()` entscheidet über die Existenz und nie über die
+Daten, Lücken im Verlauf füllt Insights und nicht die Kennzahl, und ein Filter, den eine Zahl nicht
+versteht, wird ignoriert statt zum Fehler.
+
+Vier Zahlen: Eintritte, Abschlüsse, Abschlussquote, Dauer bis zum Abschluss.
+
+Keine der fünf Tabellen trägt eine Markenspalte — gegen die Migrationen geprüft, nicht angenommen —,
+hier ist also nichts zu verengen.
+
 ## 1.4.0 — 2026-08-26
 
 ### Fixed — ein leerer Split-Anteil startete heimlich einen Test
