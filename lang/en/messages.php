@@ -46,4 +46,25 @@ return [
     'countdown_remaining' => 'Ends in',
     'countdown_over' => 'This offer has closed.',
     'stats_split' => 'Split test',
+
+    // Insights. Registered only when goldnead/statamic-insights is installed;
+    // the strings are resolved when a tile is rendered, never at boot.
+    'metric_group' => 'Funnels',
+    'metric_visits' => 'Funnel visits',
+    'metric_visits_description' => 'Walks that began in the period, one per visitor and funnel.',
+    'metric_completed' => 'Funnels completed',
+    'metric_completed_description' => 'Walks that reached the end, counted on the day they finished.',
+    'metric_completion_rate' => 'Completion rate',
+    'metric_completion_rate_description' => 'Of the walks that began in the period, the share that reached the end.',
+    'metric_step_events' => 'Step events',
+    'metric_step_events_description' => 'Every recorded step of a walk: entered, submitted, accepted, declined, completed.',
+    'metric_breakdown_funnel' => 'Funnel',
+    'metric_breakdown_event' => 'Kind of step',
+    'metric_event_entered' => 'Entered',
+    'metric_event_submitted' => 'Submitted',
+    'metric_event_accepted' => 'Accepted',
+    'metric_event_declined' => 'Declined',
+    'metric_event_completed' => 'Completed',
+    'metric_no_funnel_id' => 'No funnel',
+    'metric_no_event' => 'No kind',
 ];

@@ -46,4 +46,25 @@ return [
     'countdown_remaining' => 'Endet in',
     'countdown_over' => 'Dieses Angebot ist abgelaufen.',
     'stats_split' => 'A/B-Test',
+
+    // Insights. Nur vorhanden, wenn goldnead/statamic-insights installiert ist;
+    // die Texte werden beim Zeichnen einer Kachel aufgeloest, nie beim Booten.
+    'metric_group' => 'Funnels',
+    'metric_visits' => 'Funnel-Besuche',
+    'metric_visits_description' => 'Wege, die im Zeitraum begonnen haben, einer je Besucher und Funnel.',
+    'metric_completed' => 'Abgeschlossene Wege',
+    'metric_completed_description' => 'Wege, die ans Ende kamen, gezaehlt am Tag des Abschlusses.',
+    'metric_completion_rate' => 'Abschlussquote',
+    'metric_completion_rate_description' => 'Von den Wegen, die im Zeitraum begonnen haben, der Anteil, der ans Ende kam.',
+    'metric_step_events' => 'Schritt-Ereignisse',
+    'metric_step_events_description' => 'Jeder festgehaltene Schritt eines Weges: betreten, abgeschickt, angenommen, abgelehnt, abgeschlossen.',
+    'metric_breakdown_funnel' => 'Funnel',
+    'metric_breakdown_event' => 'Art des Schritts',
+    'metric_event_entered' => 'Betreten',
+    'metric_event_submitted' => 'Abgeschickt',
+    'metric_event_accepted' => 'Angenommen',
+    'metric_event_declined' => 'Abgelehnt',
+    'metric_event_completed' => 'Abgeschlossen',
+    'metric_no_funnel_id' => 'Ohne Funnel',
+    'metric_no_event' => 'Ohne Art',
 ];
