@@ -96,7 +96,15 @@ function refresh(immediate = false) {
                     headers: {
                         'Content-Type': 'application/json',
                         Accept: 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                        // Statamic 6's CP head renders no `<meta name="csrf-token">`
+                        // — the token lives in the JS config the layout writes
+                        // out. Reading the meta tag returned an empty string,
+                        // and every preview request came back 419.
+                        'X-CSRF-TOKEN':
+                            window.Statamic?.$config?.get('csrfToken') ??
+                            window.StatamicConfig?.csrfToken ??
+                            document.querySelector('meta[name="csrf-token"]')?.content ??
+                            '',
                     },
                     body: JSON.stringify({
                         node_key: current.value,

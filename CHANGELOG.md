@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.5.1 — 2026-08-30
+
+### Fixed — die Vorschau im Control Panel lief immer in einen CSRF-Fehler
+
+`PreviewPanel` holte den CSRF-Token aus `<meta name="csrf-token">`. **Das Control Panel von
+Statamic 6 rendert dieses Tag nicht** — der Token steht in der JS-Konfiguration, die das Layout
+ausschreibt (`Statamic.$config`, `StatamicConfig.csrfToken`). Gelesen wurde also ein leerer String,
+und jeder Vorschau-Aufruf kam als *CSRF token mismatch* zurück. Die Vorschau war damit auf keiner
+Installation je benutzbar.
+
+Nicht aufgefallen, weil die Feature-Tests der Vorschau in Laravels Testumgebung laufen, wo die
+CSRF-Prüfung ausgeschaltet ist: der Endpunkt war die ganze Zeit in Ordnung, nur der Aufruf aus dem
+Browser kam nie an. `statamic-marketing` liest denselben Token seit jeher über `Statamic.$config`;
+das ist jetzt auch hier der erste Weg, mit dem Meta-Tag als letztem Rückfall.
+
 ## 1.5.0 — 2026-08-29
 
 ### Neu: die Zahlen dieses Addons erscheinen in Insights
