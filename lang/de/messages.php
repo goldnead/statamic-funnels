@@ -27,7 +27,7 @@ return [
     // Steht unmittelbar ueber dem Bestellknopf, wenn ohne erneute
     // Karteneingabe abgebucht wird. Wer das weglaesst, laesst eine Abbuchung
     // zu, von der der Kaeufer erst im Kontoauszug erfaehrt.
-    'saved_card_named' => 'Wird ohne erneute Karteneingabe von deiner :label auf :last4 abgebucht.',
+    'saved_card_named' => 'Wird ohne erneute Karteneingabe von deiner :label •••• :last4 abgebucht.',
     'saved_card_unnamed' => 'Wird ohne erneute Karteneingabe von dem Zahlungsmittel abgebucht, mit dem du eben bezahlt hast.',
     'offer_unavailable' => 'Dieses Angebot ist gerade nicht verfügbar.',
     'delete_title' => 'Funnel löschen?',

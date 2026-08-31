@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.1 — 2026-09-01
+
+Formulierung des Kartenhinweises. „von deiner Mastercard auf 9996" las sich auf der Seite wie eine
+Betragsangabe; jetzt steht dort „von deiner Mastercard •••• 9996". Nur Text, kein Verhalten.
+
 ## 1.6.0 — 2026-09-01
 
 ### Der zweite Mensch am selben Rechner zahlte auf die Karte des ersten
