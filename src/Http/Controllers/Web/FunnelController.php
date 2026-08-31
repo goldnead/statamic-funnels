@@ -9,6 +9,7 @@ use Goldnead\StatamicFunnels\Registries\StepRegistry;
 use Goldnead\StatamicFunnels\Support\Countdown;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\PreviewToken;
+use Goldnead\StatamicFunnels\Support\SavedCard;
 use Goldnead\StatamicFunnels\Support\Split;
 use Goldnead\StatamicOffers\Models\Offer;
 use Illuminate\Http\Request;
@@ -29,6 +30,7 @@ class FunnelController
     public function __construct(
         protected FunnelWalk $walk,
         protected StepRegistry $registry,
+        protected SavedCard $savedCard,
     ) {}
 
     /** The entry step, under the funnel's own URL. */
@@ -159,6 +161,18 @@ class FunnelController
             'action' => route('statamic-funnels.advance', [$funnel->handle, $step->node_key]),
             'form' => $step->config('form'),
             'offer' => $this->offerFor($step, $preview),
+            // Ob dieser Schritt ohne erneute Karteneingabe abbuchen wuerde, und
+            // womit. Null heisst: normale Kasse, der Kaeufer geht zum Anbieter.
+            //
+            // Die Seite muss es sagen, bevor sie es tut. Eine Abbuchung, die
+            // erst im Kontoauszug auftaucht, ist keine Bequemlichkeit mehr —
+            // und § 312j Abs. 3 BGB verlangt die wesentlichen Angaben
+            // unmittelbar ueber dem Knopf, die Zahlungsart eingeschlossen.
+            // In der Vorschau gibt es keinen Besucher und damit nichts zu
+            // sagen.
+            'saved_card' => $step->type === 'offer'
+                ? $this->savedCard->forTemplate($preview ? null : $visit)
+                : null,
             // Null when this step has no deadline. A template that has to test
             // for it is a template that behaves the same either way.
             'countdown' => Countdown::forTemplate($step, $preview ? null : $visit),

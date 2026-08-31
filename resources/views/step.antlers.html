@@ -91,6 +91,22 @@
                         </label>
                     {{ /if }}
 
+                    {{# Womit abgebucht wird, unmittelbar ueber dem Knopf.
+                        Steht nur da, wenn wirklich ohne neue Karteneingabe
+                        abgebucht wird — sonst waere es eine Behauptung. Die
+                        vier Ziffern fehlen bei Zahlungsarten ohne Karte und
+                        bei Zahlungen von vor dieser Fassung; dann sagt die
+                        Seite dasselbe ohne sie, statt zu schweigen. #}}
+                    {{ if saved_card }}
+                        <p class="funnel-offer__saved-card">
+                            {{ if saved_card:last4 }}
+                                {{ trans key="statamic-funnels::messages.saved_card_named" label="{saved_card:label}" last4="{saved_card:last4}" }}
+                            {{ else }}
+                                {{ trans key="statamic-funnels::messages.saved_card_unnamed" }}
+                            {{ /if }}
+                        </p>
+                    {{ /if }}
+
                     <label>
                         <input type="checkbox" name="confirmed" value="1" required>
                         <span>{{ trans key="statamic-funnels::messages.order_confirmation" }}</span>

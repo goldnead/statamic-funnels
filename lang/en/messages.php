@@ -23,6 +23,12 @@ return [
     'decline' => 'No thanks',
     'order_button' => 'Order with payment obligation',
     'order_confirmation' => 'I am placing a binding order and agree that delivery begins at once, which ends my right of withdrawal.',
+
+    // Directly above the order button whenever the charge happens without new
+    // card details. Leaving it out permits a charge the buyer first learns of
+    // from their statement.
+    'saved_card_named' => 'Charged to your :label ending :last4, without entering card details again.',
+    'saved_card_unnamed' => 'Charged to the payment method you just used, without entering card details again.',
     'offer_unavailable' => 'This offer is not available right now.',
     'delete_title' => 'Delete this funnel?',
     'delete_body' => '“:title” goes, along with :visits visits and everything recorded in them. This cannot be undone.',

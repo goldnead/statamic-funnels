@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.6.0 — 2026-09-01
+
+### Der zweite Mensch am selben Rechner zahlte auf die Karte des ersten
+
+Ein Funnel-Besuch hängt an einem Cookie mit dreißig Tagen Laufzeit. Wer ein zweites Mal durch
+denselben Funnel ging — dieselbe Maschine, andere Person, andere Adresse —, bekam kein
+Kartenformular mehr: `AdvanceController` fand die Zahlung des ersten Laufs am Besuch, hielt das für
+„derselbe Käufer nimmt noch etwas" und ließ per gespeichertem Mandat abbuchen. Die frisch
+eingegebene Adresse überschrieb `FollowUp` dabei mit der alten. Zugang, Rechnung und
+Bestätigungsmail liefen auf den ersten Käufer, die zweite Person hatte gezahlt und bekam nichts.
+Reproduziert auf einer Staging-Installation am 31.08.2026, mit echter Zahlung.
+
+Zwei Stellen, dieselbe falsche Annahme, dass ein Gerät ein Mensch ist:
+
+- **Die gespeicherte Karte.** Neu in `Support\SavedCard`, und zwar an *einer* Stelle, weil zwei sie
+  brauchen: die Seite, die es vorher sagen muss, und die Aktion, die es danach tut. Sie fragt
+  `FollowUp::eligible($payment, $visit->email)` — das braucht `goldnead/statamic-payments ^1.16`,
+  daher die angehobene Anforderung.
+- **Die Erinnerung an den Kauf.** Trägt der Capture-Schritt eine andere Adresse ein als eben, fängt
+  der Lauf neu an: `payment_id` und `meta['payments']` fallen weg. Ohne das wäre der Fehler nur
+  gewandert — statt auf fremde Karte zu buchen, hätte `pendingPaymentFor()` den längst bezahlten
+  Kauf des Ersten für diesen gehalten und die zweite Person **ohne jede Zahlung** durchgewinkt.
+
+Für den echten Wiederkäufer ändert sich nichts: gleiche Adresse, gleicher Ein-Klick-Upsell.
+
+### Die Seite sagt jetzt, womit sie abbucht
+
+Der Offer-Schritt bekommt `funnel:saved_card` mit `last4` und `label`, gefüllt aus
+`payments.card_last4` / `card_label` (neu in payments 1.16). Die mitgelieferte Ansicht schreibt den
+Satz unmittelbar über den Bestellknopf — § 312j Abs. 3 BGB will die wesentlichen Angaben genau
+dort, und die Zahlungsart gehört dazu. Neue Sprachschlüssel `saved_card_named` und
+`saved_card_unnamed`; ohne Kartenangaben (Überweisung, Altbestand) steht der Satz ohne die vier
+Ziffern da, statt zu fehlen. Wer eine eigene Ansicht schreibt, muss `saved_card` selbst ausgeben.
+
+### Getestet
+
+`tests/Feature/SavedCardTest.php`, und das Test-Double `FakeGateway` kann jetzt nachfassen — bis
+hierhin war der ganze Zweig aus den Tests dieses Pakets heraus unerreichbar, was der Grund war,
+dass der Fehler bis in eine echte Zahlung durchkam.
+
 ## 1.5.1 — 2026-08-30
 
 ### Fixed — die Vorschau im Control Panel lief immer in einen CSRF-Fehler

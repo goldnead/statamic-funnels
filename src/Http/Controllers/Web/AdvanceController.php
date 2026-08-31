@@ -10,6 +10,7 @@ use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Support\Countdown;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
+use Goldnead\StatamicFunnels\Support\SavedCard;
 use Goldnead\StatamicOffers\Models\Offer;
 use Goldnead\StatamicOffers\Support\Basket;
 use Goldnead\StatamicPayments\Models\Payment;
@@ -31,6 +32,7 @@ class AdvanceController
         protected FunnelWalk $walk,
         protected Checkout $checkout,
         protected FollowUp $followUp,
+        protected SavedCard $savedCard,
     ) {}
 
     public function __invoke(Request $request, string $funnel, string $nodeKey)
@@ -81,9 +83,34 @@ class AdvanceController
             'name' => ['nullable', 'string', 'max:191'],
         ]);
 
+        // Eine andere Adresse als eben heisst: hier sitzt jemand anderes.
+        //
+        // Der Besuch haengt an einem Cookie, der einen Monat haelt, und trug
+        // bisher die Zahlung des vorigen Laufs mit sich. Das hatte zwei Wege
+        // ins Verderben, beide auf demselben Familien- oder Bueforechner: die
+        // Vorgaengerzahlung liess den naechsten Kauf per gespeichertem Mandat
+        // auf die *fremde* Karte abbuchen — und wo das nicht griff, hielt
+        // `pendingPaymentFor()` den alten, laengst bezahlten Kauf fuer diesen
+        // hier und winkte die zweite Person ohne Zahlung durch.
+        //
+        // Der Lauf faengt deshalb neu an: keine Zahlung, kein gemerkter
+        // Schritt, kein Name. Nur die Wegmarken des Besuchs bleiben, damit die
+        // Auswertung nicht luegt.
+        $sameBuyer = ! is_string($visit->email)
+            || $visit->email === ''
+            || mb_strtolower(trim($visit->email)) === mb_strtolower(trim($data['email']));
+
+        $meta = $visit->meta ?? [];
+
+        if (! $sameBuyer) {
+            unset($meta['payments'], $meta['pending_step']);
+        }
+
         $visit->forceFill([
             'email' => $data['email'],
-            'name' => $data['name'] ?? $visit->name,
+            'name' => $data['name'] ?? ($sameBuyer ? $visit->name : null),
+            'payment_id' => $sameBuyer ? $visit->payment_id : null,
+            'meta' => $meta === [] ? null : $meta,
         ])->save();
 
         // Announced before moving on, so a sibling that wants the contact gets
@@ -149,18 +176,23 @@ class AdvanceController
         $prefix = (string) config('statamic-offers.handle_prefix', 'offer:');
         $buyHandle = $prefix.$offer->handle;
 
-        // Already paid once in this walk? Then this is a follow-up, charged
-        // against what the first payment left behind, and the buyer types
-        // nothing. Otherwise it is a first checkout and they go to the provider.
-        $previous = $visit->payment_id
-            ? Payment::find($visit->payment_id)
-            : null;
+        // Already paid once in this walk, by this same person? Then this is a
+        // follow-up, charged against what the first payment left behind, and
+        // the buyer types nothing. Otherwise it is a first checkout and they go
+        // to the provider.
+        //
+        // „By this same person" ist der Teil, der nicht fehlen darf. Der Besuch
+        // haengt an einem Cookie, der einen Monat haelt; wer ihn allein
+        // befragt, bucht der zweiten Person am selben Rechner die Karte der
+        // ersten ab und liefert an deren Adresse. Die Pruefung steht in
+        // {@see SavedCard}, weil die Seite vorher dasselbe wissen muss.
+        $previous = $this->savedCard->chargeableFrom($visit);
 
-        if ($previous && $this->followUp->eligible($previous)) {
+        if ($previous) {
             $payment = $this->followUp->accept($previous, $buyHandle, [
                 'funnel' => $funnel->handle,
                 'step' => $step->node_key,
-            ]);
+            ], [], $visit->email);
 
             if (! $payment) {
                 return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);

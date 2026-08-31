@@ -23,6 +23,12 @@ return [
     'decline' => 'Nein danke',
     'order_button' => 'Zahlungspflichtig bestellen',
     'order_confirmation' => 'Ich bestelle kostenpflichtig und stimme zu, dass die Lieferung sofort beginnt. Damit erlischt mein Widerrufsrecht.',
+
+    // Steht unmittelbar ueber dem Bestellknopf, wenn ohne erneute
+    // Karteneingabe abgebucht wird. Wer das weglaesst, laesst eine Abbuchung
+    // zu, von der der Kaeufer erst im Kontoauszug erfaehrt.
+    'saved_card_named' => 'Wird ohne erneute Karteneingabe von deiner :label auf :last4 abgebucht.',
+    'saved_card_unnamed' => 'Wird ohne erneute Karteneingabe von dem Zahlungsmittel abgebucht, mit dem du eben bezahlt hast.',
     'offer_unavailable' => 'Dieses Angebot ist gerade nicht verfügbar.',
     'delete_title' => 'Funnel löschen?',
     'delete_body' => '„:title" wird gelöscht, samt :visits Besuchen und allem, was darin steht. Das lässt sich nicht rückgängig machen.',
