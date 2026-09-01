@@ -92,6 +92,19 @@ edge (a mail added there hangs off the same output; the edge stays), or use *Att
 an output in the step's inspector. The preview's stepper lists a mail right behind the step it
 hangs off and shows the rendered mail with sample data.
 
+### Newsletter and purchase, kept apart
+
+A form step shows a newsletter checkbox **under the email field**, never pre-ticked: the step's
+`newsletter` setting is *no checkbox* or *offer it, unticked* — there is no pre-ticked option,
+because a pre-ticked consent is not one in the EU (Planet49). The sentence beside the box is
+configurable (`newsletter_label`) and is recorded with the tick, so the visit carries
+`meta['newsletter'] = {opted_in, at, text}`.
+
+Towards LeadHub the two facts stay two facts. The address becomes a contact **without** consent;
+only a ticked box hands over consent — through LeadHub's `ContactResolver`, the one path that
+knows the flag (`LeadHub::ingest()` and `create()` do not carry consent). A purchase tags the
+contact `kunde` and grants nothing else: having bought is not having agreed to mail.
+
 ### Consent at the order button
 
 German law (§ 356 Abs. 5 BGB) lets the right of withdrawal lapse for digital content only after an

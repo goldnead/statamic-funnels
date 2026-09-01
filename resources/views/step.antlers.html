@@ -30,6 +30,16 @@
                 <input type="email" name="email" value="{{ visit:email }}" required>
             </label>
 
+            {{# Der Newsletter, direkt unter der Adresse und getrennt vom Rest:
+                wer hier seine Adresse laesst, ist ein Kontakt — Post will er
+                erst, wenn er es ankreuzt. Nie vorangekreuzt. #}}
+            {{ if newsletter }}
+                <label class="funnel-form__newsletter">
+                    <input type="checkbox" name="newsletter" value="1"{{ if newsletter:checked }} checked{{ /if }}>
+                    <span>{{ newsletter:label }}</span>
+                </label>
+            {{ /if }}
+
             {{# Die Rechnungsanschrift. Nur wenn dieser Schritt danach fragt:
                 ueber 250 EUR entsteht ohne sie gar keine Rechnung (§ 14 UStG),
                 darunter waeren es vier Felder, die niemand braucht — und jedes

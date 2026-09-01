@@ -19,6 +19,7 @@ return [
     'saved' => 'Gespeichert.',
     'field_name' => 'Name',
     'field_email' => 'E-Mail',
+    'newsletter_label' => 'Ich möchte den Newsletter erhalten.',
     'order_summary' => 'Deine Bestellung',
     'order_total' => 'Gesamt',
     'order_reference' => 'Bestellnummer:',

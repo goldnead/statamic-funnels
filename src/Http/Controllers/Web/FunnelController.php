@@ -192,6 +192,12 @@ class FunnelController
             'billing' => $step->type === 'capture'
                 ? self::billingForTemplate($step, $preview ? null : $visit)
                 : null,
+            // Der Newsletter-Haken unter dem E-Mail-Feld. Null, wenn der
+            // Schritt ihn verbirgt. Nie vorangekreuzt — ausser der Besuch hat
+            // ihn schon einmal selbst gesetzt und laedt die Seite neu.
+            'newsletter' => $step->type === 'capture'
+                ? self::newsletterForTemplate($step, $preview ? null : $visit)
+                : null,
             // Was in diesem Lauf gekauft wurde. Null, solange nichts bezahlt
             // ist — eine Danke-Seite, die „Danke" sagt und den Kauf nicht
             // kennt, ist der Zustand, den das hier beendet.
@@ -459,6 +465,25 @@ class FunnelController
         </body>
         </html>
         HTML;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected static function newsletterForTemplate(FunnelStep $step, ?FunnelVisit $visit): ?array
+    {
+        $mode = (string) ($step->config('newsletter') ?: CaptureStep::NEWSLETTER_OPTIONAL);
+
+        if ($mode === CaptureStep::NEWSLETTER_HIDDEN) {
+            return null;
+        }
+
+        $bisher = (array) ((($visit->meta ?? [])['newsletter']) ?? []);
+
+        return [
+            'label' => AdvanceController::newsletterLabel($step),
+            'checked' => (bool) ($bisher['opted_in'] ?? false),
+        ];
     }
 
     /**

@@ -19,6 +19,7 @@ return [
     'saved' => 'Saved.',
     'field_name' => 'Name',
     'field_email' => 'Email',
+    'newsletter_label' => 'I would like to receive the newsletter.',
     'order_summary' => 'Your order',
     'order_total' => 'Total',
     'order_reference' => 'Order number:',

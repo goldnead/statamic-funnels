@@ -29,9 +29,27 @@ class CaptureStep extends StepType
      */
     public const BILLING_FULL = 'full';
 
+    /** Kein Newsletter-Haken auf dieser Seite. */
+    public const NEWSLETTER_HIDDEN = 'hidden';
+
+    /**
+     * Ein Haken, **nicht** vorangekreuzt.
+     *
+     * Eine dritte Stufe „vorangekreuzt" gibt es absichtlich nicht: in der EU
+     * ist eine vorbelegte Einwilligung keine (EuGH C-673/17, Planet49). Was
+     * hier fehlt, fehlt nicht aus Versehen.
+     */
+    public const NEWSLETTER_OPTIONAL = 'optional';
+
     public static function handle(): string
     {
         return 'capture';
+    }
+
+    /** @return list<string> */
+    public static function newsletterModes(): array
+    {
+        return [self::NEWSLETTER_HIDDEN, self::NEWSLETTER_OPTIONAL];
     }
 
     /** @return list<string> */
@@ -84,6 +102,25 @@ class CaptureStep extends StepType
                     fn (string $mode) => ['value' => $mode, 'label' => __('statamic-funnels::nodes.billing_'.$mode)],
                     self::billingModes(),
                 ),
+            ],
+            // Kauf und Newsletter getrennt. Wer hier seine Adresse laesst,
+            // ist ein Kontakt; Post will er erst, wenn er es ankreuzt.
+            [
+                'handle' => 'newsletter',
+                'type' => 'select',
+                'label' => __('statamic-funnels::nodes.field_newsletter'),
+                'instructions' => __('statamic-funnels::nodes.field_newsletter_help'),
+                'default' => self::NEWSLETTER_OPTIONAL,
+                'options' => array_map(
+                    fn (string $mode) => ['value' => $mode, 'label' => __('statamic-funnels::nodes.newsletter_'.$mode)],
+                    self::newsletterModes(),
+                ),
+            ],
+            [
+                'handle' => 'newsletter_label',
+                'type' => 'text',
+                'label' => __('statamic-funnels::nodes.field_newsletter_label'),
+                'instructions' => __('statamic-funnels::nodes.field_newsletter_label_help'),
             ],
         ], self::pageSchema());
     }

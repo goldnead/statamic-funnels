@@ -23,6 +23,17 @@ noch nichts weitergeht, „Schritt anhängen" — das „+" der Leinwand gibt es
 Kante. Ein Knoten, der über das „+" einer bestehenden Kante gewählt wird, wird jetzt dazwischen
 eingefügt (vorher blieb er unverbunden); eine Mail dort hängt sich als Abzweig an denselben Ausgang.
 
+### Kauf und Newsletter getrennt
+
+Der Capture-Schritt bekommt einen Newsletter-Haken unter dem E-Mail-Feld (`newsletter`: kein
+Haken / Haken anbieten, nie vorangekreuzt; `newsletter_label` konfigurierbar). Der Besuch traegt
+`meta['newsletter']` mit Zeitpunkt und dem gezeigten Wortlaut; ein spaeterer Schritt macht aus
+einem „ja" kein „nein". Richtung LeadHub: die Adresse wird ein Kontakt **ohne** Einwilligung, nur
+der Haken setzt sie (ueber `ContactResolver`, weil `ingest()`/`create()`/`update()` keine
+Einwilligung kennen), ein Kauf traegt das Tag `kunde` — neues Listener `TagBuyerInLeadHub` auf
+`FunnelOfferAccepted`. Nebenbei: `LeadHubBridge::capture()` uebergab den Namen unter `name`, den
+`SourceEvent` gar nicht liest; jetzt unter `contact.full_name`.
+
 ### Einwilligung, Widerruf und Zugangsfenster an der Zahlung
 
 `confirmed` wurde geprüft und verworfen. Jetzt gehen Zeitpunkt und Wortlaut der Einwilligung in

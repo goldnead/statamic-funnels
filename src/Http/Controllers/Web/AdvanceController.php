@@ -112,7 +112,25 @@ class AdvanceController
             // der Steuerfall daran haengt. Ein freies Textfeld waere
             // „Deutschland", „DE", „de" und „Germany" in derselben Spalte.
             'country' => [$wantsAddress ? 'required' : 'nullable', 'string', 'size:2', 'alpha'],
+            'newsletter' => ['nullable', 'boolean'],
         ]);
+
+        // Der Newsletter-Haken, getrennt vom Kauf. Festgehalten mit Zeitpunkt
+        // und dem Wortlaut, der neben dem Haken stand — ein „ja" ohne den Satz,
+        // zu dem es gesagt wurde, ist keine Einwilligung, die man vorzeigen
+        // kann. Nur wenn die Seite den Haken ueberhaupt gezeigt hat; ein
+        // Feld, das eine fremde Vorlage mitschickt, obwohl der Schritt es
+        // verbirgt, zaehlt nicht.
+        $newsletterMode = (string) ($step->config('newsletter') ?: CaptureStep::NEWSLETTER_OPTIONAL);
+        $newsletter = null;
+
+        if ($newsletterMode !== CaptureStep::NEWSLETTER_HIDDEN) {
+            $newsletter = [
+                'opted_in' => $request->boolean('newsletter'),
+                'at' => now()->format(DATE_ATOM),
+                'text' => self::newsletterLabel($step),
+            ];
+        }
 
         // Eine andere Adresse als eben heisst: hier sitzt jemand anderes.
         //
@@ -152,6 +170,14 @@ class AdvanceController
 
         if ($anschrift !== []) {
             $meta['billing'] = array_merge((array) ($meta['billing'] ?? []), $anschrift);
+        }
+
+        if ($newsletter !== null) {
+            // Ein spaeterer Schritt darf ein „ja" nicht zu einem „nein" machen,
+            // nur weil er die Frage noch einmal stellt und niemand sie erneut
+            // ankreuzt. Ein gesetzter Haken bleibt; ein neuer Haken zaehlt.
+            $bisher = (array) ($meta['newsletter'] ?? []);
+            $meta['newsletter'] = ($newsletter['opted_in'] || empty($bisher['opted_in'])) ? $newsletter : $bisher;
         }
 
         $visit->forceFill([
@@ -372,6 +398,14 @@ class AdvanceController
             'country' => $billing['country'] ?? null,
             'meta' => array_filter(['address' => self::anschriftZeilen($billing)]),
         ]);
+    }
+
+    /** Der Satz neben dem Newsletter-Haken: der des Schritts, sonst der aus der Sprachdatei. */
+    public static function newsletterLabel(FunnelStep $step): string
+    {
+        $label = trim((string) $step->config('newsletter_label'));
+
+        return $label !== '' ? $label : (string) __('statamic-funnels::messages.newsletter_label');
     }
 
     /**
