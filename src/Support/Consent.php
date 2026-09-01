@@ -116,7 +116,7 @@ class Consent
      *
      * @param  array<string, mixed>|null  $terms
      */
-    public static function text(?array $terms, bool $b2b = false): string
+    public static function text(?array $terms, bool $b2b = false, bool $withVersion = true): string
     {
         if ($terms === null) {
             return (string) __('statamic-funnels::messages.order_confirmation');
@@ -128,7 +128,7 @@ class Consent
 
         $version = trim((string) ($terms['version'] ?? ''));
 
-        return $version === '' ? $text : $text.' ['.$version.']';
+        return $version === '' || ! $withVersion ? $text : $text.' ['.$version.']';
     }
 
     /**
@@ -150,18 +150,54 @@ class Consent
     {
         $terms = self::terms($offer);
         $b2b = self::isB2b($visit);
+        $text = trim((string) ($terms['text'] ?? ''));
 
         return [
             // Die Kurzbelehrung ueber dem Knopf. Leer, wenn das Angebot keine
             // fuehrt — dann steht da nur der Satz am Haken, wie bisher.
-            'text' => trim((string) ($terms['text'] ?? '')),
+            'text' => $text,
+            // Dieselbe Belehrung in Absaetzen, Ueberschriften markiert, damit
+            // die Vorlage sie nicht als einen Block ausgibt.
+            'paragraphs' => self::paragraphs($text),
             'days' => isset($terms['days']) ? (int) $terms['days'] : null,
             'checkbox_required' => self::checkboxRequired($terms),
             'version' => trim((string) ($terms['version'] ?? '')),
             'b2b' => $b2b,
-            // Der Wortlaut am Haken und zugleich der Wert des versteckten Felds.
+            // Der Satz, den der Kaeufer liest: ohne die Fassung.
+            'waiver_text' => self::text($terms, $b2b, withVersion: false),
+            // Der Wortlaut mit Fassung: der Wert des versteckten Felds und das,
+            // was an der Zahlung protokolliert wird.
             'consent_text' => self::text($terms, $b2b),
         ];
+    }
+
+    /**
+     * Die Belehrung in Absaetze zerlegt.
+     *
+     * Getrennt an Leerzeilen, wie der Vorgabetext in offers sie setzt. Ein
+     * kurzer Absatz ohne Satzzeichen am Ende — „Widerrufsrecht", „Folgen des
+     * Widerrufs" — ist eine Ueberschrift und wird als solche markiert; eine
+     * Belehrung, die als ein Block gerendert wird, liest niemand.
+     *
+     * @return list<array{text: string, heading: bool}>
+     */
+    public static function paragraphs(string $text): array
+    {
+        $out = [];
+
+        foreach (preg_split('/\R\s*\R/', trim($text)) ?: [] as $chunk) {
+            $chunk = trim((string) preg_replace('/\s*\R\s*/', ' ', $chunk));
+
+            if ($chunk === '') {
+                continue;
+            }
+
+            $heading = mb_strlen($chunk) <= 80 && ! preg_match('/[.!?:;]$/u', $chunk);
+
+            $out[] = ['text' => $chunk, 'heading' => $heading];
+        }
+
+        return $out;
     }
 
     /**

@@ -47,7 +47,8 @@ return [
     'offer_unavailable' => 'Dieses Angebot ist gerade nicht verfügbar.',
     // Der zurueckgeschickte Wortlaut passt nicht zum geltenden: die Seite ist
     // aelter als der Text, oder jemand hat am Formular gedreht.
-    'consent_stale' => 'Die Bedingungen haben sich geändert. Bitte lade die Seite neu und bestätige erneut.',
+    'consent_version' => 'Fassung :version',
+    'consent_stale' =>'Die Bedingungen haben sich geändert. Bitte lade die Seite neu und bestätige erneut.',
     'delete_title' => 'Funnel löschen?',
     'delete_body' => '„:title" wird gelöscht, samt :visits Besuchen und allem, was darin steht. Das lässt sich nicht rückgängig machen.',
     'preview' => 'Vorschau',

@@ -276,6 +276,39 @@
 }
 
 /* Declining is an answer, not a mistake — so it is quiet, not hidden. */
+/* Die Widerrufsbelehrung: da, lesbar, aber hinter dem Kassenkern (Preis,
+   Haken, Knopf). Kleiner und gedaempft; die Zwischenueberschriften des
+   Vorgabetexts als eigene fette Zeile. */
+.funnel-offer__withdrawal {
+    margin: 1.25rem 0 0.75rem;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--funnel-muted);
+}
+
+.funnel-offer__withdrawal p {
+    margin: 0 0 0.6rem;
+}
+
+.funnel-offer__withdrawal p:last-child {
+    margin-bottom: 0;
+}
+
+.funnel-offer__withdrawal strong {
+    display: block;
+    color: var(--funnel-ink);
+    font-weight: 600;
+}
+
+/* Die Fassung des Einwilligungstexts: Teil des Protokolls, fuer den Kaeufer
+   eine Fussnote. */
+.funnel-consent-version {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.7rem;
+    color: var(--funnel-muted);
+}
+
 .funnel-offer__decline {
     margin-top: 1rem;
 }

@@ -47,7 +47,8 @@ return [
     'offer_unavailable' => 'This offer is not available right now.',
     // The wording sent back does not match the one in force: the page is
     // older than the text, or somebody edited the form.
-    'consent_stale' => 'The terms have changed. Please reload the page and confirm again.',
+    'consent_version' => 'Version :version',
+    'consent_stale' =>'The terms have changed. Please reload the page and confirm again.',
     'delete_title' => 'Delete this funnel?',
     'delete_body' => '“:title” goes, along with :visits visits and everything recorded in them. This cannot be undone.',
     'preview' => 'Preview',

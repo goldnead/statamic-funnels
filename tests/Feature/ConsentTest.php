@@ -89,11 +89,38 @@ class ConsentTest extends TestCase
         Consent::resolveTermsUsing(fn () => self::TERMS);
         $this->funnel();
 
-        $this->asVisitor()->get('/f/kurs/angebot')
-            ->assertOk()
-            ->assertSee('Du hast 14 Tage Widerrufsrecht.')
-            ->assertSee('erlischt. [2026-09]')
-            ->assertSee('name="consent_text"', false);
+        $html = $this->asVisitor()->get('/f/kurs/angebot')->assertOk()->getContent();
+
+        $this->assertStringContainsString('Du hast 14 Tage Widerrufsrecht.', $html);
+        // Der Satz am Haken ohne die Fassung; die Fassung als Fussnote daneben.
+        // Sichtbar heisst: ohne das versteckte Feld, das den vollen Wortlaut
+        // traegt.
+        $visible = (string) preg_replace('/<input type="hidden"[^>]*>/', '', $html);
+        $this->assertStringContainsString(self::TERMS['waiver_text'], $visible);
+        $this->assertStringNotContainsString('erlischt. [2026-09]', $visible);
+        $this->assertStringContainsString('<small class="funnel-consent-version">', $html);
+        $this->assertStringContainsString('2026-09</small>', $html);
+        // Das versteckte Feld traegt den vollen protokollierten Wortlaut.
+        $this->assertStringContainsString('name="consent_text" value="'.e(self::TERMS['waiver_text'].' [2026-09]').'"', $html);
+    }
+
+    #[Test]
+    public function the_terms_render_as_paragraphs_with_their_headings(): void
+    {
+        Consent::resolveTermsUsing(fn () => ['text' => "Widerrufsrecht\n\nSie haben das Recht, binnen 14 Tagen zu widerrufen.\n\nFolgen des Widerrufs\n\nWir erstatten alle Zahlungen."] + self::TERMS);
+        $this->funnel();
+
+        $html = $this->asVisitor()->get('/f/kurs/angebot')->assertOk()->getContent();
+
+        $this->assertStringContainsString('<p><strong>Widerrufsrecht</strong></p>', $html);
+        $this->assertStringContainsString('<p><strong>Folgen des Widerrufs</strong></p>', $html);
+        $this->assertStringContainsString('<p>Sie haben das Recht, binnen 14 Tagen zu widerrufen.</p>', $html);
+        $this->assertStringContainsString('<p>Wir erstatten alle Zahlungen.</p>', $html);
+
+        $this->assertSame(
+            [['text' => 'Eins.', 'heading' => false], ['text' => 'Titel', 'heading' => true]],
+            Consent::paragraphs("Eins.\n\n\nTitel\n"),
+        );
     }
 
     #[Test]

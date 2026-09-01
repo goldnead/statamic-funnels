@@ -175,17 +175,27 @@
                         zugestimmt wird, mit Fassung; derselbe Wortlaut geht
                         versteckt zurueck, damit der Server weiss, was diese
                         Seite gezeigt hat. Eine veraltete Seite bestellt nicht. #}}
-                    {{ if withdrawal:text }}
-                        <p class="funnel-offer__withdrawal">{{ withdrawal:text }}</p>
+                    {{ if withdrawal:paragraphs }}
+                        <div class="funnel-offer__withdrawal">
+                            {{ withdrawal:paragraphs }}
+                                {{ if heading }}<p><strong>{{ text }}</strong></p>{{ else }}<p>{{ text }}</p>{{ /if }}
+                            {{ /withdrawal:paragraphs }}
+                        </div>
                     {{ /if }}
                     <input type="hidden" name="consent_text" value="{{ withdrawal:consent_text }}">
                     {{ if withdrawal:checkbox_required }}
                         <label>
                             <input type="checkbox" name="confirmed" value="1" required>
-                            <span>{{ withdrawal:consent_text }}</span>
+                            <span>
+                                {{ withdrawal:waiver_text }}
+                                {{ if withdrawal:version }}<small class="funnel-consent-version">{{ trans key="statamic-funnels::messages.consent_version" version="{withdrawal:version}" }}</small>{{ /if }}
+                            </span>
                         </label>
                     {{ else }}
-                        <p class="funnel-offer__consent">{{ withdrawal:consent_text }}</p>
+                        <p class="funnel-offer__consent">
+                            {{ withdrawal:waiver_text }}
+                            {{ if withdrawal:version }}<small class="funnel-consent-version">{{ trans key="statamic-funnels::messages.consent_version" version="{withdrawal:version}" }}</small>{{ /if }}
+                        </p>
                     {{ /if }}
                     <button type="submit">{{ if offer:button_label }}{{ offer:button_label }}{{ else }}{{ trans key="statamic-funnels::messages.order_button" }}{{ /if }}</button>
                 </form>
