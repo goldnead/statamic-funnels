@@ -41,6 +41,14 @@ const KIND_SHAPES = {
         group: 'finishs',
         color: 'purple',
     },
+    // A mail hangs off a step and is never entered. It has an input handle
+    // (the edge from the step's output) and no outputs, and the shared canvas
+    // draws it as a branch beside the real way on — which is the whole
+    // picture: HighLevel's look, a funnel's behaviour.
+    mail: {
+        group: 'mails',
+        color: 'rose',
+    },
 };
 
 /**
@@ -68,9 +76,11 @@ export const nodeIcon = createNodeIcon({
     capture: 'forms',
     offer: 'money-cashier-price-tag',
     finish: 'flag',
+    mail: 'mail',
 }, {
     entry: 'sign-post',
     page: 'file-content-list',
     offer: 'money-cashier-price-tag',
     finish: 'flag',
+    mail: 'mail',
 });

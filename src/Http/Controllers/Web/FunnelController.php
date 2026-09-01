@@ -7,18 +7,21 @@ use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Nodes\CaptureStep;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
+use Goldnead\StatamicFunnels\Support\Consent;
 use Goldnead\StatamicFunnels\Support\Countdown;
+use Goldnead\StatamicFunnels\Support\FunnelMailRenderer;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
+use Goldnead\StatamicFunnels\Support\OrderSummary;
 use Goldnead\StatamicFunnels\Support\PreviewToken;
 use Goldnead\StatamicFunnels\Support\SavedCard;
 use Goldnead\StatamicFunnels\Support\Split;
 use Goldnead\StatamicOffers\Models\Offer;
-use Goldnead\StatamicPayments\Models\Payment;
 use Illuminate\Http\Request;
 use Statamic\Contracts\Entries\Entry;
 use Statamic\Facades\Entry as EntryFacade;
 use Statamic\Facades\Site;
 use Statamic\Http\Responses\DataResponse;
+use Throwable;
 
 /**
  * The front end of a funnel.
@@ -175,6 +178,10 @@ class FunnelController
             'saved_card' => $step->type === 'offer'
                 ? $this->savedCard->forTemplate($preview ? null : $visit)
                 : null,
+            // Die Belehrung und der Wortlaut am Haken, mit Fassung. Was hier
+            // steht, schickt die Seite als `consent_text` zurueck, und der
+            // Server nimmt nur an, was mit dem geltenden Text uebereinstimmt.
+            'withdrawal' => $this->withdrawalFor($step, $preview ? null : $visit),
             // Null when this step has no deadline. A template that has to test
             // for it is a template that behaves the same either way.
             'countdown' => Countdown::forTemplate($step, $preview ? null : $visit),
@@ -188,7 +195,7 @@ class FunnelController
             // Was in diesem Lauf gekauft wurde. Null, solange nichts bezahlt
             // ist — eine Danke-Seite, die „Danke" sagt und den Kauf nicht
             // kennt, ist der Zustand, den das hier beendet.
-            'order' => self::orderForTemplate($preview ? null : $visit),
+            'order' => OrderSummary::forVisit($preview ? null : $visit),
             // Templates can say so. Statamic's own preview sets `live_preview`;
             // this is the same idea under this addon's own name.
             'preview' => $preview,
@@ -350,105 +357,128 @@ class FunnelController
     }
 
     /**
-     * Die Bestellung dieses Laufs, fuer eine Danke-Seite.
+     * Die gerenderte Mail eines Mail-Knotens, mit Beispieldaten.
      *
-     * **Warum es das braucht.** Der ganze Text nach einem bezahlten Kauf war
-     * „Danke. Das war alles von dieser Seite." — kein Produkt, kein Betrag,
-     * keine Bestellnummer. Wer gerade Geld ueberwiesen hat, bekam nichts, womit
-     * er den Vorgang benennen koennte.
-     *
-     * **Nur bezahlt.** Eine Zahlung, die noch beim Anbieter haengt, ist keine
-     * Bestellung; sie hier zu zeigen hiesse, dem Kaeufer eine Bestaetigung zu
-     * geben, die der Webhook noch widerrufen kann.
-     *
-     * **Alle Zahlungen des Laufs, nicht nur die letzte.** Ein Upsell nach der
-     * Danke-Seite ist ein zweiter Kauf im selben Weg. Wer nur `payment_id`
-     * liest, zeigt genau den, den der Kaeufer zuletzt gemacht hat — und
-     * verschweigt den, wegen dem er ueberhaupt hier ist.
-     *
-     * @return array<string, mixed>|null
+     * Derselbe Pass wie die Seiten-Vorschau, dieselbe Bindung an einen Funnel,
+     * derselbe Graph — auch ein Mail-Knoten, der noch nie gespeichert wurde.
+     * Ohne Vorlage kommt kein Fehler, sondern ein Platzhalter, der es sagt:
+     * das ist der Zustand, in dem jemand den Knoten gerade angelegt hat.
      */
-    protected static function orderForTemplate(?FunnelVisit $visit): ?array
+    public function previewMail(Request $request, string $funnel, string $nodeKey)
     {
-        if ($visit === null) {
-            return null;
+        $model = Funnel::with(['steps', 'edges'])->where('handle', $funnel)->first();
+
+        abort_unless($model !== null, 404);
+
+        $graph = PreviewToken::graph($request->query('token'), $model);
+
+        abort_unless($graph !== null, 404);
+
+        $step = PreviewToken::step($graph, $nodeKey, $model);
+
+        abort_unless($step !== null && $step->type === 'mail', 404);
+
+        // Ein Besuch, den es nicht gibt: Beispielname, Beispieladresse, nichts
+        // geschrieben. Und eine Bestellung ueber das Angebot des Funnels, damit
+        // `order.*` in der Vorschau etwas zeigt.
+        $visit = new FunnelVisit([
+            'name' => 'Maria Beispiel',
+            'email' => 'maria.beispiel@example.com',
+            'current_node_key' => $model->entryStep()?->node_key,
+        ]);
+        $visit->setRelation('funnel', $model);
+
+        $offer = $this->firstOfferIn($graph);
+
+        $sample = OrderSummary::sample(
+            $offer?->name,
+            $offer?->amountCent(),
+            $offer?->currency() ?? 'EUR',
+            $visit->email,
+        );
+
+        try {
+            $mail = app(FunnelMailRenderer::class)->render($step, $visit, $sample);
+        } catch (Throwable $e) {
+            return response($this->placeholder($e->getMessage()))
+                ->header('Content-Type', 'text/html; charset=utf-8');
         }
 
-        $ids = array_values(array_filter(array_merge(
-            array_values((array) (($visit->meta ?? [])['payments'] ?? [])),
-            [$visit->payment_id],
-        )));
-
-        if ($ids === []) {
-            return null;
-        }
-
-        $payments = Payment::query()
-            ->with('items')
-            ->whereIn('id', array_unique($ids))
-            ->orderBy('id')
-            ->get()
-            ->filter(fn (Payment $payment) => $payment->isPaid());
-
-        if ($payments->isEmpty()) {
-            return null;
-        }
-
-        $lines = [];
-        $total = 0;
-        $currency = 'EUR';
-
-        foreach ($payments as $payment) {
-            $currency = strtoupper((string) ($payment->currency ?: $currency));
-            $total += (int) $payment->amount_cent;
-
-            // Zeilen, wo es welche gibt: ein Bump ist eine eigene Zeile und
-            // gehoert einzeln aufgefuehrt. Eine Zahlung aus der Zeit vor
-            // `payment_items` traegt ihre ganze Wahrheit im Handle — denselben
-            // Rueckfall macht `InvoiceWriter::lines()`.
-            if ($payment->items->isNotEmpty()) {
-                foreach ($payment->items as $item) {
-                    $lines[] = [
-                        'name' => (string) ($item->name ?: $item->product),
-                        'amount' => self::money((int) $item->amount_cent * max(1, (int) $item->quantity), $currency),
-                        'quantity' => (int) $item->quantity,
-                    ];
-                }
-
-                continue;
-            }
-
-            $lines[] = [
-                'name' => (string) $payment->product,
-                'amount' => self::money((int) $payment->amount_cent, $currency),
-                'quantity' => 1,
-            ];
-        }
-
-        return [
-            // Die Nummer, mit der ein Kaeufer nachfragen kann. Die der ersten
-            // Zahlung, weil das der Kauf ist, wegen dem er hier steht.
-            // Ohne `?->`: die leere Sammlung ist oben schon abgefangen, und ein
-            // Fragezeichen an einer Stelle, an der nichts null sein kann, liest
-            // sich wie ein Fall, den es gibt.
-            'reference' => (string) $payments->first()->getKey(),
-            'lines' => $lines,
-            'total' => self::money($total, $currency),
-            'currency' => $currency,
-            'email' => $visit->email,
-        ];
+        return response($mail['html'])->header('Content-Type', 'text/html; charset=utf-8');
     }
 
     /**
-     * Ein Betrag, deutsch geschrieben.
+     * Das erste Angebot im vorgeschauten Graphen, fuer die Beispielbestellung.
      *
-     * Hier und nicht in der Vorlage, damit Bestelluebersicht und Kasse
-     * dieselbe Schreibweise haben — `249.00` statt `249,00` war schon einmal
-     * ein Fehler in diesem Addon.
+     * @param  array<string, mixed>  $graph
      */
-    protected static function money(int $cent, string $currency): string
+    protected function firstOfferIn(array $graph): ?Offer
     {
-        return number_format($cent / 100, 2, ',', '.').' '.$currency;
+        foreach ($graph['nodes'] ?? [] as $node) {
+            if (($node['type'] ?? null) !== 'offer') {
+                continue;
+            }
+
+            $handle = $node['config']['offer'] ?? null;
+
+            if (! is_string($handle) || $handle === '') {
+                continue;
+            }
+
+            $offer = Offer::query()->where('handle', $handle)->first();
+
+            if ($offer) {
+                return $offer;
+            }
+        }
+
+        return null;
+    }
+
+    /** Was das Vorschaufenster zeigt, wenn es keine Mail zu zeigen gibt. */
+    protected function placeholder(string $reason): string
+    {
+        $title = e(__('statamic-funnels::messages.mail_preview_empty'));
+        $reason = e($reason);
+
+        return <<<HTML
+        <!doctype html>
+        <html lang="de">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>{$title}</title>
+            <style>
+                body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f3f4f6; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; text-align: center; padding: 24px; }
+                p { margin: 0; font-size: 14px; line-height: 1.5; max-width: 32rem; }
+                strong { display: block; color: #111827; font-weight: 600; margin-bottom: 4px; }
+            </style>
+        </head>
+        <body>
+            <p><strong>{$title}</strong>{$reason}</p>
+        </body>
+        </html>
+        HTML;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function withdrawalFor(FunnelStep $step, ?FunnelVisit $visit): ?array
+    {
+        if ($step->type !== 'offer') {
+            return null;
+        }
+
+        $handle = $step->config('offer');
+
+        if (! is_string($handle) || $handle === '') {
+            return null;
+        }
+
+        $offer = Offer::query()->where('handle', $handle)->first();
+
+        return $offer ? Consent::forTemplate($offer, $visit) : null;
     }
 
     /**

@@ -27,6 +27,7 @@
         --sa-color-page: var(--color-emerald-500, #10b981);
         --sa-color-offer: var(--color-amber-500, #f59e0b);
         --sa-color-finish: var(--color-purple-500, #a855f7);
+        --sa-color-mail: var(--color-rose-500, #f43f5e);
     }
 
     .dark {
@@ -34,6 +35,7 @@
         --sa-color-page: var(--color-emerald-400, #34d399);
         --sa-color-offer: var(--color-amber-400, #fbbf24);
         --sa-color-finish: var(--color-purple-400, #c084fc);
+        --sa-color-mail: var(--color-rose-400, #fb7185);
     }
 }
 
@@ -48,6 +50,7 @@
     .sa-node--page   { --sa-chip-color: var(--sa-color-page); }
     .sa-node--offer  { --sa-chip-color: var(--sa-color-offer); }
     .sa-node--finish { --sa-chip-color: var(--sa-color-finish); }
+    .sa-node--mail   { --sa-chip-color: var(--sa-color-mail); }
 
     /* The stepper's stops. Same colour per kind as the node cards, because the
        two are the same set of things and a second colour scheme for them would
@@ -70,9 +73,16 @@
     .sa-stop--capture { --sa-chip-color: var(--sa-color-page); }
     .sa-stop--offer   { --sa-chip-color: var(--sa-color-offer); }
     .sa-stop--finish  { --sa-chip-color: var(--sa-color-finish); }
+    .sa-stop--mail    { --sa-chip-color: var(--sa-color-mail); }
+
+    /* A mail in the stepper is not a stop on the way: dashed border, icon
+       instead of a dot, so the eye reads "hangs off" rather than "next". */
+    .sa-stop--mail { @apply border-dashed border-content-border; }
+    .sa-stop--mail::before { content: none; }
 
     .sa-icon-chip--entry  { --sa-chip-color: var(--sa-color-entry); }
     .sa-icon-chip--page   { --sa-chip-color: var(--sa-color-page); }
     .sa-icon-chip--offer  { --sa-chip-color: var(--sa-color-offer); }
     .sa-icon-chip--finish { --sa-chip-color: var(--sa-color-finish); }
+    .sa-icon-chip--mail   { --sa-chip-color: var(--sa-color-mail); }
 }

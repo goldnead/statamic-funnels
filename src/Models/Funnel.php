@@ -75,10 +75,32 @@ class Funnel extends Model
      */
     public function nextStep(string $fromNodeKey, string $output = 'default'): ?FunnelStep
     {
-        $edge = $this->edges
-            ->where('from_node_key', $fromNodeKey)
-            ->firstWhere('from_output', $output);
+        // Eine Mail, die an demselben Ausgang haengt, ist kein Weiterweg. Sie
+        // wird ausgeloest, nicht betreten — der Weg fuehrt an ihr vorbei zum
+        // ersten Ziel, auf dem ein Mensch stehen kann.
+        foreach ($this->edges->where('from_node_key', $fromNodeKey)->where('from_output', $output) as $edge) {
+            $step = $this->stepByKey($edge->to_node_key);
 
-        return $edge ? $this->stepByKey($edge->to_node_key) : null;
+            if ($step && $step->type !== 'mail') {
+                return $step;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Die Mail-Knoten, die an einem Ausgang haengen.
+     *
+     * @return Collection<int, FunnelStep>
+     */
+    public function mailStepsFrom(string $fromNodeKey, string $output = 'default'): Collection
+    {
+        return $this->edges
+            ->where('from_node_key', $fromNodeKey)
+            ->where('from_output', $output)
+            ->map(fn (FunnelEdge $edge) => $this->stepByKey($edge->to_node_key))
+            ->filter(fn (?FunnelStep $step) => $step !== null && $step->type === 'mail' && ! $step->disabled)
+            ->values();
     }
 }

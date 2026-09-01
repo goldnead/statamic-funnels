@@ -38,6 +38,9 @@ return [
     'saved_card_named' => 'Wird ohne erneute Karteneingabe von deiner :label •••• :last4 abgebucht.',
     'saved_card_unnamed' => 'Wird ohne erneute Karteneingabe von dem Zahlungsmittel abgebucht, mit dem du eben bezahlt hast.',
     'offer_unavailable' => 'Dieses Angebot ist gerade nicht verfügbar.',
+    // Der zurueckgeschickte Wortlaut passt nicht zum geltenden: die Seite ist
+    // aelter als der Text, oder jemand hat am Formular gedreht.
+    'consent_stale' => 'Die Bedingungen haben sich geändert. Bitte lade die Seite neu und bestätige erneut.',
     'delete_title' => 'Funnel löschen?',
     'delete_body' => '„:title" wird gelöscht, samt :visits Besuchen und allem, was darin steht. Das lässt sich nicht rückgängig machen.',
     'preview' => 'Vorschau',
@@ -60,6 +63,20 @@ return [
     'countdown_remaining' => 'Endet in',
     'countdown_over' => 'Dieses Angebot ist abgelaufen.',
     'stats_split' => 'A/B-Test',
+
+    // Mail-Knoten.
+    'mail_stats_queued' => 'ausgelöst',
+    'mail_stats_sent' => 'zugestellt',
+    'mail_stats_failed' => 'fehlgeschlagen',
+    'mail_preview_empty' => 'Keine Vorlage gewählt',
+    'mail_error_no_template' => 'Am Mail-Knoten ist keine Vorlage gewählt.',
+    'mail_error_addon_missing' => 'goldnead/statamic-email-templates ist nicht installiert; ohne das Addon kann keine Vorlage gerendert werden.',
+    'mail_error_template_missing' => 'Die Vorlage „:slug" gibt es nicht oder sie ist nicht veröffentlicht.',
+    'mail_error_no_recipient' => 'Kein Empfänger: der Besuch hat noch keine E-Mail-Adresse genannt.',
+    'mail_error_node_gone' => 'Der Mail-Knoten oder der Besuch existiert nicht mehr.',
+    'mail_salutation' => 'Hallo :name',
+    'mail_salutation_anonymous' => 'Hallo',
+    'mail_sample_product' => 'Beispielprodukt',
 
     // Insights. Nur vorhanden, wenn goldnead/statamic-insights installiert ist;
     // die Texte werden beim Zeichnen einer Kachel aufgeloest, nie beim Booten.

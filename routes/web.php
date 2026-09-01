@@ -30,6 +30,14 @@ Route::get($prefix.'/{funnel}/_preview/{nodeKey}', [FunnelController::class, 'pr
     ->middleware('throttle:60,1')
     ->name('statamic-funnels.preview');
 
+/*
+ * Dieselbe Vorschau fuer einen Mail-Knoten: die gerenderte Mail mit
+ * Beispieldaten, im selben Iframe, mit demselben Pass.
+ */
+Route::get($prefix.'/{funnel}/_preview-mail/{nodeKey}', [FunnelController::class, 'previewMail'])
+    ->middleware('throttle:60,1')
+    ->name('statamic-funnels.preview-mail');
+
 Route::get($prefix.'/{funnel}/{slug}', [FunnelController::class, 'step'])
     ->name('statamic-funnels.step');
 

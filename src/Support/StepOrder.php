@@ -70,6 +70,21 @@ class StepOrder
                 $seen[$key] = true;
                 $ordered[] = $key;
 
+                // Mails zuerst, direkt hinter ihrem Schritt. Sie sind keine
+                // Station, sondern haengen an einer — im Stepper gehoeren sie
+                // deshalb neben den Schritt, der sie ausloest, nicht ans Ende
+                // eines Zweigs, den sie nie betreten.
+                foreach ($out[$key] ?? [] as $edge) {
+                    $to = $edge['to_node_key'];
+
+                    if (isset($seen[$to]) || (($present[$to]['type'] ?? null) !== 'mail')) {
+                        continue;
+                    }
+
+                    $seen[$to] = true;
+                    $ordered[] = $to;
+                }
+
                 // Pushed in reverse so the first declared output is popped
                 // first: the `accepted` branch of an offer is the one somebody
                 // means to look at first, and it is declared first.

@@ -45,15 +45,17 @@ class StepStats
         // honest reading of moving on, and the reason it is measured from the
         // edges rather than from a timestamp comparison: a visitor who goes
         // back and forth has still continued.
-        $targets = [];
-
-        foreach ($funnel->edges as $edge) {
-            $targets[$edge->from_node_key][] = $edge->to_node_key;
-        }
+        $targets = self::targets($funnel);
 
         $out = [];
 
         foreach ($funnel->steps as $step) {
+            // Ein Mail-Knoten ist keine Station. Seine Zahlen kommen aus der
+            // Auslieferungstabelle ({@see MailStats}), nicht aus Wegmarken.
+            if ($step->type === 'mail') {
+                continue;
+            }
+
             $key = $step->node_key;
             $visits = $counts[$key][FunnelStepEvent::ENTERED] ?? 0;
 
@@ -93,11 +95,7 @@ class StepStats
     {
         $visitIds = $funnel->visits()->select('id');
 
-        $targets = [];
-
-        foreach ($funnel->edges as $edge) {
-            $targets[$edge->from_node_key][] = $edge->to_node_key;
-        }
+        $targets = self::targets($funnel);
 
         $out = [];
 
@@ -149,6 +147,32 @@ class StepStats
         }
 
         return $out;
+    }
+
+    /**
+     * Wohin jeder Schritt fuehrt — ohne die Mails, die an ihm haengen.
+     *
+     * Eine Mail wird nie betreten. Zaehlte sie als Ziel, haette ein Schritt,
+     * an dem nur eine Mail haengt, „irgendwohin zu fuehren" und stuende mit
+     * 0 % da, obwohl er das Ende des Wegs ist.
+     *
+     * @return array<string, list<string>>
+     */
+    protected static function targets(Funnel $funnel): array
+    {
+        $mail = $funnel->steps->where('type', 'mail')->pluck('node_key')->flip()->all();
+
+        $targets = [];
+
+        foreach ($funnel->edges as $edge) {
+            if (isset($mail[$edge->to_node_key])) {
+                continue;
+            }
+
+            $targets[$edge->from_node_key][] = $edge->to_node_key;
+        }
+
+        return $targets;
     }
 
     /**

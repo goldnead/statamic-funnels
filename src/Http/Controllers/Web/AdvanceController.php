@@ -4,11 +4,13 @@ namespace Goldnead\StatamicFunnels\Http\Controllers\Web;
 
 use Goldnead\StatamicFunnels\Events\FunnelFormSubmitted;
 use Goldnead\StatamicFunnels\Events\FunnelOfferAccepted;
+use Goldnead\StatamicFunnels\Events\FunnelOfferDeclined;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Nodes\CaptureStep;
+use Goldnead\StatamicFunnels\Support\Consent;
 use Goldnead\StatamicFunnels\Support\Countdown;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\SavedCard;
@@ -20,6 +22,7 @@ use Goldnead\StatamicPayments\Support\FollowUp;
 use Goldnead\StatamicPayments\Support\PaymentDetails;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Moving on from a step.
@@ -45,7 +48,9 @@ class AdvanceController
 
         $step = $model->stepByKey($nodeKey);
 
-        abort_unless($step && ! $step->disabled, 404);
+        // Ein Mail-Knoten ist keine Seite: es gibt nichts, von dem aus man
+        // weitergehen koennte.
+        abort_unless($step && ! $step->disabled && $step->type !== 'mail', 404);
 
         $visit = $this->walk->visit($model);
 
@@ -178,6 +183,9 @@ class AdvanceController
         if (! $request->boolean('accept')) {
             $next = $this->walk->advance($visit, $step, 'declined', FunnelStepEvent::DECLINED);
 
+            // Gesagt, damit eine Mail am Ausgang `declined` einen Moment hat.
+            FunnelOfferDeclined::dispatch($visit->fresh() ?? $visit, $step);
+
             return $this->go($funnel, $next);
         }
 
@@ -189,12 +197,6 @@ class AdvanceController
             return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_expired')]);
         }
 
-        $request->validate([
-            // The order button's own confirmation. Not decoration: it is the
-            // record that somebody clicked something labelled as an order.
-            'confirmed' => ['accepted'],
-        ]);
-
         $offer = Offer::query()->where('handle', (string) $step->config('offer'))->first();
 
         if (! $offer || ! $offer->isSellable()) {
@@ -205,6 +207,31 @@ class AdvanceController
             ]);
 
             return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
+        }
+
+        // Der Wortlaut, dem hier zugestimmt wird — vom Angebot, mit Fassung,
+        // sonst aus der Sprachdatei. Und die Frage, ob der Haken Pflicht ist.
+        $terms = Consent::terms($offer);
+        $consentText = Consent::text($terms, Consent::isB2b($visit));
+
+        $request->validate([
+            // The order button's own confirmation. Not decoration: it is the
+            // record that somebody clicked something labelled as an order.
+            'confirmed' => [Consent::checkboxRequired($terms) ? 'accepted' : 'nullable'],
+            'consent_text' => ['nullable', 'string', 'max:4000'],
+        ]);
+
+        // Die Seite sagt, welchen Wortlaut sie gezeigt hat. Stimmt er nicht
+        // mit dem ueberein, der jetzt gilt, war die Seite veraltet — jemand
+        // hat sie gestern geoeffnet und der Text wurde heute geaendert — oder
+        // jemand hat am Formular gedreht. In beiden Faellen ist „zugestimmt"
+        // zu einem anderen Text als dem geltenden keine Zustimmung. Eine
+        // Vorlage, die das Feld nicht schickt, bleibt bestellbar; der Server
+        // protokolliert dann den geltenden Text.
+        if ($request->filled('consent_text') && (string) $request->input('consent_text') !== $consentText) {
+            throw ValidationException::withMessages([
+                'consent_text' => __('statamic-funnels::messages.consent_stale'),
+            ]);
         }
 
         // What was actually ticked and typed, checked against the offer rather
@@ -240,6 +267,12 @@ class AdvanceController
         // wieder keine Rechnung bekommen, an einer zweiten, unbehandelten
         // Stelle derselben Methode.
         $angaben = self::rechnungsangaben($visit);
+
+        // Die Einwilligung dazu: Zeitpunkt und Wortlaut, die Konditionen des
+        // Angebots eingefroren, das Zugangsfenster. Fuer beide Wege, weil beide
+        // eine Zahlung anlegen — ein Upsell ohne Beleg waere derselbe Fehler
+        // wie ein Upsell ohne Anschrift.
+        $angaben = self::mitEinwilligung($angaben, Consent::details($offer, $visit, $consentText));
 
         if ($previous) {
             $payment = $this->followUp->accept($previous, $buyHandle, [
@@ -339,6 +372,32 @@ class AdvanceController
             'country' => $billing['country'] ?? null,
             'meta' => array_filter(['address' => self::anschriftZeilen($billing)]),
         ]);
+    }
+
+    /**
+     * Zwei `PaymentDetails`-Haufen zusammenlegen, `meta` tief.
+     *
+     * `array_merge` allein liesse `meta['address']` von der Einwilligung
+     * ueberschreiben — oder umgekehrt — und einer der beiden Belege waere
+     * still weg.
+     *
+     * @param  array<string, mixed>  $angaben
+     * @param  array<string, mixed>  $weitere
+     * @return array<string, mixed>
+     */
+    protected static function mitEinwilligung(array $angaben, array $weitere): array
+    {
+        $meta = array_merge((array) ($angaben['meta'] ?? []), (array) ($weitere['meta'] ?? []));
+
+        unset($angaben['meta'], $weitere['meta']);
+
+        $zusammen = array_merge($angaben, $weitere);
+
+        if ($meta !== []) {
+            $zusammen['meta'] = $meta;
+        }
+
+        return $zusammen;
     }
 
     /**

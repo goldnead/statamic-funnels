@@ -263,6 +263,7 @@ onBeforeUnmount(() => {
                     :aria-current="stop.node_key === current ? 'step' : undefined"
                     @click="go(stop.node_key)"
                 >
+                    <Icon v-if="stop.type === 'mail'" name="mail" class="me-1 inline-block size-3 align-text-bottom" />
                     {{ labelFor(stop) }}
                 </button>
             </nav>

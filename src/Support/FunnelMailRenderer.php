@@ -1,0 +1,111 @@
+<?php
+
+namespace Goldnead\StatamicFunnels\Support;
+
+use Goldnead\StatamicFunnels\Models\Funnel;
+use Goldnead\StatamicFunnels\Models\FunnelStep;
+use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use RuntimeException;
+
+/**
+ * Aus Knoten und Besuch eine fertige Mail machen.
+ *
+ * Die Vorlage rendert `statamic-email-templates` — Bard zu HTML, Preheader,
+ * Marken-Layout, alles wie bei einer Automation oder Kampagne. Dieses Addon
+ * fuellt nur die Platzhalter, und zwar mit dem, was ein Funnel weiss:
+ *
+ * - `visitor.email`, `visitor.name`
+ * - `contact.*` — dieselben Namen wie in jeder anderen Vorlage der Familie,
+ *   damit eine Willkommensmail nicht zweimal geschrieben werden muss
+ * - `funnel.title`, `funnel.handle`, `funnel.url`, `funnel.continue_url`
+ * - `step.label`
+ * - `order.reference`, `order.total`, `order.lines`, `order.email` — nur nach
+ *   einem bezahlten Kauf; vorher bleiben die Platzhalter sichtbar stehen
+ */
+class FunnelMailRenderer
+{
+    /**
+     * @return array{subject: string, html: string}
+     *
+     * @throws RuntimeException wenn keine Vorlage gewaehlt, das Addon nicht da
+     *                          oder die Vorlage nicht zu finden ist
+     */
+    public function render(FunnelStep $step, FunnelVisit $visit, ?array $sampleOrder = null): array
+    {
+        $slug = trim((string) $step->config('template'));
+
+        if ($slug === '') {
+            throw new RuntimeException(__('statamic-funnels::messages.mail_error_no_template'));
+        }
+
+        if (! class_exists(MailTemplates::FACADE)) {
+            throw new RuntimeException(__('statamic-funnels::messages.mail_error_addon_missing'));
+        }
+
+        $resolved = MailTemplates::resolve($slug);
+
+        if ($resolved === null) {
+            throw new RuntimeException(__('statamic-funnels::messages.mail_error_template_missing', ['slug' => $slug]));
+        }
+
+        $data = $this->variables($step, $visit, $sampleOrder);
+
+        $subject = trim((string) $step->config('subject_override')) ?: $resolved['subject'];
+
+        return [
+            'subject' => MailTemplates::merge($subject, $data),
+            'html' => MailTemplates::merge($resolved['body'], $data),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $sampleOrder
+     * @return array<string, mixed>
+     */
+    public function variables(FunnelStep $step, FunnelVisit $visit, ?array $sampleOrder = null): array
+    {
+        /** @var Funnel $funnel */
+        $funnel = $step->relationLoaded('funnel') ? $step->funnel : $visit->funnel;
+
+        $name = trim((string) $visit->name);
+        $first = $name === '' ? '' : explode(' ', $name)[0];
+
+        $current = $visit->current_node_key ? $funnel->stepByKey($visit->current_node_key) : null;
+
+        $order = $sampleOrder ?? OrderSummary::forVisit($visit->exists ? $visit : null);
+
+        return [
+            'visitor' => [
+                'email' => (string) $visit->email,
+                'name' => $name,
+            ],
+            'contact' => [
+                'email' => (string) $visit->email,
+                'full_name' => $name,
+                'first_name' => $first,
+                'salutation' => $first === '' ? __('statamic-funnels::messages.mail_salutation_anonymous') : __('statamic-funnels::messages.mail_salutation', ['name' => $first]),
+            ],
+            'funnel' => [
+                'title' => (string) $funnel->title,
+                'handle' => (string) $funnel->handle,
+                'url' => route('statamic-funnels.entry', $funnel->handle),
+                'continue_url' => $current && $current->slug
+                    ? route('statamic-funnels.step', [$funnel->handle, $current->slug])
+                    : route('statamic-funnels.entry', $funnel->handle),
+            ],
+            'step' => [
+                'label' => (string) ($step->label ?: $step->node_key),
+            ],
+            'order' => $order === null ? [] : [
+                'reference' => (string) ($order['reference'] ?? ''),
+                'total' => (string) ($order['total'] ?? ''),
+                'currency' => (string) ($order['currency'] ?? ''),
+                'email' => (string) ($order['email'] ?? ''),
+                'lines' => implode('<br>', array_map(
+                    fn (array $line) => e((string) $line['name']).' – '.e((string) $line['amount']),
+                    (array) ($order['lines'] ?? []),
+                )),
+            ],
+        ];
+    }
+}

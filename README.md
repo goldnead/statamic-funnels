@@ -48,6 +48,70 @@ One entry per funnel, because a path has one beginning.
 **Declining is an answer, not a failure.** Most visitors decline; a funnel that treats that as an
 error has nowhere to send them, so the canvas draws both branches and the editor nags about neither.
 
+There is a sixth kind of node that is **not** a step: a **Mail** hangs off a step and is never
+entered. See [Mail nodes](#mail-nodes).
+
+### Mail nodes
+
+A mail is drawn on the same canvas as the steps, as a branch beside the way on — and that is the
+whole design decision. A mail that a visitor walked *through* would be a station without a page:
+the URL flickers, the back button breaks, the drop-off report counts a step nobody stood on, and a
+delayed mail cannot exist at all. So the node hangs off a step's **output** and the walk goes past
+it:
+
+| Edge from the parent step | The mail goes out when… |
+|---|---|
+| `default` | the step is **entered** (on the Finish step: when the walk is complete) |
+| `accepted` | the offer is **paid** — when the webhook says so, never on the click |
+| `declined` | the offer is **declined** |
+
+Each mail names a template from `goldnead/statamic-email-templates` (published entries of
+`et_templates`), an optional delay (minutes, hours, days), a recipient (the visitor, or a fixed
+address for an internal notification) and an optional subject. Placeholders come from the walk:
+`{{ visitor.name }}`, `{{ visitor.email }}`, `{{ contact.salutation }}`, `{{ funnel.title }}`,
+`{{ funnel.continue_url }}`, `{{ step.label }}` and, after a paid purchase, `{{ order.total }}`,
+`{{ order.reference }}`, `{{ order.lines }}`.
+
+**Once per visit and node.** A provider that redelivers a webhook three times triggers the purchase
+mail once; the uniqueness is a database index, not a check that a second process could overtake.
+
+**Every mail leaves a row.** `funnel_mail_deliveries` records triggered, delivered and failed with a
+reason, and the editor shows the three numbers on the node. A mail before the form step has no
+recipient yet and says so; a node without a template says so; a site without the templates addon
+says so. Nothing here fails silently — that is the failure this table exists to end.
+
+**Why the queue and not the automations engine.** The first plan handed the send to
+`statamic-automations` and its scheduled-jobs table. That would have forced every funnel with a
+mail on it to install the automations addon, and built a second place where a mail is "delayed".
+Laravel already has one: the delay is `dispatch()->delay()` on the site's own queue. One queue in
+the house, no second scheduler, and a funnel works without automations. A multi-step sequence over
+days remains an automation; a mail node is one mail at one moment.
+
+**Attaching one.** Pick *Mail* from the library on an output's "+", or from the "+" on an existing
+edge (a mail added there hangs off the same output; the edge stays), or use *Attach mail* next to
+an output in the step's inspector. The preview's stepper lists a mail right behind the step it
+hangs off and shows the rendered mail with sample data.
+
+### Consent at the order button
+
+German law (§ 356 Abs. 5 BGB) lets the right of withdrawal lapse for digital content only after an
+explicit agreement, and an agreement without a timestamp and the wording that was agreed to is
+worthless the moment the wording changes. The order button therefore records both.
+
+The wording comes from the offer's withdrawal terms (`Offer::withdrawalTerms()` in
+`statamic-offers`, when the installed version has them) with its version appended in brackets,
+or from this addon's language file otherwise. A buyer with a VAT id in their billing details gets
+the B2B wording. The page sends the wording it showed back as a hidden `consent_text`; the server
+compares it with the wording in force and refuses a stale or altered one with "please reload".
+A custom template that does not send the field can still order; the server then records the
+wording in force.
+
+What goes **into** the payment, on both the checkout and the saved-card path: `consent_at` and
+`consent_text` as columns where the installed `statamic-payments` accepts them, otherwise under
+`meta['consent']`; the terms frozen as they were at purchase under `meta['withdrawal']`; and the
+offer's access window (`Offer::accessWindow()`) under `meta['access']` for whatever grants access
+later. Nothing is thrown at an older sibling — keys it does not know are left out.
+
 ### Landing pages: point a step at an entry
 
 A step can name a **Statamic entry**, and then that entry *is* the page: its own template, its own
@@ -243,6 +307,7 @@ funnel addon must not start writing into somebody's CRM.
 | `statamic-payments` | takes the money, decides what "paid" means |
 | `statamic-offers` | says what a thing costs *here* |
 | `statamic-leadhub` | receives a captured address as a contact |
+| `statamic-email-templates` | renders the template a mail node names; without it a mail node saves but every send is recorded as failed |
 | `statamic-automations` | four trigger nodes: step entered, form submitted, offer accepted, funnel completed |
 | Statamic forms | are the form; this addon never grew its own |
 

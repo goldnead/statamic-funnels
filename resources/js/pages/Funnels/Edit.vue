@@ -28,6 +28,7 @@ const props = defineProps({
     devices: { type: Array, default: () => [] },
     stats: { type: Object, default: () => ({}) },
     splits: { type: Object, default: () => ({}) },
+    mailStats: { type: Object, default: () => ({}) },
     labels: { type: Object, default: () => ({}) },
 });
 
@@ -116,7 +117,10 @@ function addNode(handle) {
     const key = newKey(entry.handle);
     const config = {};
 
-    (entry.schema ?? []).forEach((field) => { config[field.handle] = null; });
+    // A field's default, where it declares one, otherwise null. A mail node
+    // that saved with `delay_unit: null` would read as "no unit" rather than
+    // "minutes", and the two are not the same thing to somebody reading it.
+    (entry.schema ?? []).forEach((field) => { config[field.handle] = field.default ?? null; });
 
     graph.value.nodes.push({
         node_key: key,
@@ -137,12 +141,95 @@ function addNode(handle) {
         });
     }
 
+    // Picked from the "+" on an existing edge. Two meanings, decided by what
+    // was picked: a **mail** hangs off the same output as a sibling and the
+    // edge stays — a mail is never a station on the way. Anything else is
+    // inserted between the two ends: the edge now leads to the new node, and
+    // the new node leads on to where the edge used to go.
+    if (target?.kind === 'insert' && target.edge) {
+        const edge = graph.value.edges.find(
+            (e) =>
+                e.from_node_key === target.edge.from_node_key &&
+                (e.from_output ?? 'default') === (target.edge.from_output ?? 'default') &&
+                e.to_node_key === target.edge.to_node_key,
+        );
+
+        if (entry.handle === 'mail' || !edge) {
+            graph.value.edges.push({
+                from_node_key: target.edge.from_node_key,
+                to_node_key: key,
+                from_output: target.edge.from_output ?? 'default',
+            });
+        } else {
+            const oldTarget = edge.to_node_key;
+            edge.to_node_key = key;
+            graph.value.edges.push({ from_node_key: key, to_node_key: oldTarget, from_output: 'default' });
+        }
+    }
+
     if (target?.kind === 'replace-entry') {
         removeNode(target.fromNodeKey, { silent: true });
     }
 
     pendingTarget.value = null;
     selectedKey.value = key;
+}
+
+/**
+ * The outputs of the selected step, with what already hangs off each.
+ *
+ * Shown in the inspector because the canvas's "+" only appears on an output
+ * with **no** edge yet. A step that already leads somewhere still needs a way
+ * to get a mail attached — and a step whose only edge goes to a mail still
+ * needs a way to get its real continuation.
+ */
+const selectedOutputs = computed(() => {
+    if (!selected.value || selected.value.type === 'mail') return [];
+
+    const declared = selectedType.value?.outputs?.clauses?.[0]?.outputs ?? [];
+    const nodeByKey = Object.fromEntries(graph.value.nodes.map((n) => [n.node_key, n]));
+
+    return declared.map((out) => {
+        const edges = graph.value.edges.filter(
+            (e) => e.from_node_key === selected.value.node_key && (e.from_output ?? 'default') === out.handle,
+        );
+        const targets = edges.map((e) => nodeByKey[e.to_node_key]).filter(Boolean);
+
+        return {
+            handle: out.handle,
+            label: t('outputs', out.handle, out.label ?? out.handle),
+            mails: targets.filter((n) => n.type === 'mail').length,
+            continues: targets.some((n) => n.type !== 'mail'),
+        };
+    });
+});
+
+/** Where the selected mail hangs, and by which output. */
+const selectedMailTrigger = computed(() => {
+    if (!selected.value || selected.value.type !== 'mail') return null;
+
+    const edge = graph.value.edges.find((e) => e.to_node_key === selected.value.node_key);
+    if (!edge) return t('mail', 'trigger_none', 'Hangs off no step.');
+
+    const parent = graph.value.nodes.find((n) => n.node_key === edge.from_node_key);
+    const step = parent?.label || KINDS.value?.[parent?.type]?.label || edge.from_node_key;
+    const key = ['accepted', 'declined'].includes(edge.from_output) ? edge.from_output : 'default';
+
+    return t('mail', `trigger_${key}`, `${key}: :step`).replace(':step', step);
+});
+
+const selectedMailStats = computed(() =>
+    selected.value?.type === 'mail' ? (props.mailStats?.[selected.value.node_key] ?? null) : null,
+);
+
+function attachMail(fromKey, output) {
+    pendingTarget.value = { fromNodeKey: fromKey, output };
+    addNode('mail');
+}
+
+function attachStep(fromKey, output) {
+    pendingTarget.value = { fromNodeKey: fromKey, output };
+    showLibrary.value = true;
 }
 
 function removeNode(key, { silent = false } = {}) {
@@ -204,6 +291,20 @@ const nodeStats = computed(() => {
         ];
     }
 
+    // A mail node's numbers come from the deliveries table: triggered,
+    // delivered, failed. Nothing to say until one has gone out.
+    for (const [key, row] of Object.entries(props.mailStats ?? {})) {
+        if (!row || !row.queued) continue;
+
+        out[key] = [
+            { key: 'queued', icon: 'mail', value: row.queued, label: t('mail', 'queued', 'Triggered') },
+            { key: 'sent', icon: 'mail-check', value: row.sent, tone: 'done', label: t('mail', 'sent', 'Delivered') },
+            ...(row.failed
+                ? [{ key: 'failed', icon: 'alert-warning-exclamation-mark', value: row.failed, label: t('mail', 'failed', 'Failed') }]
+                : []),
+        ];
+    }
+
     return out;
 });
 
@@ -211,14 +312,17 @@ const nodeStats = computed(() => {
 function optionsFor(field) {
     if (field.type === 'form') return props.forms;
     if (field.type === 'offer') return props.offers;
-    // A field that carries its own list, like the deadline's three kinds. The
-    // labels come from the server with everything else; the raw handles would
-    // read as `rolling` in a German Control Panel.
+    // A field that carries its own list. Two shapes arrive from the schema:
+    // bare handles like the deadline's three kinds, whose words come with the
+    // labels payload (the raw handle would read as `rolling` in a German
+    // Control Panel), and ready `{ value, label }` pairs, like the billing
+    // modes and the mail templates, which are passed through as they are.
     if (field.type === 'select') {
-        return (field.options ?? []).map((value) => ({
-            value,
-            label: labels.value.options?.[value] ?? value,
-        }));
+        return (field.options ?? []).map((option) => {
+            if (option && typeof option === 'object') return option;
+
+            return { value: option, label: labels.value.options?.[option] ?? option };
+        });
     }
 
     return [];
@@ -356,6 +460,29 @@ function searchEntries(query) {
                     </div>
                 </div>
 
+                <!-- A mail says where it hangs and what it has done. The trigger is
+                     the edge, not a field: changing it means moving the edge. -->
+                <div v-if="selected.type === 'mail'" class="mb-4 rounded-lg border border-content-border p-3">
+                    <p class="mb-1 text-2xs font-medium uppercase tracking-wide text-gray-500">
+                        {{ t('mail', 'trigger', 'Trigger') }}
+                    </p>
+                    <p class="text-sm text-gray-900 dark:text-gray-100">{{ selectedMailTrigger }}</p>
+                    <div v-if="selectedMailStats" class="mt-3 grid grid-cols-3 gap-3">
+                        <div>
+                            <p class="text-xs font-medium text-gray-500">{{ t('mail', 'queued', 'Triggered') }}</p>
+                            <p class="text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ selectedMailStats.queued }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs font-medium text-gray-500">{{ t('mail', 'sent', 'Delivered') }}</p>
+                            <p class="text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ selectedMailStats.sent }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs font-medium text-gray-500">{{ t('mail', 'failed', 'Failed') }}</p>
+                            <p class="text-lg font-semibold tabular-nums" :class="selectedMailStats.failed ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ selectedMailStats.failed }}</p>
+                        </div>
+                    </div>
+                </div>
+
                 <Field
                     v-for="field in selectedType?.schema ?? []"
                     :key="field.handle"
@@ -386,6 +513,37 @@ function searchEntries(query) {
                     />
                     <Input v-else v-model="selected.config[field.handle]" />
                 </Field>
+
+                <!-- The ways out, and what to hang on each. The canvas's "+" only
+                     exists on an output with no edge yet; this is how a step that
+                     already leads somewhere gets a mail, and how a step whose only
+                     edge goes to a mail gets its real continuation. -->
+                <div v-if="selectedOutputs.length" class="mt-2 rounded-lg border border-content-border p-3">
+                    <p class="mb-2 text-2xs font-medium uppercase tracking-wide text-gray-500">
+                        {{ t('outputs', 'heading', 'Outputs') }}
+                    </p>
+                    <div v-for="out in selectedOutputs" :key="out.handle" class="flex flex-wrap items-center gap-2 py-1.5">
+                        <span class="min-w-0 flex-1 text-sm text-gray-900 dark:text-gray-100">
+                            {{ out.label }}
+                            <span v-if="out.mails" class="ms-1 text-2xs text-gray-500">
+                                {{ t('outputs', 'mailsHere', ':count mail(s)').replace(':count', out.mails) }}
+                            </span>
+                        </span>
+                        <Button
+                            v-if="!out.continues"
+                            size="xs"
+                            icon="plus"
+                            :text="t('outputs', 'attachStep', 'Attach step')"
+                            @click="attachStep(selected.node_key, out.handle)"
+                        />
+                        <Button
+                            size="xs"
+                            icon="mail"
+                            :text="t('outputs', 'attachMail', 'Attach mail')"
+                            @click="attachMail(selected.node_key, out.handle)"
+                        />
+                    </div>
+                </div>
             </div>
         </div>
 

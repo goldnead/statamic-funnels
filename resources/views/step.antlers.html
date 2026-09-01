@@ -130,10 +130,23 @@
                         </p>
                     {{ /if }}
 
-                    <label>
-                        <input type="checkbox" name="confirmed" value="1" required>
-                        <span>{{ trans key="statamic-funnels::messages.order_confirmation" }}</span>
-                    </label>
+                    {{# Die Widerrufsbelehrung, kurz, ueber dem Knopf — wenn das
+                        Angebot eine fuehrt. Darunter der Wortlaut, dem
+                        zugestimmt wird, mit Fassung; derselbe Wortlaut geht
+                        versteckt zurueck, damit der Server weiss, was diese
+                        Seite gezeigt hat. Eine veraltete Seite bestellt nicht. #}}
+                    {{ if withdrawal:text }}
+                        <p class="funnel-offer__withdrawal">{{ withdrawal:text }}</p>
+                    {{ /if }}
+                    <input type="hidden" name="consent_text" value="{{ withdrawal:consent_text }}">
+                    {{ if withdrawal:checkbox_required }}
+                        <label>
+                            <input type="checkbox" name="confirmed" value="1" required>
+                            <span>{{ withdrawal:consent_text }}</span>
+                        </label>
+                    {{ else }}
+                        <p class="funnel-offer__consent">{{ withdrawal:consent_text }}</p>
+                    {{ /if }}
                     <button type="submit">{{ if offer:button_label }}{{ offer:button_label }}{{ else }}{{ trans key="statamic-funnels::messages.order_button" }}{{ /if }}</button>
                 </form>
 

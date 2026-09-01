@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+### Mail-Knoten auf der Leinwand
+
+Ein neuer Knoten `mail`, der **an einem Schritt hängt und nie betreten wird**. Die Kante vom
+Elternschritt sagt, wann er feuert: `default` beim Betreten (am Abschluss: wenn der Weg zu Ende
+ist), `accepted` wenn das Angebot bezahlt ist, `declined` wenn es abgelehnt wurde. Der Weg führt
+an der Mail vorbei — `nextStep()` überspringt sie, der Stepper zählt sie nicht als Station, die
+Abbruchstatistik auch nicht.
+
+Vorlage aus `statamic-email-templates`, Verzögerung als Queue-Delay (kein zweiter Scheduler,
+kein Zwang zu `statamic-automations`; die Begründung steht in der README), Empfänger der Besuch
+oder eine feste Adresse. Einmal je Besuch und Knoten, durch einen Unique-Index. Jede Mail
+hinterlässt eine Zeile in `funnel_mail_deliveries` (ausgelöst / zugestellt / fehlgeschlagen mit
+Grund), der Editor zeigt die drei Zahlen am Knoten. Vorschau: der Stepper führt die Mail direkt
+hinter ihrem Schritt, das Iframe zeigt die gerenderte Mail mit Beispieldaten
+(`GET /f/{funnel}/_preview-mail/{node}?token=…`).
+
+Neues Ereignis `FunnelOfferDeclined`. Der Inspector zeigt je Ausgang „Mail anhängen" und, wo
+noch nichts weitergeht, „Schritt anhängen" — das „+" der Leinwand gibt es nur an Ausgängen ohne
+Kante. Ein Knoten, der über das „+" einer bestehenden Kante gewählt wird, wird jetzt dazwischen
+eingefügt (vorher blieb er unverbunden); eine Mail dort hängt sich als Abzweig an denselben Ausgang.
+
+### Einwilligung, Widerruf und Zugangsfenster an der Zahlung
+
+`confirmed` wurde geprüft und verworfen. Jetzt gehen Zeitpunkt und Wortlaut der Einwilligung in
+die Zahlung (§ 356 Abs. 5 BGB): als `consent_at`/`consent_text`, wenn das installierte payments
+die Schlüssel kennt, sonst unter `meta['consent']`. Der Wortlaut kommt aus
+`Offer::withdrawalTerms()` mit Fassung in eckigen Klammern (Fallback: die Sprachdatei), bei einer
+USt-IdNr in den Rechnungsangaben der B2B-Text. Die Kassenseite zeigt die Kurzbelehrung über dem
+Knopf, schickt den gezeigten Wortlaut als `consent_text` zurück, und der Server lehnt eine
+abweichende Fassung ab („Bitte Seite neu laden"). Die Konditionen werden unter `meta['withdrawal']`
+eingefroren, das Zugangsfenster (`Offer::accessWindow()`) unter `meta['access']`. Beide Kaufwege,
+Kasse und gespeicherte Karte. Ältere Nachbarn ohne diese Methoden: nichts geworfen, weggelassen.
+
 ## 1.6.1 — 2026-09-01
 
 Formulierung des Kartenhinweises. „von deiner Mastercard auf 9996" las sich auf der Seite wie eine

@@ -5,6 +5,7 @@ namespace Goldnead\StatamicFunnels\Registries;
 use Goldnead\StatamicFunnels\Nodes\CaptureStep;
 use Goldnead\StatamicFunnels\Nodes\EntryStep;
 use Goldnead\StatamicFunnels\Nodes\FinishStep;
+use Goldnead\StatamicFunnels\Nodes\MailStep;
 use Goldnead\StatamicFunnels\Nodes\OfferStep;
 use Goldnead\StatamicFunnels\Nodes\PageStep;
 use Goldnead\StatamicFunnels\Nodes\StepType;
@@ -24,7 +25,7 @@ class StepRegistry
 
     public function __construct()
     {
-        foreach ([EntryStep::class, CaptureStep::class, PageStep::class, OfferStep::class, FinishStep::class] as $class) {
+        foreach ([EntryStep::class, CaptureStep::class, PageStep::class, OfferStep::class, FinishStep::class, MailStep::class] as $class) {
             $this->register($class);
         }
     }

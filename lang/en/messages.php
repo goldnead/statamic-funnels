@@ -38,6 +38,9 @@ return [
     'saved_card_named' => 'Charged to your :label •••• :last4, without entering card details again.',
     'saved_card_unnamed' => 'Charged to the payment method you just used, without entering card details again.',
     'offer_unavailable' => 'This offer is not available right now.',
+    // The wording sent back does not match the one in force: the page is
+    // older than the text, or somebody edited the form.
+    'consent_stale' => 'The terms have changed. Please reload the page and confirm again.',
     'delete_title' => 'Delete this funnel?',
     'delete_body' => '“:title” goes, along with :visits visits and everything recorded in them. This cannot be undone.',
     'preview' => 'Preview',
@@ -60,6 +63,20 @@ return [
     'countdown_remaining' => 'Ends in',
     'countdown_over' => 'This offer has closed.',
     'stats_split' => 'Split test',
+
+    // Mail nodes.
+    'mail_stats_queued' => 'triggered',
+    'mail_stats_sent' => 'delivered',
+    'mail_stats_failed' => 'failed',
+    'mail_preview_empty' => 'No template chosen',
+    'mail_error_no_template' => 'The mail node has no template chosen.',
+    'mail_error_addon_missing' => 'goldnead/statamic-email-templates is not installed; without it no template can be rendered.',
+    'mail_error_template_missing' => 'The template “:slug” does not exist or is not published.',
+    'mail_error_no_recipient' => 'No recipient: the visitor has not given an email address yet.',
+    'mail_error_node_gone' => 'The mail node or the visit no longer exists.',
+    'mail_salutation' => 'Hello :name',
+    'mail_salutation_anonymous' => 'Hello',
+    'mail_sample_product' => 'Sample product',
 
     // Insights. Registered only when goldnead/statamic-insights is installed;
     // the strings are resolved when a tile is rendered, never at boot.

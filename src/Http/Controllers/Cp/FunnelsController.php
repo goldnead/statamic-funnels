@@ -5,6 +5,7 @@ namespace Goldnead\StatamicFunnels\Http\Controllers\Cp;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
 use Goldnead\StatamicFunnels\Support\GraphWriter;
+use Goldnead\StatamicFunnels\Support\MailStats;
 use Goldnead\StatamicFunnels\Support\PreviewToken;
 use Goldnead\StatamicFunnels\Support\StepOrder;
 use Goldnead\StatamicFunnels\Support\StepStats;
@@ -110,6 +111,10 @@ class FunnelsController extends CpController
             // sprouted an A and a B would bury the one number that matters
             // under two that say the same thing.
             'splits' => StepStats::byVariant($funnel),
+            // Was die Mail-Knoten getan haben: ausgeloest, zugestellt,
+            // fehlgeschlagen. Aus der Auslieferungstabelle, nicht aus
+            // Wegmarken — eine Mail ist keine Station.
+            'mailStats' => MailStats::forFunnel($funnel),
             // Translated here, not in the browser. Statamic's JavaScript `__()`
             // only knows core and application strings; an addon's language file
             // never reaches it, so a label written in JS renders as the raw key
@@ -182,9 +187,15 @@ class FunnelsController extends CpController
 
         $token = PreviewToken::mint($funnel, $graph, $data['token'] ?? null);
 
+        // Ein Mail-Knoten hat keine Seite; das Iframe zeigt fuer ihn die
+        // gerenderte Mail. Entschieden am Typ im Graphen, der gerade auf dem
+        // Bildschirm ist — auch fuer einen Knoten, der noch nicht gespeichert
+        // wurde.
+        $type = collect($graph['nodes'])->firstWhere('node_key', $data['node_key'])['type'] ?? null;
+
         return response()->json([
             'token' => $token,
-            'url' => route('statamic-funnels.preview', [
+            'url' => route($type === 'mail' ? 'statamic-funnels.preview-mail' : 'statamic-funnels.preview', [
                 'funnel' => $funnel->handle,
                 'nodeKey' => $data['node_key'],
             ]).'?token='.$token,
@@ -314,6 +325,28 @@ class FunnelsController extends CpController
                 'page' => ['label' => __('statamic-funnels::nodes.kind_page'), 'plural' => __('statamic-funnels::nodes.kind_page_plural')],
                 'offer' => ['label' => __('statamic-funnels::nodes.kind_offer'), 'plural' => __('statamic-funnels::nodes.kind_offer_plural')],
                 'finish' => ['label' => __('statamic-funnels::nodes.kind_finish'), 'plural' => __('statamic-funnels::nodes.kind_finish_plural')],
+                'mail' => ['label' => __('statamic-funnels::nodes.kind_mail'), 'plural' => __('statamic-funnels::nodes.kind_mail_plural')],
+            ],
+            // Die Ausgaenge eines Schritts im Inspector, und was man dort
+            // anhaengen kann.
+            'outputs' => [
+                'heading' => __('statamic-funnels::nodes.outputs_heading'),
+                'default' => __('statamic-funnels::nodes.output_default'),
+                'accepted' => __('statamic-funnels::nodes.output_accepted'),
+                'declined' => __('statamic-funnels::nodes.output_declined'),
+                'attachMail' => __('statamic-funnels::nodes.attach_mail'),
+                'attachStep' => __('statamic-funnels::nodes.attach_step'),
+                'mailsHere' => __('statamic-funnels::nodes.mails_here'),
+            ],
+            'mail' => [
+                'queued' => __('statamic-funnels::messages.mail_stats_queued'),
+                'sent' => __('statamic-funnels::messages.mail_stats_sent'),
+                'failed' => __('statamic-funnels::messages.mail_stats_failed'),
+                'trigger' => __('statamic-funnels::nodes.mail_trigger'),
+                'trigger_default' => __('statamic-funnels::nodes.mail_trigger_default'),
+                'trigger_accepted' => __('statamic-funnels::nodes.mail_trigger_accepted'),
+                'trigger_declined' => __('statamic-funnels::nodes.mail_trigger_declined'),
+                'trigger_none' => __('statamic-funnels::nodes.mail_trigger_none'),
             ],
             'adder' => [
                 'root' => __('statamic-funnels::nodes.add_entry'),
