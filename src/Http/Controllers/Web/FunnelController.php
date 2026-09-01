@@ -19,6 +19,7 @@ use Goldnead\StatamicFunnels\Support\SavedCard;
 use Goldnead\StatamicFunnels\Support\Split;
 use Goldnead\StatamicOffers\Models\Offer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Statamic\Contracts\Entries\Entry;
 use Statamic\Facades\Entry as EntryFacade;
 use Statamic\Facades\Site;
@@ -202,7 +203,12 @@ class FunnelController
                 : null,
             // Der Konto-Schritt: ob „Spaeter" erlaubt ist.
             'account' => $step->type === 'account'
-                ? ['optional' => AccountStep::isOptional((array) ($step->config ?? []))]
+                ? [
+                    'optional' => AccountStep::isOptional((array) ($step->config ?? [])),
+                    // Wohin, wenn es das Konto schon gibt: die Seite der Site
+                    // fuer „Passwort vergessen", sonst die des Control Panels.
+                    'reset_url' => self::passwordResetUrl(),
+                ]
                 : null,
             // Was in diesem Lauf gekauft wurde. Null, solange nichts bezahlt
             // ist — eine Danke-Seite, die „Danke" sagt und den Kauf nicht
@@ -500,6 +506,17 @@ class FunnelController
         </body>
         </html>
         HTML;
+    }
+
+    protected static function passwordResetUrl(): ?string
+    {
+        $configured = trim((string) config('statamic-funnels.password_reset_url', ''));
+
+        if ($configured !== '') {
+            return $configured;
+        }
+
+        return Route::has('statamic.cp.password.request') ? route('statamic.cp.password.request') : null;
     }
 
     /**

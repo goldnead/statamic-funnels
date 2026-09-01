@@ -3,6 +3,7 @@
 namespace Goldnead\StatamicFunnels\Tests\Feature;
 
 use Goldnead\StatamicFunnels\Models\Funnel;
+use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Support\Consent;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Tests\TestCase;
@@ -39,6 +40,7 @@ class ConsentTest extends TestCase
     {
         Consent::resolveTermsUsing(null);
         Consent::resolveAccessUsing(null);
+        Consent::allowPaymentKeysUsing(null);
 
         parent::tearDown();
     }
@@ -272,24 +274,45 @@ class ConsentTest extends TestCase
     }
 
     #[Test]
-    public function an_older_payments_without_the_columns_is_not_thrown_at(): void
+    public function an_older_payments_without_the_columns_keeps_the_consent_in_meta(): void
     {
-        // Was `PaymentDetails` annimmt, entscheidet, ob die Einwilligung als
-        // Spalte oder unter `meta['consent']` landet. In keinem Fall wirft der
-        // Kauf, und in keinem Fall geht der Beleg verloren.
+        // So tun, als kenne payments nur die drei alten Schluessel. Der Kauf
+        // wirft nicht, und der Beleg landet unter `meta['consent']`.
+        Consent::allowPaymentKeysUsing(['meta', 'country', 'country_source']);
+        Consent::resolveTermsUsing(fn () => self::TERMS);
+
+        $details = Consent::details(Offer::make(['handle' => 'x']), new FunnelVisit, 'Wortlaut [1]');
+
+        $this->assertArrayNotHasKey('consent_at', $details);
+        $this->assertArrayNotHasKey('consent_text', $details);
+        $this->assertSame('Wortlaut [1]', $details['meta']['consent']['text']);
+        $this->assertNotEmpty($details['meta']['consent']['at']);
+        $this->assertSame('2026-09', $details['meta']['withdrawal']['version']);
+
+        // Und durch die ganze Kasse, mit den Schluesseln, die das echte payments
+        // gerade kennt: in keinem Fall ein Fehler.
+        Consent::allowPaymentKeysUsing(null);
         $this->funnel();
 
         $this->asVisitor()->get('/f/kurs/angebot')->assertOk();
-        $this->asVisitor()->post('/f/kurs/offer_1/advance', ['accept' => '1', 'confirmed' => '1'])
+        $this->asVisitor()->post('/f/kurs/offer_1/advance', ['accept' => '1', 'confirmed' => '1', 'consent_text' => self::TERMS['waiver_text'].' [2026-09]'])
             ->assertSessionHasNoErrors()
             ->assertRedirect();
 
-        $payment = Payment::query()->sole();
+        $this->assertNotNull($this->consentOn(Payment::query()->sole())['text']);
+    }
 
-        if (in_array('consent_text', PaymentDetails::ALLOWED, true)) {
-            $this->assertNotNull($payment->getAttribute('consent_text'));
-        } else {
-            $this->assertNotNull($payment->meta['consent']['text'] ?? null);
-        }
+    #[Test]
+    public function a_payments_with_the_columns_gets_them_as_columns(): void
+    {
+        Consent::allowPaymentKeysUsing(['meta', 'country', 'country_source', 'consent_at', 'consent_text']);
+        Consent::resolveTermsUsing(fn () => self::TERMS);
+
+        $details = Consent::details(Offer::make(['handle' => 'x']), new FunnelVisit, 'Wortlaut [1]');
+
+        $this->assertSame('Wortlaut [1]', $details['consent_text']);
+        $this->assertNotNull($details['consent_at']);
+        $this->assertArrayNotHasKey('consent', $details['meta']);
+        $this->assertSame('2026-09', $details['meta']['withdrawal']['version']);
     }
 }

@@ -7,7 +7,6 @@ use Goldnead\StatamicFunnels\Models\FunnelMailDelivery;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Nodes\MailStep;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -61,24 +60,29 @@ class MailTrigger
     /**
      * Eine Zeile anlegen und den Job stellen. Einmal je (Besuch, Knoten).
      *
-     * Die Einmaligkeit ist der Unique-Index, nicht ein `exists()` davor: zwei
-     * Webhook-Zustellungen im selben Augenblick wuerden beide „noch nicht da"
-     * lesen. Der zweite Insert schlaegt an der Datenbank fehl, und das ist die
-     * gewollte Antwort.
+     * `firstOrCreate` auf (Besuch, Knoten): der zweite Aufruf findet die Zeile
+     * des ersten und stellt keinen Job. Den Rest sichert der Unique-Index —
+     * zwei Webhook-Zustellungen im selben Augenblick lesen beide „noch nicht
+     * da", und dann scheitert der zweite Insert an der Datenbank; dieser
+     * Fehler wird von `fire()` geloggt und nicht als Doppelaufruf verkleidet.
      */
     protected function queue(FunnelVisit $visit, FunnelStep $mail): bool
     {
-        try {
-            $delivery = FunnelMailDelivery::create([
-                'visit_id' => $visit->getKey(),
+        $delivery = FunnelMailDelivery::firstOrCreate(
+            ['visit_id' => $visit->getKey(), 'node_key' => $mail->node_key],
+            [
                 'funnel_id' => $visit->funnel_id,
-                'node_key' => $mail->node_key,
                 'template' => $mail->config('template') ?: null,
                 'brand_id' => $this->brand(),
                 'queued_at' => now(),
-            ]);
-        } catch (QueryException) {
-            // Schon ausgeloest. Kein Fehler, kein zweiter Versand.
+            ],
+        );
+
+        // Schon ausgeloest. Kein Fehler, kein zweiter Versand. Alles andere,
+        // was die Datenbank hier wirft, wirft weiter — `fire()` schreibt es ins
+        // Log; ein stiller `catch` haette einen echten Fehler wie einen
+        // Doppelaufruf aussehen lassen.
+        if (! $delivery->wasRecentlyCreated) {
             return false;
         }
 

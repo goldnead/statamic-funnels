@@ -237,9 +237,26 @@ class Consent
         return $details;
     }
 
-    /** Ob das installierte payments diesen Schluessel einer Zahlung mitgeben laesst. */
-    protected static function paymentsAllows(string $key): bool
+    /** @var list<string>|null */
+    protected static ?array $allowedPaymentKeys = null;
+
+    /**
+     * Fuer Tests: so tun, als kenne payments genau diese Schluessel.
+     *
+     * @param  list<string>|null  $keys
+     */
+    public static function allowPaymentKeysUsing(?array $keys): void
     {
+        static::$allowedPaymentKeys = $keys;
+    }
+
+    /** Ob das installierte payments diesen Schluessel einer Zahlung mitgeben laesst. */
+    public static function paymentsAllows(string $key): bool
+    {
+        if (static::$allowedPaymentKeys !== null) {
+            return in_array($key, static::$allowedPaymentKeys, true);
+        }
+
         if (! defined(PaymentDetails::class.'::ALLOWED')) {
             return false;
         }

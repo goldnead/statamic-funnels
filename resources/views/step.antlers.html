@@ -248,6 +248,14 @@
     {{ if step:type == "account" }}
         <form method="POST" action="{{ action }}" class="funnel-form funnel-account">
             {{ csrf_field }}
+            {{# Gibt es das Konto schon, oder fehlt die Adresse: hier steht es,
+                mit dem Weg zum Passwort-Zuruecksetzen. #}}
+            {{ get_error:account }}
+                <p class="funnel-form__error" role="alert">
+                    {{ value }}
+                    {{ if account:reset_url }}<a href="{{ account:reset_url }}">{{ trans key="statamic-funnels::messages.account_reset_link" }}</a>{{ /if }}
+                </p>
+            {{ /get_error:account }}
             <label>
                 <span>{{ trans key="statamic-funnels::messages.field_email" }}</span>
                 <input type="email" value="{{ visit:email }}" readonly>

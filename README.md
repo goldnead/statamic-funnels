@@ -57,8 +57,11 @@ entered. See [Mail nodes](#mail-nodes).
 Until now the user came into being silently — built from the address, and nobody told the buyer
 it existed. The account step is Kajabi's order: checkout → upsell → name and password (skippable)
 → library. It shows the visit's email read-only, asks for a name and a password (min. 8, repeated),
-creates the Statamic user or updates the one with that address (never a duplicate), logs them in
-(`login_after`) and carries on. *Later* carries on without an account when `optional` allows it,
+creates the Statamic user — no role, no group, never super — logs them in (`login_after`, on a
+fresh session) and carries on. **If an account with that address already exists, nothing is
+changed and nobody is logged in:** the page says so and points to the password reset. The
+address came from a form anybody can fill in; setting a password on an existing account from
+here would be an account takeover with the administrator's address. *Later* carries on without an account when `optional` allows it,
 which it does by default — a mandatory account is an abandoned checkout after the checkout.
 
 The address is the visit's, never the form's: to get an account for an address you have to have
@@ -105,7 +108,9 @@ says so. Nothing here fails silently — that is the failure this table exists t
 `statamic-automations` and its scheduled-jobs table. That would have forced every funnel with a
 mail on it to install the automations addon, and built a second place where a mail is "delayed".
 Laravel already has one: the delay is `dispatch()->delay()` on the site's own queue. One queue in
-the house, no second scheduler, and a funnel works without automations. A multi-step sequence over
+the house, no second scheduler, and a funnel works without automations. **That needs a queue
+that runs:** with `QUEUE_CONNECTION=sync` the delay is ignored and the mail goes out inside the
+visitor's request — fine for trying it out, not for "three days later". A multi-step sequence over
 days remains an automation; a mail node is one mail at one moment.
 
 **Attaching one.** Pick *Mail* from the library on an output's "+", or from the "+" on an existing

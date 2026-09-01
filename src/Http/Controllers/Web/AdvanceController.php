@@ -100,7 +100,7 @@ class AdvanceController
             return $this->go($funnel, $next);
         }
 
-        $email = trim((string) $visit->email);
+        $email = mb_strtolower(trim((string) $visit->email));
 
         if ($email === '') {
             // Kein Formular-Schritt davor, oder eine Vorlage ohne E-Mail-Feld.
@@ -113,13 +113,26 @@ class AdvanceController
             'password' => ['required', 'string', 'min:8', 'max:191', 'confirmed'],
         ]);
 
-        $user = User::findByEmail($email) ?? User::make()->email($email);
+        // Gibt es zu dieser Adresse schon ein Konto, wird hier **nichts**
+        // gesetzt und niemand eingeloggt. Die Adresse kam aus einem Formular,
+        // das jeder ausfuellen kann; ein Passwort darauf zu setzen hiesse, mit
+        // der Adresse des Administrators dessen Konto zu uebernehmen. Wer sein
+        // Konto schon hat, meldet sich an oder setzt sein Passwort ueber den
+        // Weg zurueck, der seine Adresse prueft.
+        if (User::findByEmail($email) !== null) {
+            return back()->withErrors(['account' => __('statamic-funnels::messages.account_exists')]);
+        }
 
+        // Ein neuer Benutzer, ohne Rolle, ohne Gruppe, kein Super: was er darf,
+        // entscheidet die Site — ueber Entitlements, Gruppen, was sie hat.
+        $user = User::make()->email($email);
         $user->set('name', $data['name']);
         $user->password($data['password']);
         $user->save();
 
         if (AccountStep::logsIn($config)) {
+            // Eine frische Session fuer den frischen Login, gegen Session-Fixation.
+            $request->session()->regenerate();
             Auth::login($user, true);
         }
 

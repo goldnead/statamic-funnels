@@ -68,6 +68,19 @@ return [
 
     'template_prefix' => '',
 
+    /*
+    |--------------------------------------------------------------------------
+    | Where "forgot your password" lives
+    |--------------------------------------------------------------------------
+    |
+    | The account step refuses to touch an account that already exists and
+    | points the visitor here instead. Empty falls back to the Control Panel's
+    | own reset form; a site with a front-end login names its page.
+    |
+    */
+
+    'password_reset_url' => null,
+
     'integrations' => [
         // Hand a captured address to goldnead/statamic-leadhub as a contact.
         'leadhub' => false,

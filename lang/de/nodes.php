@@ -17,7 +17,7 @@ return [
     'field_mail_template_help' => 'Eine veröffentlichte E-Mail-Vorlage. Platzhalter: {{ visitor.name }}, {{ visitor.email }}, {{ funnel.title }}, {{ order.total }}, {{ order.reference }}, {{ order.lines }}.',
     'field_mail_template_missing' => 'Keine Vorlagen: goldnead/statamic-email-templates ist nicht installiert oder hat keine veröffentlichte Vorlage. Der Knoten lässt sich speichern, jeder Versand steht dann als fehlgeschlagen im Bericht.',
     'field_delay_amount' => 'Verzögerung',
-    'field_delay_amount_help' => '0 heißt sofort. Die Verzögerung ist ein Queue-Delay: die Warteschlange der Site muss laufen.',
+    'field_delay_amount_help' => '0 heißt sofort. Die Verzögerung ist ein Queue-Delay: die Warteschlange der Site muss laufen. Mit QUEUE_CONNECTION=sync wird sie ignoriert, und die Mail geht im Request des Besuchers raus.',
     'field_delay_unit' => 'Einheit',
     'unit_minutes' => 'Minuten',
     'unit_hours' => 'Stunden',

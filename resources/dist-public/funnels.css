@@ -300,6 +300,23 @@
     font-weight: 600;
 }
 
+/* Eine Meldung am Formular, die man nicht uebersehen soll und die trotzdem
+   kein Alarm ist. */
+.funnel-form__error {
+    margin: 0 0 1rem;
+    padding: 0.7rem 0.9rem;
+    border: 1px solid var(--funnel-line);
+    border-left: 3px solid var(--funnel-accent);
+    border-radius: var(--funnel-radius);
+    font-size: 0.9rem;
+}
+
+.funnel-form__error a {
+    color: inherit;
+    text-decoration: underline;
+    margin-left: 0.3rem;
+}
+
 /* Die Fassung des Einwilligungstexts: Teil des Protokolls, fuer den Kaeufer
    eine Fussnote. */
 .funnel-consent-version {

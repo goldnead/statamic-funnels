@@ -17,7 +17,7 @@ return [
     'field_mail_template_help' => 'A published email template. Placeholders: {{ visitor.name }}, {{ visitor.email }}, {{ funnel.title }}, {{ order.total }}, {{ order.reference }}, {{ order.lines }}.',
     'field_mail_template_missing' => 'No templates: goldnead/statamic-email-templates is not installed or has no published template. The node can be saved; every send then shows up as failed in the report.',
     'field_delay_amount' => 'Delay',
-    'field_delay_amount_help' => '0 means at once. The delay is a queue delay: the site’s queue has to be running.',
+    'field_delay_amount_help' => '0 means at once. The delay is a queue delay: the site’s queue has to be running. With QUEUE_CONNECTION=sync it is ignored and the mail goes out inside the visitor’s request.',
     'field_delay_unit' => 'Unit',
     'unit_minutes' => 'Minutes',
     'unit_hours' => 'Hours',

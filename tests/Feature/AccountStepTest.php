@@ -98,24 +98,56 @@ class AccountStepTest extends TestCase
     }
 
     #[Test]
-    public function an_existing_user_with_that_address_is_updated_not_duplicated(): void
+    public function an_existing_account_is_neither_changed_nor_logged_in(): void
     {
         $this->funnel();
-        tap(User::make()->email('maria@example.com')->password('altes-passwort-1'))->save();
+
+        // Der Administrator. Seine Adresse kann jeder in ein Formular tippen.
+        tap(User::make()->email('maria@example.com')->password('altes-passwort-1')->set('name', 'Maria Admin')->makeSuper())->save();
 
         $this->arrive();
 
         $this->asVisitor()->post('/f/kurs/account_1/advance', [
-            'name' => 'Maria B.',
+            'name' => 'Eindringling',
             'password' => 'neues-passwort-2',
             'password_confirmation' => 'neues-passwort-2',
-        ])->assertSessionHasNoErrors();
+        ])->assertSessionHasErrors(['account']);
 
         $this->assertSame(1, User::all()->filter(fn ($u) => $u->email() === 'maria@example.com')->count());
 
         $user = User::findByEmail('maria@example.com');
-        $this->assertSame('Maria B.', $user->get('name'));
-        $this->assertTrue(Hash::check('neues-passwort-2', (string) $user->password()));
+        $this->assertSame('Maria Admin', $user->get('name'));
+        $this->assertTrue(Hash::check('altes-passwort-1', (string) $user->password()));
+        $this->assertFalse(Hash::check('neues-passwort-2', (string) $user->password()));
+        $this->assertFalse(Auth::check());
+    }
+
+    #[Test]
+    public function the_address_is_matched_case_insensitively_and_the_new_user_is_no_super(): void
+    {
+        $this->funnel();
+        tap(User::make()->email('maria@example.com')->password('altes-passwort-1'))->save();
+
+        // Gross geschrieben im Formular: dasselbe Konto, also kein neues.
+        $this->arrive('Maria@Example.com');
+        $this->asVisitor()->post('/f/kurs/account_1/advance', [
+            'name' => 'Maria', 'password' => 'geheim-und-lang', 'password_confirmation' => 'geheim-und-lang',
+        ])->assertSessionHasErrors(['account']);
+        $this->assertSame(1, User::all()->count());
+
+        // Und ein wirklich neuer: klein geschrieben abgelegt, ohne Rolle, kein Super.
+        $this->asVisitor(str_repeat('n', 32))->get('/f/kurs/anmeldung')->assertOk();
+        $this->asVisitor(str_repeat('n', 32))->post('/f/kurs/capture_1/advance', ['email' => 'Neu@Example.com', 'name' => 'Neu']);
+        $this->asVisitor(str_repeat('n', 32))->get('/f/kurs/konto')->assertOk();
+        $this->asVisitor(str_repeat('n', 32))->post('/f/kurs/account_1/advance', [
+            'name' => 'Neu', 'password' => 'geheim-und-lang', 'password_confirmation' => 'geheim-und-lang',
+        ])->assertSessionHasNoErrors();
+
+        $user = User::findByEmail('neu@example.com');
+        $this->assertNotNull($user);
+        $this->assertFalse($user->isSuper());
+        $this->assertCount(0, $user->roles());
+        $this->assertCount(0, $user->groups());
     }
 
     #[Test]
