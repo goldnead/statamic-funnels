@@ -57,13 +57,19 @@ A mail is drawn on the same canvas as the steps, as a branch beside the way on �
 whole design decision. A mail that a visitor walked *through* would be a station without a page:
 the URL flickers, the back button breaks, the drop-off report counts a step nobody stood on, and a
 delayed mail cannot exist at all. So the node hangs off a step's **output** and the walk goes past
-it:
+it. **One rule: the mail goes out when the visitor takes the output it hangs off.** It is the
+same rule the canvas draws — an edge on the handle labelled "submitted" fires on submit.
 
 | Edge from the parent step | The mail goes out when… |
 |---|---|
-| `default` | the step is **entered** (on the Finish step: when the walk is complete) |
+| `default` | the visitor **carries on**: *continue* on an entry or page, *submitted* on a form |
 | `accepted` | the offer is **paid** — when the webhook says so, never on the click |
 | `declined` | the offer is **declined** |
+
+The Finish step has no output, so nothing hangs off it: "the walk is complete" is the output
+that *leads to* the finish, and that is where a completion mail goes. A welcome mail belongs on
+the form's *submitted* output or later — before that the walk has no address yet, and the row
+says so.
 
 Each mail names a template from `goldnead/statamic-email-templates` (published entries of
 `et_templates`), an optional delay (minutes, hours, days), a recipient (the visitor, or a fixed

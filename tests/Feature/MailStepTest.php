@@ -132,16 +132,22 @@ class MailStepTest extends TestCase
     }
 
     #[Test]
-    public function entering_the_parent_queues_exactly_one_job_with_the_delay(): void
+    public function taking_the_output_queues_exactly_one_job_with_the_delay(): void
     {
         Bus::fake();
         $this->funnel(['delay_amount' => 2, 'delay_unit' => 'hours']);
 
         $this->travelTo(now()->startOfMinute());
 
+        // Ansehen loest nichts aus: die Mail haengt am Ausgang, nicht am Betreten.
         $this->asVisitor()->get('/f/kurs')->assertOk();
-        // Ein Neuladen ist kein zweites Betreten.
-        $this->asVisitor()->get('/f/kurs')->assertOk();
+        Bus::assertNothingDispatched();
+        $this->assertSame(0, FunnelMailDelivery::count());
+
+        // Weitergehen nimmt den Ausgang. Zweimal, wie ein Doppelklick — einmal
+        // feuert es.
+        $this->asVisitor()->post('/f/kurs/entry_1/advance')->assertRedirect();
+        $this->asVisitor()->post('/f/kurs/entry_1/advance')->assertRedirect();
 
         Bus::assertDispatchedTimes(SendFunnelMail::class, 1);
         Bus::assertDispatched(SendFunnelMail::class, function (SendFunnelMail $job) {
@@ -166,8 +172,8 @@ class MailStepTest extends TestCase
 
         $nodes = FunnelMailDelivery::query()->pluck('node_key')->all();
 
-        // Der Einstieg wurde nie betreten, die Seite „schade" traegt keine
-        // Mail: uebrig bleibt genau der Zweig, der genommen wurde.
+        // Der Ausgang des Einstiegs wurde nie genommen, `accepted` auch nicht:
+        // uebrig bleibt genau der Zweig, der genommen wurde.
         $this->assertSame(['mail_no'], $nodes);
     }
 

@@ -112,6 +112,16 @@ class FunnelWalk
     {
         $visit->record($from->node_key, $event, $payload);
 
+        // Die Mails, die an diesem Ausgang haengen. **Der Ausgang wird genommen**
+        // ist der eine Moment, an dem ein Mail-Knoten feuert — `weiter` auf
+        // einer Seite, `abgeschickt` am Formular, `abgelehnt` am Angebot. Nur
+        // `accepted` nicht: das nimmt niemand per Klick, das sagt der Webhook,
+        // und dafuer gibt es `FunnelOfferAccepted`. Ein Ende des Wegs hat
+        // keinen Ausgang; „abgeschlossen" ist der Ausgang, der zum Ende fuehrt.
+        if ($output !== 'accepted') {
+            app(MailTrigger::class)->fire($visit, $from, $output);
+        }
+
         $next = $visit->funnel->nextStep($from->node_key, $output);
 
         if (! $next) {

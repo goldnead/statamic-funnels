@@ -9,12 +9,16 @@ use Goldnead\StatamicFunnels\Support\MailTemplates;
  *
  * **Kein Schritt, den jemand betritt.** Der Knoten hat keine Seite, keinen
  * Slug und keinen Ausgang; der Besuch laeuft nie hindurch. Was ihn ausloest,
- * ist der Ausgang des Elternschritts, an dem seine Kante haengt:
+ * ist **dass der Besuch den Ausgang nimmt**, an dem seine Kante haengt:
  *
- * - `default`  — der Elternschritt wurde **betreten**. Am Abschluss-Schritt
- *                ist das der Moment, in dem der Weg zu Ende ist.
+ * - `default`  — `weiter` auf Einstieg und Seite, `abgeschickt` am Formular.
  * - `accepted` — das Angebot wurde bezahlt (erst wenn der Webhook es sagt).
  * - `declined` — das Angebot wurde abgelehnt.
+ *
+ * Eine Regel, nicht drei, und dieselbe, die die Leinwand zeichnet: die Kante
+ * haengt am Griff mit dem Wort „abgeschickt", also feuert sie beim Abschicken.
+ * Der Abschluss hat keinen Ausgang; „der Weg ist zu Ende" ist der Ausgang, der
+ * zum Abschluss fuehrt — die Mail haengt an dem.
  *
  * Auf der Leinwand sieht das aus wie bei HighLevel oder Kajabi: die Mail als
  * Abzweig neben dem Weg. Im Verhalten bleibt der Funnel ein Weg, auf dem

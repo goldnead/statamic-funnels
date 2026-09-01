@@ -4,11 +4,12 @@
 
 ### Mail-Knoten auf der Leinwand
 
-Ein neuer Knoten `mail`, der **an einem Schritt hängt und nie betreten wird**. Die Kante vom
-Elternschritt sagt, wann er feuert: `default` beim Betreten (am Abschluss: wenn der Weg zu Ende
-ist), `accepted` wenn das Angebot bezahlt ist, `declined` wenn es abgelehnt wurde. Der Weg führt
-an der Mail vorbei — `nextStep()` überspringt sie, der Stepper zählt sie nicht als Station, die
-Abbruchstatistik auch nicht.
+Ein neuer Knoten `mail`, der **an einem Ausgang hängt und nie betreten wird**. Eine Regel: die
+Mail geht raus, wenn der Besuch den Ausgang nimmt, an dem sie hängt — `default` heißt weiter
+(Seite) oder abgeschickt (Formular), `accepted` heißt bezahlt (erst per Webhook), `declined`
+heißt abgelehnt. Der Abschluss hat keinen Ausgang; „der Weg ist zu Ende" ist der Ausgang, der
+dorthin führt. Der Weg führt an der Mail vorbei — `nextStep()` überspringt sie, der Stepper
+zählt sie nicht als Station, die Abbruchstatistik auch nicht.
 
 Vorlage aus `statamic-email-templates`, Verzögerung als Queue-Delay (kein zweiter Scheduler,
 kein Zwang zu `statamic-automations`; die Begründung steht in der README), Empfänger der Besuch
