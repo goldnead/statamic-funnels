@@ -67,11 +67,7 @@ class Consent
             return is_array($terms) && $terms !== [] ? $terms : null;
         }
 
-        if (! method_exists($offer, 'withdrawalTerms')) {
-            return null;
-        }
-
-        $terms = $offer->withdrawalTerms();
+        $terms = Sibling::call($offer, 'withdrawalTerms');
 
         return is_array($terms) && $terms !== [] ? $terms : null;
     }
@@ -83,13 +79,9 @@ class Consent
      */
     public static function accessWindow(Offer $offer): ?array
     {
-        if (static::$accessResolver) {
-            $window = (static::$accessResolver)($offer);
-        } elseif (method_exists($offer, 'accessWindow')) {
-            $window = $offer->accessWindow();
-        } else {
-            return null;
-        }
+        $window = static::$accessResolver
+            ? (static::$accessResolver)($offer)
+            : Sibling::call($offer, 'accessWindow');
 
         if (! is_array($window) || $window === []) {
             return null;

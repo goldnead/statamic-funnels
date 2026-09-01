@@ -58,7 +58,12 @@
 }
 
 .funnel-step input[type="text"],
-.funnel-step input[type="email"] {
+.funnel-step input[type="email"],
+.funnel-step input[type="tel"],
+.funnel-step input[type="number"],
+.funnel-step input[type="password"],
+.funnel-step select,
+.funnel-step textarea {
     width: 100%;
     padding: 0.65rem 0.8rem;
     border: 1px solid var(--funnel-line);
@@ -275,12 +280,33 @@
     margin-top: 1rem;
 }
 
-.funnel-offer__decline button[type="submit"] {
+.funnel-offer__decline button[type="submit"],
+.funnel-account__skip button[type="submit"] {
     background: none;
     color: var(--funnel-muted);
     padding: 0.4rem 0;
     font-weight: 400;
     text-decoration: underline;
+}
+
+/* Die Haken unter dem E-Mail-Feld und am Feld-Bibliotheks-Formular: Kaestchen
+   und Satz in einer Zeile, wie die Bestaetigung an der Kasse. */
+.funnel-form__newsletter,
+.funnel-form__field--checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+}
+
+.funnel-form__newsletter > span,
+.funnel-form__field--checkbox > span {
+    margin: 0;
+    font-weight: 400;
+}
+
+.funnel-form__newsletter input[type="checkbox"],
+.funnel-form__field--checkbox input[type="checkbox"] {
+    margin-top: 0.2rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -297,6 +323,11 @@
 
     .funnel-step input[type="text"],
     .funnel-step input[type="email"],
+    .funnel-step input[type="tel"],
+    .funnel-step input[type="number"],
+    .funnel-step input[type="password"],
+    .funnel-step select,
+    .funnel-step textarea,
     .funnel-offer {
         color: inherit;
     }

@@ -99,6 +99,10 @@ class ConsentTest extends TestCase
     #[Test]
     public function without_terms_on_the_offer_the_page_reads_as_before(): void
     {
+        // Ein Angebot, das keine Konditionen fuehrt — ein aelteres offers, oder
+        // eine Site, die sie woanders regelt. Ausdruecklich, weil das
+        // installierte offers inzwischen fuer jedes Angebot welche kennt.
+        Consent::resolveTermsUsing(fn () => null);
         $this->funnel();
 
         $this->asVisitor()->get('/f/kurs/angebot')
@@ -151,8 +155,10 @@ class ConsentTest extends TestCase
 
         $this->assertSame(0, Payment::count());
 
-        // Als JSON: derselbe Fall ist ein 422.
-        $this->asVisitor()->postJson('/f/kurs/offer_1/advance', [
+        // Als JSON: derselbe Fall ist ein 422. `withCredentials()`, weil der
+        // Testclient JSON-Anfragen sonst ohne Cookies schickt — und ohne den
+        // Cookie ist es ein neuer Besuch, der den Schritt nie betreten hat.
+        $this->asVisitor()->withCredentials()->postJson('/f/kurs/offer_1/advance', [
             'accept' => '1', 'confirmed' => '1', 'consent_text' => 'etwas ganz anderes',
         ])->assertStatus(422);
     }
@@ -197,6 +203,8 @@ class ConsentTest extends TestCase
     #[Test]
     public function without_terms_the_lang_wording_is_what_is_recorded(): void
     {
+        Consent::resolveTermsUsing(fn () => null);
+        Consent::resolveAccessUsing(fn () => null);
         $this->funnel();
 
         $this->asVisitor()->get('/f/kurs/angebot')->assertOk();
@@ -208,6 +216,32 @@ class ConsentTest extends TestCase
         // Keine Konditionen, kein Fenster: nichts erfunden.
         $this->assertArrayNotHasKey('withdrawal', (array) $payment->meta);
         $this->assertArrayNotHasKey('access', (array) $payment->meta);
+    }
+
+    #[Test]
+    public function the_real_terms_of_the_installed_offers_are_used_when_it_has_them(): void
+    {
+        $this->funnel();
+        $offer = Offer::query()->sole();
+
+        if (! method_exists($offer, 'withdrawalTerms')) {
+            $this->markTestSkipped('Das installierte statamic-offers fuehrt noch keine Widerrufskonditionen.');
+        }
+
+        $terms = $offer->withdrawalTerms();
+        $expected = Consent::text($terms, false);
+
+        $this->assertStringEndsWith('['.$terms['version'].']', $expected);
+
+        $this->asVisitor()->get('/f/kurs/angebot')->assertOk()->assertSee($expected);
+        $this->asVisitor()->post('/f/kurs/offer_1/advance', [
+            'accept' => '1', 'confirmed' => '1', 'consent_text' => $expected,
+        ])->assertSessionHasNoErrors();
+
+        $payment = Payment::query()->sole();
+
+        $this->assertSame($expected, $this->consentOn($payment)['text']);
+        $this->assertSame($terms['version'], $payment->meta['withdrawal']['version'] ?? null);
     }
 
     #[Test]

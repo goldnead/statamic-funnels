@@ -74,7 +74,7 @@ class FunnelMailRenderer
 
         $order = $sampleOrder ?? OrderSummary::forVisit($visit->exists ? $visit : null);
 
-        return [
+        return self::siteVariables() + [
             'visitor' => [
                 'email' => (string) $visit->email,
                 'name' => $name,
@@ -107,5 +107,27 @@ class FunnelMailRenderer
                 )),
             ],
         ];
+    }
+
+    /**
+     * Was jede Vorlage der Familie ausserdem kennt: `sender.*`, `date`,
+     * `unsubscribe_url`.
+     *
+     * Aus den Vorgaben von `MergeVariables`, aber **nur diese Schluessel**:
+     * die Vorgaben tragen daneben eine Beispiel-Empfaengerin, und die darf in
+     * einer echten Mail nirgends auftauchen. Der Absender dort ist der der
+     * Marke bzw. aus `mail.from`, also der richtige auch fuer den Versand.
+     *
+     * @return array<string, mixed>
+     */
+    protected static function siteVariables(): array
+    {
+        $defaults = Sibling::call(MailTemplates::MERGE, 'defaults');
+
+        if (! is_array($defaults)) {
+            return [];
+        }
+
+        return array_intersect_key($defaults, array_flip(['sender', 'date', 'unsubscribe_url']));
     }
 }

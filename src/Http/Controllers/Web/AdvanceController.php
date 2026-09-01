@@ -9,7 +9,9 @@ use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicFunnels\Nodes\AccountStep;
 use Goldnead\StatamicFunnels\Nodes\CaptureStep;
+use Goldnead\StatamicFunnels\Support\BillingFields;
 use Goldnead\StatamicFunnels\Support\Consent;
 use Goldnead\StatamicFunnels\Support\Countdown;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
@@ -21,8 +23,10 @@ use Goldnead\StatamicPayments\Support\Checkout;
 use Goldnead\StatamicPayments\Support\FollowUp;
 use Goldnead\StatamicPayments\Support\PaymentDetails;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Statamic\Facades\User;
 
 /**
  * Moving on from a step.
@@ -64,8 +68,69 @@ class AdvanceController
         return match ($step->type) {
             'offer' => $this->offer($request, $model, $step, $visit),
             'capture' => $this->capture($request, $model, $step, $visit),
+            'account' => $this->account($request, $model, $step, $visit),
             default => $this->plain($model, $step, $visit),
         };
+    }
+
+    /**
+     * Der Konto-Schritt: Name und Passwort zu der Adresse, die der Besuch schon hat.
+     *
+     * Die Adresse kommt vom Besuch, nie aus dem Formular: wer hier ein
+     * fremdes Konto uebernehmen will, muesste zuerst dessen Weg gehen — und
+     * der haengt an einem Cookie, das nur der eigene Browser hat.
+     *
+     * Ein bestehender Benutzer mit dieser Adresse wird aktualisiert, nicht
+     * dupliziert. Statamic verweigert ohnehin zwei Benutzer mit einer Adresse,
+     * und der Kaeufer, der schon ein Konto hat, will ein neues Passwort, kein
+     * „gibt es schon".
+     */
+    protected function account(Request $request, Funnel $funnel, FunnelStep $step, $visit)
+    {
+        $config = (array) ($step->config ?? []);
+
+        // „Spaeter": weiter ohne Konto, wenn der Schritt das zulaesst.
+        if ($request->boolean('skip')) {
+            if (! AccountStep::isOptional($config)) {
+                return back()->withErrors(['account' => __('statamic-funnels::messages.account_required')]);
+            }
+
+            $next = $this->walk->advance($visit, $step, 'default', FunnelStepEvent::SUBMITTED, ['account' => 'skipped']);
+
+            return $this->go($funnel, $next);
+        }
+
+        $email = trim((string) $visit->email);
+
+        if ($email === '') {
+            // Kein Formular-Schritt davor, oder eine Vorlage ohne E-Mail-Feld.
+            // Ohne Adresse gibt es kein Konto, und raten waere das Falsche.
+            return back()->withErrors(['account' => __('statamic-funnels::messages.account_no_email')]);
+        }
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:191'],
+            'password' => ['required', 'string', 'min:8', 'max:191', 'confirmed'],
+        ]);
+
+        $user = User::findByEmail($email) ?? User::make()->email($email);
+
+        $user->set('name', $data['name']);
+        $user->password($data['password']);
+        $user->save();
+
+        if (AccountStep::logsIn($config)) {
+            Auth::login($user, true);
+        }
+
+        $visit->forceFill(['name' => $data['name']])->save();
+
+        $next = $this->walk->advance($visit, $step, 'default', FunnelStepEvent::SUBMITTED, [
+            'account' => 'created',
+            'user' => (string) $user->id(),
+        ]);
+
+        return $this->go($funnel, $next);
     }
 
     /** An ordinary "continue". */
@@ -99,10 +164,19 @@ class AdvanceController
             $billing = CaptureStep::BILLING_MINIMAL;
         }
 
-        $wantsName = $billing !== CaptureStep::BILLING_MINIMAL;
+        // Modus `offer`: die Felder kommen vom naechsten Angebot und aus der
+        // Bibliothek. Null heisst, eines von beiden fehlt — dann `minimal`, und
+        // {@see BillingFields} hat es ins Log geschrieben.
+        $library = BillingFields::forStep($funnel, $step);
+
+        if ($billing === CaptureStep::BILLING_OFFER && $library === null) {
+            $billing = CaptureStep::BILLING_MINIMAL;
+        }
+
+        $wantsName = $billing !== CaptureStep::BILLING_MINIMAL && $billing !== CaptureStep::BILLING_OFFER;
         $wantsAddress = $billing === CaptureStep::BILLING_FULL;
 
-        $data = $request->validate([
+        $rules = [
             'email' => ['required', 'email', 'max:191'],
             'name' => [$wantsName ? 'required' : 'nullable', 'string', 'max:191'],
             'street' => [$wantsAddress ? 'required' : 'nullable', 'string', 'max:191'],
@@ -113,7 +187,15 @@ class AdvanceController
             // „Deutschland", „DE", „de" und „Germany" in derselben Spalte.
             'country' => [$wantsAddress ? 'required' : 'nullable', 'string', 'size:2', 'alpha'],
             'newsletter' => ['nullable', 'boolean'],
-        ]);
+        ];
+
+        if ($billing === CaptureStep::BILLING_OFFER) {
+            // Die Bibliothek sagt je Feld, ob es Pflicht ist; ihre Regeln
+            // schlagen die vier festen oben, wo sie denselben Schluessel tragen.
+            $rules = array_merge($rules, BillingFields::rules($library));
+        }
+
+        $data = $request->validate($rules);
 
         // Der Newsletter-Haken, getrennt vom Kauf. Festgehalten mit Zeitpunkt
         // und dem Wortlaut, der neben dem Haken stand — ein „ja" ohne den Satz,
@@ -167,6 +249,26 @@ class AdvanceController
             'city' => trim((string) ($data['city'] ?? '')),
             'country' => strtoupper(trim((string) ($data['country'] ?? ''))),
         ], static fn (string $wert): bool => $wert !== '');
+
+        // Im Modus `offer` gehen alle Felder der Bibliothek 1:1 in die
+        // Rechnungsangaben, mit ihren Schluesseln — `vat_id`, `company`,
+        // `phone`, was immer das Angebot verlangt. `name` und `email` sind
+        // Spalten am Besuch und stehen zusaetzlich dort.
+        if ($billing === CaptureStep::BILLING_OFFER) {
+            foreach ($library as $field) {
+                $key = $field['key'];
+
+                if (! array_key_exists($key, $data) || $data[$key] === null || $data[$key] === '') {
+                    continue;
+                }
+
+                $anschrift[$key] = match ($field['type']) {
+                    'country' => strtoupper(trim((string) $data[$key])),
+                    'checkbox' => filter_var($data[$key], FILTER_VALIDATE_BOOLEAN),
+                    default => trim((string) $data[$key]),
+                };
+            }
+        }
 
         if ($anschrift !== []) {
             $meta['billing'] = array_merge((array) ($meta['billing'] ?? []), $anschrift);

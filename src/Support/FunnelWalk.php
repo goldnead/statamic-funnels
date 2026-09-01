@@ -22,8 +22,6 @@ class FunnelWalk
 {
     public const COOKIE = 'statamic_funnel';
 
-    public function __construct(protected Request $request) {}
-
     /**
      * An existing walk, or null.
      *
@@ -33,7 +31,7 @@ class FunnelWalk
      */
     public function existingVisit(Funnel $funnel): ?FunnelVisit
     {
-        $token = $this->request->cookie(self::COOKIE);
+        $token = $this->request()->cookie(self::COOKIE);
 
         if (! is_string($token) || ! $this->looksLikeToken($token)) {
             return null;
@@ -66,7 +64,7 @@ class FunnelWalk
      */
     public function token(): string
     {
-        $existing = $this->request->cookie(self::COOKIE);
+        $existing = $this->request()->cookie(self::COOKIE);
 
         if (is_string($existing) && $this->looksLikeToken($existing)) {
             return $existing;
@@ -76,6 +74,19 @@ class FunnelWalk
         cookie()->queue(cookie(self::COOKIE, $token, 60 * 24 * 30, null, null, null, true, false, 'Lax'));
 
         return $token;
+    }
+
+    /**
+     * Der Request von **jetzt**, nicht der vom Bau des Objekts.
+     *
+     * Laravel haelt die Controller-Instanz am Route-Objekt fest; wo dasselbe
+     * Route-Objekt einen zweiten Request bedient — in der Testsuite, unter
+     * Octane — truege ein per Konstruktor gefangener Request den Cookie des
+     * ersten Besuchers in den Weg des zweiten.
+     */
+    protected function request(): Request
+    {
+        return app('request');
     }
 
     protected function looksLikeToken(string $value): bool

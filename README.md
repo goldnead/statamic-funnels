@@ -48,8 +48,23 @@ One entry per funnel, because a path has one beginning.
 **Declining is an answer, not a failure.** Most visitors decline; a funnel that treats that as an
 error has nowhere to send them, so the canvas draws both branches and the editor nags about neither.
 
-There is a sixth kind of node that is **not** a step: a **Mail** hangs off a step and is never
+A sixth step, **Account**, is a page after the purchase: see [The account step](#the-account-step).
+And there is one kind of node that is **not** a step: a **Mail** hangs off a step and is never
 entered. See [Mail nodes](#mail-nodes).
+
+### The account step
+
+Until now the user came into being silently — built from the address, and nobody told the buyer
+it existed. The account step is Kajabi's order: checkout → upsell → name and password (skippable)
+→ library. It shows the visit's email read-only, asks for a name and a password (min. 8, repeated),
+creates the Statamic user or updates the one with that address (never a duplicate), logs them in
+(`login_after`) and carries on. *Later* carries on without an account when `optional` allows it,
+which it does by default — a mandatory account is an abandoned checkout after the checkout.
+
+The address is the visit's, never the form's: to get an account for an address you have to have
+walked the path that gave it, and that path hangs on a cookie only your browser has. A browser
+that never reached the step gets a 403 like on every other step. No mail is sent from here; the
+access mail is the site's.
 
 ### Mail nodes
 
@@ -110,6 +125,16 @@ Towards LeadHub the two facts stay two facts. The address becomes a contact **wi
 only a ticked box hands over consent — through LeadHub's `ContactResolver`, the one path that
 knows the flag (`LeadHub::ingest()` and `create()` do not carry consent). A purchase tags the
 contact `kunde` and grants nothing else: having bought is not having agreed to mail.
+
+### Fields from the offer
+
+The form step's `billing` setting has a fourth mode, **fields from the offer**. The step then
+searches the graph forward for the next offer step (past pages, past mails), asks that offer which
+checkout fields it wants (`Offer::checkoutFields()` in `statamic-offers`) and takes labels, types,
+options and `required` from the site-wide library (`Offers::fieldLibrary()`). Validation is built
+from the library; the values land in `visit.meta['billing']` under their own keys, one to one, so
+the checkout and the invoice read the same definition the form did. Without the library, or
+without an offer behind the step, the step asks for the email only and the log says why.
 
 ### Consent at the order button
 

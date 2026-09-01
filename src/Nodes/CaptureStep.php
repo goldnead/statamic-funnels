@@ -29,6 +29,16 @@ class CaptureStep extends StepType
      */
     public const BILLING_FULL = 'full';
 
+    /**
+     * Die Felder bestimmt das Angebot.
+     *
+     * Aus `Offer::checkoutFields()` des naechsten Angebots hinter diesem
+     * Schritt, mit Labels und Typen aus `Offers::fieldLibrary()`. So steht
+     * „Anschrift" an einer Stelle, und Formular, Kasse und Rechnung lesen
+     * dasselbe. Ohne die Bibliothek verhaelt sich der Schritt wie `minimal`.
+     */
+    public const BILLING_OFFER = 'offer';
+
     /** Kein Newsletter-Haken auf dieser Seite. */
     public const NEWSLETTER_HIDDEN = 'hidden';
 
@@ -55,7 +65,7 @@ class CaptureStep extends StepType
     /** @return list<string> */
     public static function billingModes(): array
     {
-        return [self::BILLING_MINIMAL, self::BILLING_NAME, self::BILLING_FULL];
+        return [self::BILLING_MINIMAL, self::BILLING_NAME, self::BILLING_FULL, self::BILLING_OFFER];
     }
 
     public static function kind(): string

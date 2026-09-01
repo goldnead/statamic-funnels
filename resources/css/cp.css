@@ -71,6 +71,7 @@
     .sa-stop--entry   { --sa-chip-color: var(--sa-color-entry); }
     .sa-stop--page    { --sa-chip-color: var(--sa-color-page); }
     .sa-stop--capture { --sa-chip-color: var(--sa-color-page); }
+    .sa-stop--account { --sa-chip-color: var(--sa-color-page); }
     .sa-stop--offer   { --sa-chip-color: var(--sa-color-offer); }
     .sa-stop--finish  { --sa-chip-color: var(--sa-color-finish); }
     .sa-stop--mail    { --sa-chip-color: var(--sa-color-mail); }

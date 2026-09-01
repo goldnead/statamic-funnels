@@ -35,6 +35,28 @@ Einwilligung kennen), ein Kauf traegt das Tag `kunde` — neues Listener `TagBuy
 `FunnelOfferAccepted`. Nebenbei: `LeadHubBridge::capture()` uebergab den Namen unter `name`, den
 `SourceEvent` gar nicht liest; jetzt unter `contact.full_name`.
 
+### Konto-Schritt nach dem Kauf
+
+Neuer Seiten-Knoten `account`: zeigt die E-Mail des Besuchs (nicht aenderbar), fragt Name und
+Passwort (min. 8, wiederholt), legt den Statamic-User an oder aktualisiert den mit dieser
+Adresse — nie ein Duplikat —, meldet ihn an (`login_after`) und geht weiter. „Spaeter" geht ohne
+Konto weiter, wenn `optional` es zulaesst (Vorgabe: ja). Ohne Adresse am Besuch gibt es kein
+Konto, ein fremder Browser bekommt 403 wie an jedem Schritt. Kein eigenes Mailing.
+
+Nebenbefund: `FunnelWalk` las den Request aus dem Konstruktor. Laravel haelt die
+Controller-Instanz am Route-Objekt fest; bedient dasselbe Route-Objekt einen zweiten Request
+(Testsuite, Octane), trug der gefangene Request den Cookie des ersten Besuchers in den Weg des
+zweiten. Jetzt wird der aktuelle Request gelesen.
+
+### Der Capture-Schritt liest die Feld-Bibliothek
+
+`billing` hat eine vierte Stufe `offer`: die Felder ergeben sich aus `Offer::checkoutFields()`
+des naechsten Angebots hinter dem Schritt (Graph vorwaerts, an Seiten und Mails vorbei), Labels,
+Typen, Optionen und Pflicht aus `Offers::fieldLibrary()`. Validierung dynamisch aus der
+Bibliothek, Ablage 1:1 in `visit.meta['billing']`. Fehlt die Bibliothek oder das Angebot,
+verhaelt sich der Schritt wie `minimal` und schreibt es ins Log. Beide Methoden nur hinter
+`method_exists`; Tests laufen ueber Resolver-Fakes, bis das installierte offers sie hat.
+
 ### Einwilligung, Widerruf und Zugangsfenster an der Zahlung
 
 `confirmed` wurde geprüft und verworfen. Jetzt gehen Zeitpunkt und Wortlaut der Einwilligung in

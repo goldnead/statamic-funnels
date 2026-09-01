@@ -5,8 +5,10 @@ namespace Goldnead\StatamicFunnels\Http\Controllers\Web;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicFunnels\Nodes\AccountStep;
 use Goldnead\StatamicFunnels\Nodes\CaptureStep;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
+use Goldnead\StatamicFunnels\Support\BillingFields;
 use Goldnead\StatamicFunnels\Support\Consent;
 use Goldnead\StatamicFunnels\Support\Countdown;
 use Goldnead\StatamicFunnels\Support\FunnelMailRenderer;
@@ -190,13 +192,17 @@ class FunnelController
             // Getrennt von `visit`, weil `visit` sagt, wer da ist, und dies
             // hier, was die Rechnung von ihm braucht.
             'billing' => $step->type === 'capture'
-                ? self::billingForTemplate($step, $preview ? null : $visit)
+                ? self::billingForTemplate($funnel, $step, $preview ? null : $visit)
                 : null,
             // Der Newsletter-Haken unter dem E-Mail-Feld. Null, wenn der
             // Schritt ihn verbirgt. Nie vorangekreuzt — ausser der Besuch hat
             // ihn schon einmal selbst gesetzt und laedt die Seite neu.
             'newsletter' => $step->type === 'capture'
                 ? self::newsletterForTemplate($step, $preview ? null : $visit)
+                : null,
+            // Der Konto-Schritt: ob „Spaeter" erlaubt ist.
+            'account' => $step->type === 'account'
+                ? ['optional' => AccountStep::isOptional((array) ($step->config ?? []))]
                 : null,
             // Was in diesem Lauf gekauft wurde. Null, solange nichts bezahlt
             // ist — eine Danke-Seite, die „Danke" sagt und den Kauf nicht
@@ -339,11 +345,19 @@ class FunnelController
      *
      * @return array<string, mixed>
      */
-    protected static function billingForTemplate(FunnelStep $step, ?FunnelVisit $visit): array
+    protected static function billingForTemplate(Funnel $funnel, FunnelStep $step, ?FunnelVisit $visit): array
     {
         $mode = (string) ($step->config('billing') ?: CaptureStep::BILLING_MINIMAL);
 
         if (! in_array($mode, CaptureStep::billingModes(), true)) {
+            $mode = CaptureStep::BILLING_MINIMAL;
+        }
+
+        // Die Felder aus der Bibliothek, wenn das Angebot sie bestimmt. Null
+        // heisst: Bibliothek nicht erreichbar, dann wie `minimal`.
+        $fields = BillingFields::forStep($funnel, $step);
+
+        if ($mode === CaptureStep::BILLING_OFFER && $fields === null) {
             $mode = CaptureStep::BILLING_MINIMAL;
         }
 
@@ -354,11 +368,32 @@ class FunnelController
         return [
             'mode' => $mode,
             'address' => $mode === CaptureStep::BILLING_FULL,
-            'name_required' => $mode !== CaptureStep::BILLING_MINIMAL,
+            'name_required' => $mode === CaptureStep::BILLING_NAME || $mode === CaptureStep::BILLING_FULL,
             'street' => $bekannt['street'] ?? null,
             'postal_code' => $bekannt['postal_code'] ?? null,
             'city' => $bekannt['city'] ?? null,
             'country' => $bekannt['country'] ?? null,
+            // Modus `offer`: die Felder mit dem, was schon dasteht. Das
+            // Namensfeld der Vorlage bleibt, wenn die Bibliothek `name` fuehrt,
+            // sonst ist es freiwillig wie bei `minimal`.
+            'fields' => $mode === CaptureStep::BILLING_OFFER
+                ? array_map(function (array $field) use ($bekannt) {
+                    $value = $bekannt[$field['key']] ?? null;
+
+                    // Optionen als Liste mit `selected`, weil Antlers in der
+                    // Schleife den aeusseren Wert nicht mehr sieht.
+                    $options = [];
+
+                    foreach ($field['options'] as $optionValue => $label) {
+                        $options[] = ['value' => (string) $optionValue, 'label' => $label, 'selected' => (string) $optionValue === (string) $value];
+                    }
+
+                    return ['options' => $options, 'value' => $value] + $field;
+                }, array_values(array_filter($fields, fn (array $field) => $field['key'] !== 'name')))
+                : [],
+            'name_from_library' => $mode === CaptureStep::BILLING_OFFER
+                ? collect($fields)->firstWhere('key', 'name')
+                : null,
         ];
     }
 

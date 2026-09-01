@@ -75,6 +75,7 @@ export const nodeIcon = createNodeIcon({
     page: 'file-content-list',
     capture: 'forms',
     offer: 'money-cashier-price-tag',
+    account: 'user-avatar',
     finish: 'flag',
     mail: 'mail',
 }, {

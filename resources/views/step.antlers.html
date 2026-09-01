@@ -22,8 +22,8 @@
         <form method="POST" action="{{ action }}" class="funnel-form">
             {{ csrf_field }}
             <label>
-                <span>{{ trans key="statamic-funnels::messages.field_name" }}</span>
-                <input type="text" name="name" value="{{ visit:name }}"{{ if billing:name_required }} required{{ /if }}>
+                <span>{{ if billing:name_from_library }}{{ billing:name_from_library:label }}{{ else }}{{ trans key="statamic-funnels::messages.field_name" }}{{ /if }}</span>
+                <input type="text" name="name" value="{{ visit:name }}"{{ if billing:name_required || billing:name_from_library:required }} required{{ /if }}>
             </label>
             <label>
                 <span>{{ trans key="statamic-funnels::messages.field_email" }}</span>
@@ -44,6 +44,36 @@
                 ueber 250 EUR entsteht ohne sie gar keine Rechnung (§ 14 UStG),
                 darunter waeren es vier Felder, die niemand braucht — und jedes
                 Feld mehr ist ein Kaufabbruch mehr. #}}
+            {{# Modus „Felder vom Angebot": die Liste kommt aus der
+                Feld-Bibliothek von statamic-offers, Pflicht je Feld von dort.
+                Formular, Kasse und Rechnung lesen dieselbe Definition. #}}
+            {{ billing:fields }}
+                {{ if type == "checkbox" }}
+                    <label class="funnel-form__field funnel-form__field--checkbox">
+                        <input type="checkbox" name="{{ key }}" value="1"{{ if value }} checked{{ /if }}{{ if required }} required{{ /if }}>
+                        <span>{{ label }}</span>
+                    </label>
+                {{ elseif type == "select" }}
+                    <label class="funnel-form__field">
+                        <span>{{ label }}</span>
+                        <select name="{{ key }}"{{ if required }} required{{ /if }}>
+                            <option value=""></option>
+                            {{ options }}<option value="{{ value }}"{{ if selected }} selected{{ /if }}>{{ label }}</option>{{ /options }}
+                        </select>
+                    </label>
+                {{ elseif type == "textarea" }}
+                    <label class="funnel-form__field">
+                        <span>{{ label }}</span>
+                        <textarea name="{{ key }}" rows="3"{{ if required }} required{{ /if }}>{{ value }}</textarea>
+                    </label>
+                {{ else }}
+                    <label class="funnel-form__field">
+                        <span>{{ label }}</span>
+                        <input type="{{ if type == "email" || type == "tel" || type == "number" }}{{ type }}{{ else }}text{{ /if }}" name="{{ key }}" value="{{ value }}"{{ if type == "country" }} maxlength="2" size="2"{{ /if }}{{ if required }} required{{ /if }}>
+                    </label>
+                {{ /if }}
+            {{ /billing:fields }}
+
             {{ if billing:address }}
                 <label>
                     <span>{{ trans key="statamic-funnels::messages.field_street" }}</span>
@@ -200,6 +230,39 @@
                 </p>
             {{ /if }}
         </div>
+    {{ /if }}
+
+    {{# Der Konto-Schritt nach dem Kauf. Die Adresse steht fest — sie ist die
+        des Besuchs —, gefragt wird nach Name und Passwort. „Spaeter" geht
+        weiter ohne Konto, wenn der Schritt das zulaesst. #}}
+    {{ if step:type == "account" }}
+        <form method="POST" action="{{ action }}" class="funnel-form funnel-account">
+            {{ csrf_field }}
+            <label>
+                <span>{{ trans key="statamic-funnels::messages.field_email" }}</span>
+                <input type="email" value="{{ visit:email }}" readonly>
+            </label>
+            <label>
+                <span>{{ trans key="statamic-funnels::messages.field_name" }}</span>
+                <input type="text" name="name" value="{{ visit:name }}" autocomplete="name" required>
+            </label>
+            <label>
+                <span>{{ trans key="statamic-funnels::messages.field_password" }}</span>
+                <input type="password" name="password" minlength="8" autocomplete="new-password" required>
+            </label>
+            <label>
+                <span>{{ trans key="statamic-funnels::messages.field_password_confirmation" }}</span>
+                <input type="password" name="password_confirmation" minlength="8" autocomplete="new-password" required>
+            </label>
+            <button type="submit">{{ trans key="statamic-funnels::messages.account_create" }}</button>
+        </form>
+        {{ if account:optional }}
+            <form method="POST" action="{{ action }}" class="funnel-account__skip">
+                {{ csrf_field }}
+                <input type="hidden" name="skip" value="1">
+                <button type="submit">{{ trans key="statamic-funnels::messages.account_later" }}</button>
+            </form>
+        {{ /if }}
     {{ /if }}
 
     {{# Any other step just carries on. #}}

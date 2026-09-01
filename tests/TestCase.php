@@ -31,6 +31,12 @@ abstract class TestCase extends AddonTestCase
 
         $app['config']->set('database.default', 'testing');
         $app['config']->set('statamic.system.multisite', false);
+
+        // Wie in jeder Statamic-Installation: der Benutzer-Provider ist
+        // Statamics eigener, nicht Eloquent. Testbench bringt die Laravel-
+        // Vorgabe mit, und `Auth::login()` fiele dann auf eine `users`-Tabelle,
+        // die es hier nicht gibt.
+        $app['config']->set('auth.providers.users.driver', 'statamic');
         $app['config']->set('statamic-payments.products', [
             'kurs' => ['name' => 'Kurs', 'amount_cent' => 9900],
             'begleit-cd' => ['name' => 'Begleit-CD', 'amount_cent' => 2900],
