@@ -23,12 +23,35 @@
             {{ csrf_field }}
             <label>
                 <span>{{ trans key="statamic-funnels::messages.field_name" }}</span>
-                <input type="text" name="name" value="{{ visit:name }}">
+                <input type="text" name="name" value="{{ visit:name }}"{{ if billing:name_required }} required{{ /if }}>
             </label>
             <label>
                 <span>{{ trans key="statamic-funnels::messages.field_email" }}</span>
                 <input type="email" name="email" value="{{ visit:email }}" required>
             </label>
+
+            {{# Die Rechnungsanschrift. Nur wenn dieser Schritt danach fragt:
+                ueber 250 EUR entsteht ohne sie gar keine Rechnung (§ 14 UStG),
+                darunter waeren es vier Felder, die niemand braucht — und jedes
+                Feld mehr ist ein Kaufabbruch mehr. #}}
+            {{ if billing:address }}
+                <label>
+                    <span>{{ trans key="statamic-funnels::messages.field_street" }}</span>
+                    <input type="text" name="street" value="{{ billing:street }}" autocomplete="street-address" required>
+                </label>
+                <label>
+                    <span>{{ trans key="statamic-funnels::messages.field_postal_code" }}</span>
+                    <input type="text" name="postal_code" value="{{ billing:postal_code }}" autocomplete="postal-code" required>
+                </label>
+                <label>
+                    <span>{{ trans key="statamic-funnels::messages.field_city" }}</span>
+                    <input type="text" name="city" value="{{ billing:city }}" autocomplete="address-level2" required>
+                </label>
+                <label>
+                    <span>{{ trans key="statamic-funnels::messages.field_country" }}</span>
+                    <input type="text" name="country" value="{{ billing:country }}" maxlength="2" size="2" autocomplete="country" required>
+                </label>
+            {{ /if }}
             <button type="submit">{{ trans key="statamic-funnels::messages.continue" }}</button>
         </form>
     {{ /if }}
@@ -123,6 +146,37 @@
         {{ else }}
             <p class="funnel-offer__missing">{{ trans key="statamic-funnels::messages.offer_unavailable" }}</p>
         {{ /if }}
+    {{ /if }}
+
+    {{# Was gekauft wurde. Der ganze Text nach einem bezahlten Kauf war bisher
+        „Danke, das war alles von dieser Seite" — kein Produkt, kein Betrag,
+        keine Nummer, mit der jemand nachfragen koennte. Nur bezahlte
+        Zahlungen stehen hier; eine, die noch beim Anbieter haengt, waere eine
+        Bestaetigung, die der Webhook noch widerrufen kann. #}}
+    {{ if order }}
+        <div class="funnel-order">
+            <h2>{{ trans key="statamic-funnels::messages.order_summary" }}</h2>
+            <ul class="funnel-order__lines">
+                {{ order:lines }}
+                    <li>
+                        <span class="funnel-order__name">{{ name }}</span>
+                        <span class="funnel-order__amount">{{ amount }}</span>
+                    </li>
+                {{ /order:lines }}
+            </ul>
+            <p class="funnel-order__total">
+                <span>{{ trans key="statamic-funnels::messages.order_total" }}</span>
+                <strong>{{ order:total }}</strong>
+            </p>
+            <p class="funnel-order__reference">
+                {{ trans key="statamic-funnels::messages.order_reference" }} {{ order:reference }}
+            </p>
+            {{ if order:email }}
+                <p class="funnel-order__email">
+                    {{ trans key="statamic-funnels::messages.order_mail_to" }} {{ order:email }}
+                </p>
+            {{ /if }}
+        </div>
     {{ /if }}
 
     {{# Any other step just carries on. #}}

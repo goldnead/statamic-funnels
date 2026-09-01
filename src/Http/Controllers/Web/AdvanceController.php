@@ -8,6 +8,7 @@ use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicFunnels\Nodes\CaptureStep;
 use Goldnead\StatamicFunnels\Support\Countdown;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\SavedCard;
@@ -16,6 +17,7 @@ use Goldnead\StatamicOffers\Support\Basket;
 use Goldnead\StatamicPayments\Models\Payment;
 use Goldnead\StatamicPayments\Support\Checkout;
 use Goldnead\StatamicPayments\Support\FollowUp;
+use Goldnead\StatamicPayments\Support\PaymentDetails;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -78,9 +80,33 @@ class AdvanceController
      */
     protected function capture(Request $request, Funnel $funnel, FunnelStep $step, $visit)
     {
+        // Wonach dieser Schritt fragt, entscheidet der Schritt — nicht das
+        // Formular, das ankommt. Ein Funnel, der ueber 250 Euro verkauft, muss
+        // Name und Anschrift verlangen koennen, sonst schreibt der
+        // `InvoiceWriter` spaeter gar keine Rechnung (§ 14 UStG, § 33 UStDV).
+        // Umgekehrt darf ein Lead-Magnet weiterhin nur die Adresse wollen.
+        $billing = (string) ($step->config('billing') ?: CaptureStep::BILLING_MINIMAL);
+
+        if (! in_array($billing, CaptureStep::billingModes(), true)) {
+            // Ein unbekannter Wert kaeme aus einem Graphen, den jemand von Hand
+            // geschrieben hat. Die mildeste Lesart gewinnt: fragen ist erlaubt,
+            // jemanden am Kauf hindern nicht.
+            $billing = CaptureStep::BILLING_MINIMAL;
+        }
+
+        $wantsName = $billing !== CaptureStep::BILLING_MINIMAL;
+        $wantsAddress = $billing === CaptureStep::BILLING_FULL;
+
         $data = $request->validate([
             'email' => ['required', 'email', 'max:191'],
-            'name' => ['nullable', 'string', 'max:191'],
+            'name' => [$wantsName ? 'required' : 'nullable', 'string', 'max:191'],
+            'street' => [$wantsAddress ? 'required' : 'nullable', 'string', 'max:191'],
+            'postal_code' => [$wantsAddress ? 'required' : 'nullable', 'string', 'max:32'],
+            'city' => [$wantsAddress ? 'required' : 'nullable', 'string', 'max:191'],
+            // Zwei Buchstaben, weil `payments.country` genau das speichert und
+            // der Steuerfall daran haengt. Ein freies Textfeld waere
+            // „Deutschland", „DE", „de" und „Germany" in derselben Spalte.
+            'country' => [$wantsAddress ? 'required' : 'nullable', 'string', 'size:2', 'alpha'],
         ]);
 
         // Eine andere Adresse als eben heisst: hier sitzt jemand anderes.
@@ -103,7 +129,24 @@ class AdvanceController
         $meta = $visit->meta ?? [];
 
         if (! $sameBuyer) {
-            unset($meta['payments'], $meta['pending_step']);
+            unset($meta['payments'], $meta['pending_step'], $meta['billing']);
+        }
+
+        // Die Rechnungsanschrift bleibt am Besuch, nicht am Schritt: bezahlt
+        // wird ein, zwei Schritte spaeter, und die Zahlung braucht sie dort.
+        // Nur ueberschreiben, wenn wirklich etwas kam — sonst loescht ein
+        // spaeterer Capture-Schritt ohne Adressfelder die Anschrift, die der
+        // erste erhoben hat, und die Rechnung platzt an einer Stelle, an der
+        // niemand nach der Ursache sucht.
+        $anschrift = array_filter([
+            'street' => trim((string) ($data['street'] ?? '')),
+            'postal_code' => trim((string) ($data['postal_code'] ?? '')),
+            'city' => trim((string) ($data['city'] ?? '')),
+            'country' => strtoupper(trim((string) ($data['country'] ?? ''))),
+        ], static fn (string $wert): bool => $wert !== '');
+
+        if ($anschrift !== []) {
+            $meta['billing'] = array_merge((array) ($meta['billing'] ?? []), $anschrift);
         }
 
         $visit->forceFill([
@@ -188,11 +231,21 @@ class AdvanceController
         // {@see SavedCard}, weil die Seite vorher dasselbe wissen muss.
         $previous = $this->savedCard->chargeableFrom($visit);
 
+        // Die Rechnungsangaben dieses Laufs — **fuer beide Wege**.
+        //
+        // Sie standen zuerst nur am Checkout-Zweig, und das war derselbe Fehler
+        // noch einmal, nur eine Methode tiefer: `FollowUp::accept()` uebernimmt
+        // von der Vorgaengerzahlung nur Adresse, Name, Mandat und Herkunft —
+        // **nicht** Land und Anschrift. Ein Upsell ueber 250 Euro haette damit
+        // wieder keine Rechnung bekommen, an einer zweiten, unbehandelten
+        // Stelle derselben Methode.
+        $angaben = self::rechnungsangaben($visit);
+
         if ($previous) {
             $payment = $this->followUp->accept($previous, $buyHandle, [
                 'funnel' => $funnel->handle,
                 'step' => $step->node_key,
-            ], [], $visit->email);
+            ], $angaben, $visit->email);
 
             if (! $payment) {
                 return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
@@ -234,12 +287,19 @@ class AdvanceController
                 : $this->waiting($funnel, $step);
         }
 
-        $result = $this->checkout->start($basket->handles(), [
+        // Die Anschrift geht **in** die Zahlung hinein, nicht danach hinterher.
+        // Der `InvoiceWriter` liest `payment.meta['address']` in dem Moment, in
+        // dem die Zahlung bezahlt gemeldet wird; was danach nachgetragen wird,
+        // kommt fuer die Rechnung zu spaet. Fehlt sie, wird nichts erfunden —
+        // dann ist es ein Kauf unter 250 Euro, und die Kleinbetragsrechnung
+        // kommt ohne aus (§ 33 UStDV).
+        $result = $this->checkout->start($basket->handles(), array_filter([
             'email' => $visit->email,
             'name' => $visit->name,
-        ], $accepted?->slug
+            'country' => $angaben['country'] ?? null,
+        ], static fn ($wert): bool => $wert !== null && $wert !== ''), $accepted?->slug
             ? route('statamic-funnels.step', [$funnel->handle, $accepted->slug])
-            : route('statamic-funnels.entry', $funnel->handle), $basket->discount());
+            : route('statamic-funnels.entry', $funnel->handle), $basket->discount(), $angaben);
 
         if (! $result) {
             return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
@@ -250,6 +310,68 @@ class AdvanceController
         // Off to the provider. Nothing is accepted yet — only the webhook
         // decides that, exactly as everywhere else in this family.
         return redirect()->away($result->checkoutUrl);
+    }
+
+    /**
+     * Was von diesem Lauf an jede Zahlung gehoert.
+     *
+     * Genau die Form, die {@see PaymentDetails}
+     * annimmt: `country` als eigene Spalte, weil der Steuersatz daran haengt,
+     * und die Anschrift als eine Zeichenkette in `meta`, weil der
+     * `InvoiceWriter` sie so liest.
+     *
+     * **Eine Stelle fuer beide Wege.** Die erste Fassung setzte das nur am
+     * Checkout-Zweig zusammen, und der Upsell ueber die gespeicherte Karte ging
+     * leer aus — derselbe fehlende Beleg, nur zwanzig Zeilen weiter oben. Ein
+     * gemeinsamer Helfer macht es unmoeglich, den einen zu pflegen und den
+     * anderen zu vergessen.
+     *
+     * Leer heisst leer: `array_filter` laesst nichts uebrig, was der Aufrufer
+     * dann als gesetzt lesen koennte.
+     *
+     * @return array<string, mixed>
+     */
+    protected static function rechnungsangaben(FunnelVisit $visit): array
+    {
+        $billing = (array) (($visit->meta ?? [])['billing'] ?? []);
+
+        return array_filter([
+            'country' => $billing['country'] ?? null,
+            'meta' => array_filter(['address' => self::anschriftZeilen($billing)]),
+        ]);
+    }
+
+    /**
+     * Die Anschrift als die eine Zeichenkette, die eine Rechnung braucht.
+     *
+     * `payments.meta['address']` ist ein String und kein Feld je Zeile — der
+     * `InvoiceWriter` setzt ihn so, wie er kommt, unter den Namen des
+     * Empfaengers. Zwei Zeilen also, deutsche Reihenfolge: Strasse, dann
+     * Postleitzahl und Ort.
+     *
+     * **Das Land steht nicht darin.** Es hat mit `payments.country` eine eigene
+     * Spalte, weil der Steuersatz daran haengt; zweimal gefuehrt waeren es
+     * zwei Wahrheiten, sobald jemand eine davon korrigiert.
+     *
+     * Unvollstaendig heisst leer, nicht halb. Eine Anschrift ohne Ort ist
+     * keine, und eine halbe auf einer Rechnung ist schlechter als gar keine:
+     * ohne sie faellt die Rechnung ueber 250 Euro laut aus, mit einer halben
+     * entsteht sie fehlerhaft — und eine ausgestellte Rechnung ist danach
+     * nicht mehr zu aendern.
+     *
+     * @param  array<string, mixed>  $billing
+     */
+    protected static function anschriftZeilen(array $billing): ?string
+    {
+        $strasse = trim((string) ($billing['street'] ?? ''));
+        $plz = trim((string) ($billing['postal_code'] ?? ''));
+        $ort = trim((string) ($billing['city'] ?? ''));
+
+        if ($strasse === '' || $ort === '') {
+            return null;
+        }
+
+        return $strasse."\n".trim($plz.' '.$ort);
     }
 
     /**

@@ -5,6 +5,7 @@ namespace Goldnead\StatamicFunnels\Http\Controllers\Web;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicFunnels\Nodes\CaptureStep;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
 use Goldnead\StatamicFunnels\Support\Countdown;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
@@ -12,6 +13,7 @@ use Goldnead\StatamicFunnels\Support\PreviewToken;
 use Goldnead\StatamicFunnels\Support\SavedCard;
 use Goldnead\StatamicFunnels\Support\Split;
 use Goldnead\StatamicOffers\Models\Offer;
+use Goldnead\StatamicPayments\Models\Payment;
 use Illuminate\Http\Request;
 use Statamic\Contracts\Entries\Entry;
 use Statamic\Facades\Entry as EntryFacade;
@@ -177,6 +179,16 @@ class FunnelController
             // for it is a template that behaves the same either way.
             'countdown' => Countdown::forTemplate($step, $preview ? null : $visit),
             'visit' => ['email' => $visit->email, 'name' => $visit->name],
+            // Wonach der Capture-Schritt fragt, und was davon schon dasteht.
+            // Getrennt von `visit`, weil `visit` sagt, wer da ist, und dies
+            // hier, was die Rechnung von ihm braucht.
+            'billing' => $step->type === 'capture'
+                ? self::billingForTemplate($step, $preview ? null : $visit)
+                : null,
+            // Was in diesem Lauf gekauft wurde. Null, solange nichts bezahlt
+            // ist — eine Danke-Seite, die „Danke" sagt und den Kauf nicht
+            // kennt, ist der Zustand, den das hier beendet.
+            'order' => self::orderForTemplate($preview ? null : $visit),
             // Templates can say so. Statamic's own preview sets `live_preview`;
             // this is the same idea under this addon's own name.
             'preview' => $preview,
@@ -298,6 +310,145 @@ class FunnelController
         }
 
         return $entry;
+    }
+
+    /**
+     * Was der Capture-Schritt an Rechnungsangaben will, und was schon dasteht.
+     *
+     * `address` ist der Schalter fuer die vier Felder, `name_required` der fuer
+     * das Sternchen am Namen. Die Werte daneben kommen aus dem Besuch, damit
+     * jemand, der zurueckgeht oder neu laedt, nicht alles noch einmal tippt —
+     * und damit ein zweiter Schritt im selben Lauf zeigt, was der erste schon
+     * erhoben hat.
+     *
+     * In der Vorschau gibt es keinen Besucher: dann stehen die Felder leer da,
+     * was genau das ist, was ein neuer Besucher sieht.
+     *
+     * @return array<string, mixed>
+     */
+    protected static function billingForTemplate(FunnelStep $step, ?FunnelVisit $visit): array
+    {
+        $mode = (string) ($step->config('billing') ?: CaptureStep::BILLING_MINIMAL);
+
+        if (! in_array($mode, CaptureStep::billingModes(), true)) {
+            $mode = CaptureStep::BILLING_MINIMAL;
+        }
+
+        // `??` faengt den fehlenden Besuch der Vorschau schon ab; ein `?->`
+        // davor waere doppelt gemoppelt und faellt der statischen Analyse auf.
+        $bekannt = (array) (($visit->meta ?? [])['billing'] ?? []);
+
+        return [
+            'mode' => $mode,
+            'address' => $mode === CaptureStep::BILLING_FULL,
+            'name_required' => $mode !== CaptureStep::BILLING_MINIMAL,
+            'street' => $bekannt['street'] ?? null,
+            'postal_code' => $bekannt['postal_code'] ?? null,
+            'city' => $bekannt['city'] ?? null,
+            'country' => $bekannt['country'] ?? null,
+        ];
+    }
+
+    /**
+     * Die Bestellung dieses Laufs, fuer eine Danke-Seite.
+     *
+     * **Warum es das braucht.** Der ganze Text nach einem bezahlten Kauf war
+     * „Danke. Das war alles von dieser Seite." — kein Produkt, kein Betrag,
+     * keine Bestellnummer. Wer gerade Geld ueberwiesen hat, bekam nichts, womit
+     * er den Vorgang benennen koennte.
+     *
+     * **Nur bezahlt.** Eine Zahlung, die noch beim Anbieter haengt, ist keine
+     * Bestellung; sie hier zu zeigen hiesse, dem Kaeufer eine Bestaetigung zu
+     * geben, die der Webhook noch widerrufen kann.
+     *
+     * **Alle Zahlungen des Laufs, nicht nur die letzte.** Ein Upsell nach der
+     * Danke-Seite ist ein zweiter Kauf im selben Weg. Wer nur `payment_id`
+     * liest, zeigt genau den, den der Kaeufer zuletzt gemacht hat — und
+     * verschweigt den, wegen dem er ueberhaupt hier ist.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected static function orderForTemplate(?FunnelVisit $visit): ?array
+    {
+        if ($visit === null) {
+            return null;
+        }
+
+        $ids = array_values(array_filter(array_merge(
+            array_values((array) (($visit->meta ?? [])['payments'] ?? [])),
+            [$visit->payment_id],
+        )));
+
+        if ($ids === []) {
+            return null;
+        }
+
+        $payments = Payment::query()
+            ->with('items')
+            ->whereIn('id', array_unique($ids))
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (Payment $payment) => $payment->isPaid());
+
+        if ($payments->isEmpty()) {
+            return null;
+        }
+
+        $lines = [];
+        $total = 0;
+        $currency = 'EUR';
+
+        foreach ($payments as $payment) {
+            $currency = strtoupper((string) ($payment->currency ?: $currency));
+            $total += (int) $payment->amount_cent;
+
+            // Zeilen, wo es welche gibt: ein Bump ist eine eigene Zeile und
+            // gehoert einzeln aufgefuehrt. Eine Zahlung aus der Zeit vor
+            // `payment_items` traegt ihre ganze Wahrheit im Handle — denselben
+            // Rueckfall macht `InvoiceWriter::lines()`.
+            if ($payment->items->isNotEmpty()) {
+                foreach ($payment->items as $item) {
+                    $lines[] = [
+                        'name' => (string) ($item->name ?: $item->product),
+                        'amount' => self::money((int) $item->amount_cent * max(1, (int) $item->quantity), $currency),
+                        'quantity' => (int) $item->quantity,
+                    ];
+                }
+
+                continue;
+            }
+
+            $lines[] = [
+                'name' => (string) $payment->product,
+                'amount' => self::money((int) $payment->amount_cent, $currency),
+                'quantity' => 1,
+            ];
+        }
+
+        return [
+            // Die Nummer, mit der ein Kaeufer nachfragen kann. Die der ersten
+            // Zahlung, weil das der Kauf ist, wegen dem er hier steht.
+            // Ohne `?->`: die leere Sammlung ist oben schon abgefangen, und ein
+            // Fragezeichen an einer Stelle, an der nichts null sein kann, liest
+            // sich wie ein Fall, den es gibt.
+            'reference' => (string) $payments->first()->getKey(),
+            'lines' => $lines,
+            'total' => self::money($total, $currency),
+            'currency' => $currency,
+            'email' => $visit->email,
+        ];
+    }
+
+    /**
+     * Ein Betrag, deutsch geschrieben.
+     *
+     * Hier und nicht in der Vorlage, damit Bestelluebersicht und Kasse
+     * dieselbe Schreibweise haben — `249.00` statt `249,00` war schon einmal
+     * ein Fehler in diesem Addon.
+     */
+    protected static function money(int $cent, string $currency): string
+    {
+        return number_format($cent / 100, 2, ',', '.').' '.$currency;
     }
 
     /**
