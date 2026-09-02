@@ -416,10 +416,15 @@ class AdvanceController
         $angaben = self::mitEinwilligung($angaben, Consent::details($offer, $visit, $consentText));
 
         if ($previous) {
+            // Ueber welches Angebot verkauft wurde, ausgesprochen statt
+            // vorausgesetzt. Am Kassenweg heftet der Katalog es an die Zeile;
+            // beim Ein-Klick-Weg blieb `payment_items.offer` bis payments
+            // 1.17.1 leer, und der Upsell-Bericht ordnete den Umsatz keinem
+            // Angebot zu. Hier weiss der Aufrufer es, also sagt er es.
             $payment = $this->followUp->accept($previous, $buyHandle, [
                 'funnel' => $funnel->handle,
                 'step' => $step->node_key,
-            ], $angaben, $visit->email);
+            ], $angaben + ['offer_handles' => [$buyHandle => $offer->handle]], $visit->email);
 
             if (! $payment) {
                 return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
