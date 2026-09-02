@@ -30,6 +30,9 @@ const props = defineProps({
     splits: { type: Object, default: () => ({}) },
     mailStats: { type: Object, default: () => ({}) },
     labels: { type: Object, default: () => ({}) },
+    // `{ enabled, available }`. On but not available is the one state worth a
+    // word in the side panel: the host has no browser to photograph pages with.
+    thumbnails: { type: Object, default: () => ({ enabled: false, available: false }) },
 });
 
 // Every word the editor shows comes from the server: Statamic's JavaScript
@@ -330,6 +333,27 @@ function optionsFor(field) {
 
 const labels = computed(() => props.labels ?? {});
 
+/**
+ * The graph as the canvas draws it: each node with its picture, when the server
+ * has one. `config.thumbnail` is the server's record (`path`, `rendered_at`,
+ * `url`); the canvas wants one URL on the node. `rendered_at` rides along as a
+ * cache-buster, so a re-rendered page is not shown from the browser's cache of
+ * the old one at the same path.
+ */
+const canvasNodes = computed(() =>
+    graph.value.nodes.map((node) => {
+        const thumb = node.config?.thumbnail;
+        if (!thumb?.url) return node;
+
+        return { ...node, thumbnail: `${thumb.url}?v=${encodeURIComponent(thumb.rendered_at ?? '')}` };
+    }),
+);
+
+/** Pictures are on, the host cannot take them, and the selected step would have one. */
+const thumbnailHint = computed(
+    () => !!props.thumbnails?.enabled && !props.thumbnails?.available && !!selected.value && selected.value.type !== 'mail',
+);
+
 /** The two versions of the selected step, when it is running a test. */
 const selectedSplit = computed(() => (selectedKey.value ? (props.splits?.[selectedKey.value] ?? null) : null));
 
@@ -421,7 +445,7 @@ function searchEntries(query) {
                     :kinds="KINDS"
                     :node-icon="nodeIcon"
                     :adder-labels="labels.adder ?? {}"
-                    :nodes="graph.nodes"
+                    :nodes="canvasNodes"
                     :edges="graph.edges"
                     :library="library"
                     :selected-key="selectedKey"
@@ -440,6 +464,14 @@ function searchEntries(query) {
                 <Field :label="t('fields', 'label', 'Label')" class="mb-4">
                     <Input v-model="selected.label" @update:model-value="record(`label:${selected.node_key}`)" />
                 </Field>
+
+                <!-- Quiet, and only when it is true: the feature is on and this
+                     host has no browser to photograph pages with. Never a grey
+                     placeholder on the card — a card without a picture looks
+                     like a card, a grey box looks like a fault. -->
+                <p v-if="thumbnailHint" class="mb-4 text-2xs text-gray-500 dark:text-gray-400">
+                    {{ t('thumbnails', 'hint', 'Thumbnails need Chromium (see the docs).') }}
+                </p>
 
                 <!-- Which version is winning, right where the test is set up.
                      A split report on another screen is a report nobody opens. -->

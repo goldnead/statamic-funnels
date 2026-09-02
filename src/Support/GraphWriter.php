@@ -2,8 +2,10 @@
 
 namespace Goldnead\StatamicFunnels\Support;
 
+use Goldnead\StatamicFunnels\Events\FunnelSaved;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
+use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -49,14 +51,22 @@ class GraphWriter
                         'type' => $node['type'],
                         'label' => $node['label'] ?? null,
                         'slug' => $this->slug($funnel, $node),
-                        'config' => $node['config'] ?? [],
+                        // The thumbnail key is the server's, not the editor's:
+                        // the picture is taken after the save, and a second
+                        // save before the page was reloaded would otherwise
+                        // send the old config back and throw it away.
+                        'config' => Thumbnails::keepStored(
+                            $node['config'] ?? [],
+                            $funnel->steps->firstWhere('node_key', $node['node_key']),
+                        ),
                         'disabled' => (bool) ($node['disabled'] ?? false),
                     ],
                 );
             }
 
-            // Gone from the canvas, gone from the table.
-            $funnel->steps()->whereNotIn('node_key', $keys ?: ['__none__'])->delete();
+            // Gone from the canvas, gone from the table — one model at a time,
+            // so the step's own `deleted` hook removes its picture with it.
+            $funnel->steps()->whereNotIn('node_key', $keys ?: ['__none__'])->get()->each->delete();
 
             $funnel->edges()->delete();
 
@@ -74,6 +84,10 @@ class GraphWriter
                 ]);
             }
         });
+
+        // After the commit, with the rows as they now are: a listener that
+        // queues work must find what the job will later look for.
+        FunnelSaved::dispatch($funnel->load(['steps', 'edges']));
     }
 
     /** A brand-new funnel gets the one step every funnel must have. */

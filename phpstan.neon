@@ -19,3 +19,6 @@ parameters:
     scanFiles:
         - tests/Fakes/insights-contracts.php
         - tests/Fakes/insights-table-metric.php
+        # spatie/browsershot is a `suggest` too; the renderer that drives it is
+        # only constructed behind a class_exists guard.
+        - tests/Fakes/browsershot.php

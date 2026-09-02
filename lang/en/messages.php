@@ -27,7 +27,7 @@ return [
     'account_required' => 'This step requires an account.',
     'account_exists' => 'There is already an account for this address. Log in, or reset your password.',
     'account_reset_link' => 'Forgot your password?',
-    'account_no_email' =>'No account without an email address. Please fill in the form first.',
+    'account_no_email' => 'No account without an email address. Please fill in the form first.',
     'order_summary' => 'Your order',
     'order_total' => 'Total',
     'order_reference' => 'Order number:',
@@ -50,7 +50,7 @@ return [
     // The wording sent back does not match the one in force: the page is
     // older than the text, or somebody edited the form.
     'consent_version' => 'Version :version',
-    'consent_stale' =>'The terms have changed. Please reload the page and confirm again.',
+    'consent_stale' => 'The terms have changed. Please reload the page and confirm again.',
     'delete_title' => 'Delete this funnel?',
     'delete_body' => '“:title” goes, along with :visits visits and everything recorded in them. This cannot be undone.',
     'preview' => 'Preview',
@@ -73,6 +73,10 @@ return [
     'countdown_remaining' => 'Ends in',
     'countdown_over' => 'This offer has closed.',
     'stats_split' => 'Split test',
+
+    // Step thumbnails. Shown in the editor's side panel only when they are on
+    // and the host cannot render them.
+    'thumbnails_need_chromium' => 'Thumbnails need Chromium (see the docs).',
 
     // Mail nodes.
     'mail_stats_queued' => 'triggered',

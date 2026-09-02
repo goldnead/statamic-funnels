@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.9.0 — 2026-09-02
+
+### Ein Bild je Seite auf der Leinwand
+
+Nach dem Speichern wird jeder **Seiten**-Schritt fotografiert, und die Karte auf der Leinwand zeigt
+das Bild als 16:10-Kachel über dem Titel. Aus dem Graphen wird eine Landkarte: man erkennt eine
+Station am Aussehen ihrer Seite, nicht nur am Namen. Mail-Knoten bekommen kein Bild, sie haben keine
+Seite.
+
+- Das Foto entsteht **nicht beim Laden des Editors**, sondern in einem Job (`RenderStepThumbnail`,
+  queued, eindeutig je Schritt) nach dem Speichern. Er lädt die Seite über dieselbe Vorschau-Route
+  wie das Vorschau-Panel, mit einem `PreviewToken`, das nach dem Foto wieder gelöscht wird, und
+  schreibt nichts: kein Besuch, kein Ereignis, keine Impression.
+- Ein Schritt wird nur neu fotografiert, wenn sich an ihm etwas geändert hat (Fingerabdruck aus
+  Typ, Label, Slug, Konfiguration). `php please funnels:thumbnails {funnel?} {--force}` rendert
+  nach, etwa nach einer Änderung am Eintrag hinter einer Seite.
+- Ablage auf `thumbnails.disk` (Standard `public`) unter `funnels/thumbs/<funnel>/<node_key>.png`,
+  Pfad und `rendered_at` in `funnel_steps.config['thumbnail']`. Der Schlüssel gehört dem Server:
+  ein zweites Speichern vor dem Neuladen wirft das Bild nicht weg. Ein gelöschter Schritt nimmt
+  sein Bild mit, ein gelöschter Funnel seinen Ordner.
+- **Renderer hinter einem Contract** (`Contracts\ThumbnailRenderer`). Browsershot, wenn
+  `spatie/browsershot` installiert ist **und** ein Chromium gefunden wird (auf `PATH`, in den
+  üblichen Mac-Pfaden oder unter `thumbnails.chrome_path`). Sonst ein `NullRenderer`, der nichts
+  tut und das einmal je Prozess als `notice` sagt. Ohne Renderer: **kein grauer Platzhalter**, die
+  Karten sehen aus wie bisher, und die Seitenleiste des Editors sagt still „Vorschaubilder brauchen
+  Chromium (siehe Doku)".
+- Config `thumbnails`: `enabled`, `disk`, `width`, `height`, `chrome_path`.
+- Braucht `goldnead/statamic-flow-canvas` ^1.3, das den Knoten das Feld `thumbnail` gibt.
+
 ## 1.8.0 — 2026-09-02
 
 ### Mail-Knoten auf der Leinwand

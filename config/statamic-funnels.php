@@ -81,6 +81,31 @@ return [
 
     'password_reset_url' => null,
 
+    /*
+    |--------------------------------------------------------------------------
+    | A picture of every page
+    |--------------------------------------------------------------------------
+    |
+    | After a save, each page step is photographed and the editor shows the
+    | picture on its card. This needs a browser: `spatie/browsershot` (a
+    | Composer `suggest`, not a requirement) and a Chromium the addon can find,
+    | on `PATH` or named in `chrome_path`. Without one, nothing is rendered,
+    | the cards look as they always did, and the editor says so quietly.
+    |
+    | Pictures go on `disk`, which has to be a public one — the Control Panel
+    | loads them by URL. `width` and `height` are the stored size in pixels;
+    | the card draws them at 16:10, so keep that ratio.
+    |
+    */
+
+    'thumbnails' => [
+        'enabled' => true,
+        'disk' => 'public',
+        'width' => 640,
+        'height' => 400,
+        'chrome_path' => env('FUNNELS_CHROME_PATH'),
+    ],
+
     'integrations' => [
         // Hand a captured address to goldnead/statamic-leadhub as a contact.
         'leadhub' => false,

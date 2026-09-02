@@ -27,7 +27,7 @@ return [
     'account_required' => 'Für diesen Schritt ist ein Konto nötig.',
     'account_exists' => 'Zu dieser Adresse gibt es schon ein Konto. Melde dich an oder setze dein Passwort zurück.',
     'account_reset_link' => 'Passwort vergessen?',
-    'account_no_email' =>'Ohne E-Mail-Adresse lässt sich kein Konto anlegen. Bitte zuerst das Formular ausfüllen.',
+    'account_no_email' => 'Ohne E-Mail-Adresse lässt sich kein Konto anlegen. Bitte zuerst das Formular ausfüllen.',
     'order_summary' => 'Deine Bestellung',
     'order_total' => 'Gesamt',
     'order_reference' => 'Bestellnummer:',
@@ -50,7 +50,7 @@ return [
     // Der zurueckgeschickte Wortlaut passt nicht zum geltenden: die Seite ist
     // aelter als der Text, oder jemand hat am Formular gedreht.
     'consent_version' => 'Fassung :version',
-    'consent_stale' =>'Die Bedingungen haben sich geändert. Bitte lade die Seite neu und bestätige erneut.',
+    'consent_stale' => 'Die Bedingungen haben sich geändert. Bitte lade die Seite neu und bestätige erneut.',
     'delete_title' => 'Funnel löschen?',
     'delete_body' => '„:title" wird gelöscht, samt :visits Besuchen und allem, was darin steht. Das lässt sich nicht rückgängig machen.',
     'preview' => 'Vorschau',
@@ -73,6 +73,10 @@ return [
     'countdown_remaining' => 'Endet in',
     'countdown_over' => 'Dieses Angebot ist abgelaufen.',
     'stats_split' => 'A/B-Test',
+
+    // Vorschaubilder. Nur in der Seitenleiste des Editors, wenn sie an sind
+    // und der Host sie nicht rendern kann.
+    'thumbnails_need_chromium' => 'Vorschaubilder brauchen Chromium (siehe Doku).',
 
     // Mail-Knoten.
     'mail_stats_queued' => 'ausgelöst',

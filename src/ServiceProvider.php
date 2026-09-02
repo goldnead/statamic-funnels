@@ -2,6 +2,7 @@
 
 namespace Goldnead\StatamicFunnels;
 
+use Goldnead\StatamicFunnels\Contracts\ThumbnailRenderer;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelsController;
 use Goldnead\StatamicFunnels\Integrations\Insights\Completed;
 use Goldnead\StatamicFunnels\Integrations\Insights\CompletionRate;
@@ -10,6 +11,7 @@ use Goldnead\StatamicFunnels\Integrations\Insights\Visits;
 use Goldnead\StatamicFunnels\Integrations\LeadHubBridge;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
+use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Support\Facades\Log;
 use Statamic\Facades\Utility;
@@ -42,6 +44,11 @@ class ServiceProvider extends AddonServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../config/statamic-funnels.php', 'statamic-funnels');
 
         $this->app->singleton(StepRegistry::class);
+
+        // Decided once per process, and lazily: the search for a browser is a
+        // handful of stats, but there is no reason to pay for it on a request
+        // that never renders anything. A test swaps the binding for a double.
+        $this->app->singleton(ThumbnailRenderer::class, fn () => Thumbnails::detectRenderer());
     }
 
     public function bootAddon()

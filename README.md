@@ -213,6 +213,47 @@ funnel twenty times must not move the acceptance rate the offers screen is judge
 Behind it is a real `Statamic\Facades\Token`, minted only by somebody with the funnels permission,
 reused across a session rather than reissued per keystroke, and good for fifteen minutes.
 
+### A picture of every page
+
+After a save, every **page** step is photographed and its card on the canvas shows the picture as a
+16:10 tile above the title. A graph becomes a map: you recognise a station by what its page looks
+like, not only by its name. Mail nodes get no picture; a mail has no page.
+
+It needs a browser, and the addon does not bring one. Two things have to be true:
+
+1. `spatie/browsershot` is installed (`composer require spatie/browsershot`, plus the `puppeteer`
+   npm package it drives, as its own README describes).
+2. A Chromium can be found: on `PATH` as `google-chrome`, `google-chrome-stable`, `chromium`,
+   `chromium-browser` or `chrome`, in the usual place on a Mac, or named in
+   `statamic-funnels.thumbnails.chrome_path` (`FUNNELS_CHROME_PATH` in `.env`).
+
+Without both, nothing is rendered, the cards look exactly as they always did — **no grey
+placeholder**, a card without a picture is a card, a grey box is a fault — and the editor's side
+panel says quietly that thumbnails need Chromium. The log carries one `notice` per process.
+
+The picture is not taken when the editor loads. It is taken by a queued job (`RenderStepThumbnail`,
+unique per step) after the save, through the same preview route the preview panel uses, with a
+`PreviewToken` that is deleted once the picture exists. Like the preview it writes nothing: no
+visit, no step event, no impression. A step is photographed again only when something about it
+changed — type, label, slug, configuration. For the change that cannot be seen from the step, an
+edited entry or template behind it, there is a command:
+
+```bash
+php please funnels:thumbnails                  # every funnel, only what is out of date
+php please funnels:thumbnails fruehlingskurs   # one funnel, by handle or id
+php please funnels:thumbnails --force          # everything, again
+```
+
+Pictures live on `thumbnails.disk` (default `public`, so run `php artisan storage:link`) under
+`funnels/thumbs/<funnel-id>/<node_key>.png`, 640 × 400 by default. Path and `rendered_at` are kept
+in the step's `config['thumbnail']`; that key belongs to the server, so a second save before the
+page was reloaded does not throw the picture away. A deleted step takes its picture with it, a
+deleted funnel its folder.
+
+Two things to know about the host. The browser loads the page through `APP_URL`, so that URL has to
+resolve from where the queue worker runs. And on `QUEUE_CONNECTION=sync` the pictures are taken
+inside the save request, a second or two per page; a real queue is the better place for them.
+
 ### Where people stop
 
 Every step card in the editor carries three figures: how many visitors reached it, how many carried
@@ -370,6 +411,10 @@ funnel addon must not start writing into somebody's CRM.
 | `integrations.entitlements` | `false` | Off because the payment addon offers the same bridge, and two addons granting the same thing is worse than neither. |
 | `coupons` | `true` | Off leaves the code field off every offer page. |
 | `template_prefix` | `''` | A folder name confines what a step may name as its template. A namespaced name is refused either way. |
+| `thumbnails.enabled` | `true` | Off, no page is photographed and the editor says nothing about it. |
+| `thumbnails.disk` | `public` | Has to be a disk with public URLs; the Control Panel loads the pictures by URL. |
+| `thumbnails.width` / `height` | `640` / `400` | The stored size. The card draws 16:10; another ratio is cropped. |
+| `thumbnails.chrome_path` | `null` | Names the browser when it is not on `PATH`. Named but not executable means no renderer, not a fallback. |
 
 ## Multi-site
 

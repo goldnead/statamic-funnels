@@ -9,6 +9,7 @@ use Goldnead\StatamicFunnels\Support\MailStats;
 use Goldnead\StatamicFunnels\Support\PreviewToken;
 use Goldnead\StatamicFunnels\Support\StepOrder;
 use Goldnead\StatamicFunnels\Support\StepStats;
+use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
 use Goldnead\StatamicOffers\Models\Offer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -93,7 +94,8 @@ class FunnelsController extends CpController
                     'type' => $step->type,
                     'label' => $step->label,
                     'slug' => $step->slug,
-                    'config' => $step->config ?? [],
+                    // With the thumbnail's URL folded in, when there is one.
+                    'config' => Thumbnails::configForEditor($step),
                     'disabled' => $step->disabled,
                 ])->values()->all(),
                 'edges' => $funnel->edges->map(fn ($edge) => [
@@ -115,6 +117,13 @@ class FunnelsController extends CpController
             // fehlgeschlagen. Aus der Auslieferungstabelle, nicht aus
             // Wegmarken — eine Mail ist keine Station.
             'mailStats' => MailStats::forFunnel($funnel),
+            // Whether the cards can carry a picture of their page. `enabled`
+            // without `available` is the one state the editor has to say
+            // something about: the feature is on and the host cannot do it.
+            'thumbnails' => [
+                'enabled' => Thumbnails::enabled(),
+                'available' => Thumbnails::available(),
+            ],
             // Translated here, not in the browser. Statamic's JavaScript `__()`
             // only knows core and application strings; an addon's language file
             // never reaches it, so a label written in JS renders as the raw key
@@ -307,6 +316,10 @@ class FunnelsController extends CpController
     {
         $this->authorizeAccess();
 
+        // The steps cascade at the database, which skips their model events;
+        // the pictures are one folder per funnel for exactly this moment.
+        Thumbnails::forgetFunnel($funnel);
+
         $funnel->delete();
 
         return redirect(cp_route('utilities.funnels'));
@@ -395,6 +408,9 @@ class FunnelsController extends CpController
                 'undo' => __('Undo'),
                 'redo' => __('Redo'),
                 'save' => __('Save'),
+            ],
+            'thumbnails' => [
+                'hint' => __('statamic-funnels::messages.thumbnails_need_chromium'),
             ],
         ];
     }
