@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.8.0 — 2026-09-02
 
 ### Mail-Knoten auf der Leinwand
 
@@ -68,6 +68,13 @@ Knopf, schickt den gezeigten Wortlaut als `consent_text` zurück, und der Server
 abweichende Fassung ab („Bitte Seite neu laden"). Die Konditionen werden unter `meta['withdrawal']`
 eingefroren, das Zugangsfenster (`Offer::accessWindow()`) unter `meta['access']`. Beide Kaufwege,
 Kasse und gespeicherte Karte. Ältere Nachbarn ohne diese Methoden: nichts geworfen, weggelassen.
+
+## 1.7.0 — 2026-09-01
+
+Nachgetragen: die Fassung 1.7.0 ging ohne Eintrag raus. Sie brachte am Capture-Schritt die
+**Rechnungsangaben** (`billing` minimal / name / full, Anschrift landet als `meta.address` an der
+Zahlung, damit über 250 € eine Rechnung entsteht) und auf der Danke-Seite die
+**Bestellzusammenfassung** (`order` mit Positionen, Summe, Referenz).
 
 ## 1.6.1 — 2026-09-01
 
