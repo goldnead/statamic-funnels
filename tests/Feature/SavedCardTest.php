@@ -199,4 +199,89 @@ class SavedCardTest extends TestCase
             ->assertOk()
             ->assertDontSee('9996', false);
     }
+
+    #[Test]
+    public function the_hint_is_there_on_the_first_render_even_when_the_webhook_is_still_in_flight(): void
+    {
+        $this->funnel();
+        $this->offers();
+
+        $this->asVisitor()->get('/f/fruehlingskurs/anmeldung');
+        $this->asVisitor()->post('/f/fruehlingskurs/capture_1/advance', ['email' => 'erste@example.com']);
+        $this->asVisitor()->get('/f/fruehlingskurs/angebot');
+        $this->asVisitor()->post('/f/fruehlingskurs/offer_1/advance', ['accept' => '1', 'confirmed' => '1']);
+
+        $payment = Payment::latest('id')->first();
+
+        // Der Anbieter hat das Geld, der Webhook ist noch unterwegs: genau der
+        // Zustand, in dem der Kaeufer vom Bezahldienst zurueckkommt. Beim
+        // Kauftest am 02.09.2026 lagen zwischen Ruecksprung und Webhook
+        // weniger als eine Sekunde, und in dieser Sekunde rendert die Seite.
+        $this->gateway->markPaid($payment->provider_id, 'erste@example.com', '9996', 'Mastercard');
+        $this->assertFalse($payment->fresh()->isPaid(), 'Der Aufbau taugt nur, solange der Webhook noch nicht durch ist.');
+
+        // Ohne die Rueckfrage stand hier gar kein Hinweis — und beim Klick
+        // danach war der Webhook da, es wurde ein Klick abgebucht, den die
+        // Seite nie angekuendigt hatte.
+        $this->asVisitor()->get('/f/fruehlingskurs/noch-etwas')
+            ->assertOk()
+            ->assertSee('without entering card details again', false)
+            ->assertSee('9996', false);
+
+        $this->assertTrue($payment->fresh()->isPaid());
+    }
+
+    #[Test]
+    public function a_mandate_without_card_digits_still_announces_the_one_click(): void
+    {
+        $this->funnel();
+        $this->offers();
+
+        $payment = $this->paysOnce('erste@example.com');
+
+        // Zahlungsarten ohne Karte, und Zahlungen von vor der Fassung, die die
+        // Ziffern mitschreibt. Das Mandat ist da, abgebucht wird ohne neue
+        // Eingabe — nur sagen laesst sich nicht, von welcher Karte. Dann steht
+        // der Satz ohne Ziffern da, statt zu fehlen.
+        $payment->forceFill(['card_last4' => null, 'card_label' => null])->save();
+
+        $this->asVisitor()->get('/f/fruehlingskurs/noch-etwas')
+            ->assertOk()
+            ->assertSee('without entering card details again', false)
+            ->assertDontSee('9996', false);
+    }
+
+    #[Test]
+    public function digits_without_a_brand_do_not_produce_a_gap_in_the_sentence(): void
+    {
+        $this->funnel();
+        $this->offers();
+
+        $payment = $this->paysOnce('erste@example.com');
+
+        // Wallet-Zahlungen: der Anbieter nennt die Ziffern, die Marke nicht.
+        // Der genannte Satz haette dann „von deiner  •••• 9996" ergeben.
+        $payment->forceFill(['card_label' => null])->save();
+
+        $this->asVisitor()->get('/f/fruehlingskurs/noch-etwas')
+            ->assertOk()
+            ->assertSee('Charged to your card •••• 9996', false);
+    }
+
+    #[Test]
+    public function the_upsell_line_names_the_offer_it_was_sold_through(): void
+    {
+        $this->funnel();
+        $this->offers();
+
+        $this->paysOnce('erste@example.com');
+
+        $this->asVisitor()->get('/f/fruehlingskurs/noch-etwas');
+        $this->asVisitor()->post('/f/fruehlingskurs/offer_2/advance', ['accept' => '1', 'confirmed' => '1']);
+
+        // Ohne das war `payment_items.offer` genau beim Upsell leer, und der
+        // Bericht in statamic-insights ordnete den Umsatz keinem Angebot zu.
+        $upsell = Payment::latest('id')->first();
+        $this->assertSame('cd-angebot', $upsell->items()->first()->getAttribute('offer'));
+    }
 }

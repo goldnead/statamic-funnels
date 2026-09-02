@@ -156,14 +156,21 @@
 
                     {{# Womit abgebucht wird, unmittelbar ueber dem Knopf.
                         Steht nur da, wenn wirklich ohne neue Karteneingabe
-                        abgebucht wird — sonst waere es eine Behauptung. Die
-                        vier Ziffern fehlen bei Zahlungsarten ohne Karte und
-                        bei Zahlungen von vor dieser Fassung; dann sagt die
-                        Seite dasselbe ohne sie, statt zu schweigen. #}}
+                        abgebucht wird — sonst waere es eine Behauptung.
+
+                        Drei Faelle, weil der Anbieter drei Antworten gibt:
+                        Marke und Ziffern, nur Ziffern (er nennt die Marke
+                        nicht), oder keins von beidem (Zahlungsart ohne Karte,
+                        Zahlung von vor dieser Fassung). Gesagt wird es in
+                        allen dreien — nur mit weniger Details. Vorher hing der
+                        genannte Satz allein an den Ziffern, und eine fehlende
+                        Marke ergab „von deiner  •••• 9996". #}}
                     {{ if saved_card }}
                         <p class="funnel-offer__saved-card">
-                            {{ if saved_card:last4 }}
+                            {{ if saved_card:last4 && saved_card:label }}
                                 {{ trans key="statamic-funnels::messages.saved_card_named" label="{saved_card:label}" last4="{saved_card:last4}" }}
+                            {{ elseif saved_card:last4 }}
+                                {{ trans key="statamic-funnels::messages.saved_card_digits" last4="{saved_card:last4}" }}
                             {{ else }}
                                 {{ trans key="statamic-funnels::messages.saved_card_unnamed" }}
                             {{ /if }}

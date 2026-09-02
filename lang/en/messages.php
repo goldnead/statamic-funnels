@@ -45,6 +45,7 @@ return [
     // card details. Leaving it out permits a charge the buyer first learns of
     // from their statement.
     'saved_card_named' => 'Charged to your :label •••• :last4, without entering card details again.',
+    'saved_card_digits' => 'Charged to your card •••• :last4, without entering card details again.',
     'saved_card_unnamed' => 'Charged to the payment method you just used, without entering card details again.',
     'offer_unavailable' => 'This offer is not available right now.',
     // The wording sent back does not match the one in force: the page is

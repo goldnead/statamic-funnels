@@ -373,6 +373,17 @@ without asking for card details again. The consent is not skipped — see
 [`statamic-payments/docs/follow-up-offers.md`](https://github.com/goldnead/statamic-payments/blob/main/docs/follow-up-offers.md),
 because in Germany a follow-up order still needs its own unambiguously labelled button.
 
+**The page says so before the button does it.** The shipped template prints, directly above the
+order button, that this will be charged to the card already on file — with the brand and last four
+digits where the provider named them, without the digits where it did not, and never with a card the
+provider did not document for that payment. Announcement and action come from the same place
+(`SavedCard`), so they cannot drift apart.
+
+That place also asks the provider once when the buyer comes back from the checkout before the
+webhook has landed — otherwise the very first buyer sees the offer without the one-click sentence and
+is then charged with one click anyway. A provider that will not answer changes nothing: the page
+falls back to an ordinary checkout, and the webhook settles it a moment later.
+
 ### Templates
 
 Each step may name its own Antlers template. Without one, a shipped template renders it, styled by a
