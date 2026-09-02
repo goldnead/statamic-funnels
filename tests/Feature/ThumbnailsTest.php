@@ -3,11 +3,14 @@
 namespace Goldnead\StatamicFunnels\Tests\Feature;
 
 use Goldnead\StatamicFunnels\Contracts\ThumbnailRenderer;
+use Goldnead\StatamicFunnels\Jobs\RenderStepThumbnail;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Tests\Support\FakeRenderer;
 use Goldnead\StatamicFunnels\Tests\TestCase;
 use Goldnead\StatamicFunnels\Thumbnails\ConsentCookie;
 use Goldnead\StatamicFunnels\Thumbnails\NullRenderer;
+use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
+use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
@@ -57,6 +60,14 @@ class ThumbnailsTest extends TestCase
         return $funnel->fresh(['steps', 'edges']);
     }
 
+    #[Test]
+    public function a_second_save_during_a_render_is_not_swallowed(): void
+    {
+        // Unique until processing, not until done: a lock that outlives handle()
+        // would drop the save that landed while the browser was busy.
+        $this->assertInstanceOf(ShouldBeUniqueUntilProcessing::class, new RenderStepThumbnail(1));
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -76,6 +87,12 @@ class ThumbnailsTest extends TestCase
                 ['from_node_key' => 'page_1', 'to_node_key' => 'mail_1', 'from_output' => 'default'],
             ],
         ], $overrides);
+    }
+
+    /** Where a step's picture goes, from the one place that decides it. */
+    protected function path(Funnel $funnel, string $nodeKey): string
+    {
+        return Thumbnails::path($funnel->fresh(['steps'])->stepByKey($nodeKey));
     }
 
     protected function save(Funnel $funnel, array $overrides = []): void
@@ -98,19 +115,36 @@ class ThumbnailsTest extends TestCase
         $entry = $funnel->stepByKey('entry_1');
         $mail = $funnel->stepByKey('mail_1');
 
-        $this->assertSame('funnels/thumbs/'.$funnel->id.'/page_1.png', $page->config('thumbnail.path'));
+        $this->assertSame($this->path($funnel, 'page_1'), $page->config('thumbnail.path'));
         $this->assertNotNull($page->config('thumbnail.rendered_at'));
-        Storage::disk('public')->assertExists('funnels/thumbs/'.$funnel->id.'/page_1.png');
-        Storage::disk('public')->assertExists('funnels/thumbs/'.$funnel->id.'/entry_1.png');
+        Storage::disk('public')->assertExists($this->path($funnel, 'page_1'));
+        Storage::disk('public')->assertExists($this->path($funnel, 'entry_1'));
 
         // The entry is a page too; the mail is not a place anybody stands on.
         $this->assertNotNull($entry->config('thumbnail.path'));
         $this->assertNull($mail->config('thumbnail'));
-        Storage::disk('public')->assertMissing('funnels/thumbs/'.$funnel->id.'/mail_1.png');
+        Storage::disk('public')->assertMissing($this->path($funnel, 'mail_1'));
 
         // The picture was taken through the preview route, with a pass.
         $this->assertCount(2, $this->renderer->urls);
         $this->assertStringContainsString('/f/kurs/_preview/page_1?token=', $this->renderer->urls[1]);
+    }
+
+    #[Test]
+    public function the_file_name_cannot_be_guessed_without_the_app_key(): void
+    {
+        $funnel = $this->funnel();
+        $step = $funnel->stepByKey('entry_1');
+
+        config()->set('app.key', 'base64:'.base64_encode(str_repeat('a', 32)));
+        $first = Thumbnails::path($step);
+
+        config()->set('app.key', 'base64:'.base64_encode(str_repeat('b', 32)));
+        $second = Thumbnails::path($step);
+
+        $this->assertNotSame($first, $second);
+        $this->assertMatchesRegularExpression('#^funnels/thumbs/'.$funnel->id.'/entry_1-[0-9a-f]{16}\.png$#', $first);
+        $this->assertSame($second, Thumbnails::path($step), 'The name is stable under one key.');
     }
 
     #[Test]
@@ -183,7 +217,7 @@ class ThumbnailsTest extends TestCase
                 ->where('funnel.nodes', function ($nodes) use ($funnel) {
                     $nodes = collect($nodes)->keyBy('node_key');
 
-                    $this->assertTrue(str_ends_with((string) $nodes['page_1']['config']['thumbnail']['url'], '/funnels/thumbs/'.$funnel->id.'/page_1.png'));
+                    $this->assertStringEndsWith('/'.$this->path($funnel, 'page_1'), (string) $nodes['page_1']['config']['thumbnail']['url']);
                     $this->assertNotEmpty($nodes['page_1']['config']['thumbnail']['rendered_at']);
                     $this->assertArrayNotHasKey('thumbnail', $nodes['mail_1']['config']);
 
@@ -254,7 +288,9 @@ class ThumbnailsTest extends TestCase
 
         $this->save($funnel);
 
-        Storage::disk('public')->assertExists('funnels/thumbs/'.$funnel->id.'/page_1.png');
+        // Remembered now: once the step is gone there is nothing to ask.
+        $pagePicture = $this->path($funnel, 'page_1');
+        Storage::disk('public')->assertExists($pagePicture);
 
         $graph = $this->graph();
         unset($graph['nodes'][1]);
@@ -263,8 +299,8 @@ class ThumbnailsTest extends TestCase
 
         $this->save($funnel, $graph);
 
-        Storage::disk('public')->assertMissing('funnels/thumbs/'.$funnel->id.'/page_1.png');
-        Storage::disk('public')->assertExists('funnels/thumbs/'.$funnel->id.'/entry_1.png');
+        Storage::disk('public')->assertMissing($pagePicture);
+        Storage::disk('public')->assertExists($this->path($funnel, 'entry_1'));
     }
 
     #[Test]

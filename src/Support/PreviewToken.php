@@ -57,7 +57,7 @@ class PreviewToken
      *
      * @param  array<string, mixed>  $graph
      */
-    public static function mint(Funnel $funnel, array $graph, ?string $reuse = null): string
+    public static function mint(Funnel $funnel, array $graph, ?string $reuse = null, int $minutes = self::MINUTES): string
     {
         $existing = self::valid($reuse, $funnel);
 
@@ -66,7 +66,9 @@ class PreviewToken
             'graph' => $graph,
         ]);
 
-        $token->expireAt(now()->addMinutes(self::MINUTES));
+        // The editor's preview keeps the default; a thumbnail render, which
+        // uses its pass once and deletes it, asks for less.
+        $token->expireAt(now()->addMinutes(max(1, $minutes)));
         $token->save();
 
         return $token->token();

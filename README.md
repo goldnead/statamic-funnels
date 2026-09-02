@@ -245,14 +245,17 @@ php please funnels:thumbnails --force          # everything, again
 ```
 
 Pictures live on `thumbnails.disk` (default `public`, so run `php artisan storage:link`) under
-`funnels/thumbs/<funnel-id>/<node_key>.png`, 640 × 400 by default. Path and `rendered_at` are kept
+`funnels/thumbs/<funnel-id>/<node_key>-<hmac>.png`, 640 × 400 by default — the sixteen hex
+characters are an HMAC under `APP_KEY`, so a draft's pictures are not guessable from the editor's
+URLs. Path and `rendered_at` are kept
 in the step's `config['thumbnail']`; that key belongs to the server, so a second save before the
 page was reloaded does not throw the picture away. A deleted step takes its picture with it, a
 deleted funnel its folder.
 
 Two things to know about the host. The browser loads the page through `APP_URL`, so that URL has to
 resolve from where the queue worker runs. And on `QUEUE_CONNECTION=sync` the pictures are taken
-inside the save request, a second or two per page; a real queue is the better place for them.
+after the save's response has gone out, in the same PHP process, a second or two per page — the
+editor has its "saved" back first, but the process stays busy; a real queue is the better place.
 
 **The cookie banner.** A fresh browser has consented to nothing, so without help every picture is a
 picture of the banner and the map shows the same card six times. Two knobs:

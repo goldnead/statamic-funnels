@@ -114,9 +114,22 @@ class Thumbnails
         return 'funnels/thumbs/'.$id;
     }
 
+    /**
+     * `funnels/thumbs/{funnel}/{node_key}-{hmac}.png`.
+     *
+     * The disk is public and a draft funnel's pages are not. `node_key` alone
+     * would make every picture guessable from the editor's URLs, so the name
+     * carries sixteen hex characters of an HMAC over funnel and key under the
+     * application key. Not a secret link — a picture, not the page — but not a
+     * listing either. This is the only place the name is made.
+     */
     public static function path(FunnelStep $step): string
     {
-        return self::directory((int) $step->funnel_id).'/'.$step->node_key.'.png';
+        $funnelId = (int) $step->funnel_id;
+
+        $mac = substr(hash_hmac('sha256', $funnelId.'/'.$step->node_key, (string) config('app.key')), 0, 16);
+
+        return self::directory($funnelId).'/'.$step->node_key.'-'.$mac.'.png';
     }
 
     /**

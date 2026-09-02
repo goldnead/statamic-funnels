@@ -42,6 +42,9 @@ class StepRenderer
     /** Thumbnails are switched off in config. */
     public const DISABLED = 'disabled';
 
+    /** How long the pass a render uses stays good, in case the delete never runs. */
+    public const TOKEN_MINUTES = 2;
+
     public function __construct(protected ThumbnailRenderer $renderer) {}
 
     /**
@@ -69,7 +72,10 @@ class StepRenderer
             return self::FAILED;
         }
 
-        $token = PreviewToken::mint($funnel, Thumbnails::graph($funnel));
+        // Two minutes, not the preview's fifteen: this pass is used once, now,
+        // and deleted below. The short life is for the case where that delete
+        // never runs because the worker died mid-render.
+        $token = PreviewToken::mint($funnel, Thumbnails::graph($funnel), minutes: self::TOKEN_MINUTES);
 
         $url = route('statamic-funnels.preview', [
             'funnel' => $funnel->handle,
@@ -85,10 +91,13 @@ class StepRenderer
                 Thumbnails::hideSelectors(),
             );
         } catch (Throwable $e) {
+            // Browsershot quotes its whole command line in the message, pass
+            // included. The pass is short-lived and deleted below, but a log
+            // is copied into tickets and read months later.
             Log::warning('statamic-funnels: a step thumbnail could not be rendered.', [
                 'funnel' => $funnel->handle,
                 'node' => $step->node_key,
-                'exception' => $e->getMessage(),
+                'exception' => preg_replace('/token=[^&\s\'"]+/', 'token=***', $e->getMessage()),
             ]);
 
             return self::FAILED;

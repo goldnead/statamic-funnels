@@ -10,13 +10,16 @@ Station am Aussehen ihrer Seite, nicht nur am Namen. Mail-Knoten bekommen kein B
 Seite.
 
 - Das Foto entsteht **nicht beim Laden des Editors**, sondern in einem Job (`RenderStepThumbnail`,
-  queued, eindeutig je Schritt) nach dem Speichern. Er lädt die Seite über dieselbe Vorschau-Route
+  queued, eindeutig je Schritt bis zum Start; auf der `sync`-Queue nach der Antwort) nach dem
+  Speichern. Er lädt die Seite über dieselbe Vorschau-Route
   wie das Vorschau-Panel, mit einem `PreviewToken`, das nach dem Foto wieder gelöscht wird, und
   schreibt nichts: kein Besuch, kein Ereignis, keine Impression.
 - Ein Schritt wird nur neu fotografiert, wenn sich an ihm etwas geändert hat (Fingerabdruck aus
   Typ, Label, Slug, Konfiguration). `php please funnels:thumbnails {funnel?} {--force}` rendert
   nach, etwa nach einer Änderung am Eintrag hinter einer Seite.
-- Ablage auf `thumbnails.disk` (Standard `public`) unter `funnels/thumbs/<funnel>/<node_key>.png`,
+- Ablage auf `thumbnails.disk` (Standard `public`) unter `funnels/thumbs/<funnel>/<node_key>-<hmac>.png`
+  (16 Hex-Zeichen HMAC unter `APP_KEY`, damit die Bilder eines Entwurfs nicht aus den Editor-URLs
+  erratbar sind),
   Pfad und `rendered_at` in `funnel_steps.config['thumbnail']`. Der Schlüssel gehört dem Server:
   ein zweites Speichern vor dem Neuladen wirft das Bild nicht weg. Ein gelöschter Schritt nimmt
   sein Bild mit, ein gelöschter Funnel seinen Ordner.

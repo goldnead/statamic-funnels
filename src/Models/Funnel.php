@@ -2,6 +2,7 @@
 
 namespace Goldnead\StatamicFunnels\Models;
 
+use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
@@ -25,6 +26,16 @@ class Funnel extends Model
     protected function casts(): array
     {
         return ['published' => 'boolean', 'meta' => 'array'];
+    }
+
+    /**
+     * A funnel that goes takes its pictures with it. The steps cascade at the
+     * database, which skips their own `deleted` hooks, so the folder is removed
+     * here — before the row goes, while the id is still known.
+     */
+    protected static function booted(): void
+    {
+        static::deleting(fn (Funnel $funnel) => Thumbnails::forgetFunnel($funnel));
     }
 
     /** @return HasMany<FunnelStep, $this> */

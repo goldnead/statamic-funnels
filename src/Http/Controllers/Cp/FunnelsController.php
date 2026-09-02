@@ -316,10 +316,6 @@ class FunnelsController extends CpController
     {
         $this->authorizeAccess();
 
-        // The steps cascade at the database, which skips their model events;
-        // the pictures are one folder per funnel for exactly this moment.
-        Thumbnails::forgetFunnel($funnel);
-
         $funnel->delete();
 
         return redirect(cp_route('utilities.funnels'));

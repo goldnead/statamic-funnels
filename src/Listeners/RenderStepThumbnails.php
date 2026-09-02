@@ -14,6 +14,10 @@ use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
  * editor's side panel already says why there are no pictures. A step whose
  * fingerprint still matches its stored picture is skipped too, so saving a
  * renamed edge does not photograph six pages.
+ *
+ * On the `sync` queue the jobs run after the response has gone out, not inside
+ * the save: a browser takes a second or two per page, and the editor should
+ * have its "saved" back before the first shutter clicks.
  */
 class RenderStepThumbnails
 {
@@ -23,12 +27,16 @@ class RenderStepThumbnails
             return;
         }
 
+        $afterResponse = config('queue.default') === 'sync';
+
         foreach ($event->funnel->steps as $step) {
             if (! Thumbnails::isPage($step) || Thumbnails::isCurrent($step)) {
                 continue;
             }
 
-            RenderStepThumbnail::dispatch((int) $step->getKey());
+            $afterResponse
+                ? RenderStepThumbnail::dispatchAfterResponse((int) $step->getKey())
+                : RenderStepThumbnail::dispatch((int) $step->getKey());
         }
     }
 }

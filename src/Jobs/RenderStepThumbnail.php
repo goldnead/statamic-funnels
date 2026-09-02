@@ -5,7 +5,7 @@ namespace Goldnead\StatamicFunnels\Jobs;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Thumbnails\StepRenderer;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -14,9 +14,11 @@ use Illuminate\Queue\InteractsWithQueue;
  * Photograph one step, later.
  *
  * Queued, because a browser takes a second or two per page and a save with six
- * pages must not take twelve seconds to come back. Unique per step, because
- * the editor saves often and the queue would otherwise hold five renders of the
- * same page, of which only the last one matters.
+ * pages must not take twelve seconds to come back. Unique per step **until it
+ * starts**, because the editor saves often and the queue would otherwise hold
+ * five renders of the same page, of which only the last one matters — but a
+ * save that lands *while* a render is running has to queue a new one, or the
+ * picture would silently stay one version behind.
  *
  * The id travels, not the model: a step deleted between dispatch and run is a
  * job that finds nothing and does nothing, not one that fails deserialising.
@@ -24,7 +26,7 @@ use Illuminate\Queue\InteractsWithQueue;
  * One try. A page that will not render will not render on the third attempt
  * either, and the warning is already in the log.
  */
-class RenderStepThumbnail implements ShouldBeUnique, ShouldQueue
+class RenderStepThumbnail implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
