@@ -2,6 +2,35 @@
 
 ## 1.9.1 — 2026-09-02
 
+### Fixed — der Ein-Klick-Hinweis fehlte genau beim ersten Käufer
+
+Nach dem Rücksprung vom Bezahldienst rendert der Upsell-Schritt, bevor der Webhook die Zahlung auf
+`paid` gesetzt hat — beim Kauftest am 02.09.2026 lagen zwischen beidem weniger als eine Sekunde. In
+dieser Sekunde hielt `FollowUp::eligible()` die Vorgängerzahlung für unbezahlt, und die Seite sagte
+nichts über die gespeicherte Karte. Erst ein Neuladen brachte den Satz. In der scharfen Fassung
+betrifft das **jeden** ersten Käufer.
+
+Der fehlende Satz ist dabei nicht das Schlimmste: bis zum Klick ist der Webhook da, die Aktion nimmt
+den Ein-Klick-Weg, und abgebucht wird etwas, das die Seite nie angekündigt hat. `SavedCard` fragt
+deshalb den Anbieter selbst, wenn eine Zahlung `open` bei ihm liegt (`Fulfilment::handle()`, derselbe
+Weg wie der Webhook, gegen Doppelausführung gesichert). Antwortet er nicht oder wirft ein Listener,
+bleibt es beim bekannten Stand und die Seite fällt auf die normale Kasse zurück — eine öffentliche
+Seite kippt daran nicht.
+
+### Fixed — „von deiner  •••• 9996"
+
+Der genannte Kartensatz hing allein an den vier Ziffern. Nennt der Anbieter die Ziffern, aber nicht
+die Marke — bei Wallet-Zahlungen der Normalfall —, entstand eine Lücke mitten im Satz. Jetzt drei
+Fälle: Marke und Ziffern, nur Ziffern (neuer Schlüssel `saved_card_digits`), keins von beidem. Gesagt
+wird es in allen dreien, nur mit weniger Details.
+
+### Fixed — `payment_items.offer` beim Upsell
+
+Der Ein-Klick-Weg übergibt jetzt `offer_handles` an `FollowUp::accept()`, so wie der Kassenweg es
+über den Katalog bekommt. Ohne das blieb die Spalte genau bei der Upsell-Zeile leer, und der
+Upsell-Bericht in `statamic-insights` ordnete den Umsatz keinem Angebot zu. Braucht payments 1.17.1;
+gegen ältere payments-Fassungen wird die Angabe ignoriert, nicht bestraft.
+
 ### Fixed — was der Besucher eintippt, kam roh im HTML der Mail an
 
 `statamic-email-templates` setzte bis 2.2.x jeden Wert unverändert ein, und dieses Addon gab ihm
