@@ -124,6 +124,15 @@ class StepRenderer
         }
 
         $config = $step->config ?? [];
+
+        // A picture that lived under another name — a key rotation, an older
+        // naming — is not left behind as an orphan on a public disk.
+        $previous = $config[Thumbnails::KEY]['path'] ?? null;
+
+        if (is_string($previous) && $previous !== '' && $previous !== $path) {
+            Thumbnails::disk()->delete($previous);
+        }
+
         $config[Thumbnails::KEY] = [
             'path' => $path,
             'rendered_at' => now()->toIso8601String(),
