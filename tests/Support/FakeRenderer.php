@@ -14,9 +14,17 @@ class FakeRenderer implements ThumbnailRenderer
     /** @var list<string> */
     public array $urls = [];
 
-    public function render(string $url, int $width, int $height): ?string
+    /** @var list<array<string, string>> */
+    public array $cookies = [];
+
+    /** @var list<list<string>> */
+    public array $hideSelectors = [];
+
+    public function render(string $url, int $width, int $height, array $cookies = [], array $hideSelectors = []): ?string
     {
         $this->urls[] = $url;
+        $this->cookies[] = $cookies;
+        $this->hideSelectors[] = $hideSelectors;
 
         return "\x89PNG\r\n\x1a\n fake {$width}x{$height}";
     }

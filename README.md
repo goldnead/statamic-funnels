@@ -254,6 +254,17 @@ Two things to know about the host. The browser loads the page through `APP_URL`,
 resolve from where the queue worker runs. And on `QUEUE_CONNECTION=sync` the pictures are taken
 inside the save request, a second or two per page; a real queue is the better place for them.
 
+**The cookie banner.** A fresh browser has consented to nothing, so without help every picture is a
+picture of the banner and the map shows the same card six times. Two knobs:
+
+- `thumbnails.cookies` (`name => value`) are set for the page's host before it loads. Left empty,
+  and with `goldnead/statamic-consent` installed, its own cookie is sent with every registered
+  service granted, in the exact shape its script reads (`{ v, granted, ts, how, id }`, URL-encoded),
+  so the banner stays down and the gated embeds render. Another consent tool wants its own cookie
+  here.
+- `thumbnails.hide_selectors` is a list of CSS selectors hidden before the shot (`display: none
+  !important`), for a banner no cookie silences. Empty by default.
+
 ### Where people stop
 
 Every step card in the editor carries three figures: how many visitors reached it, how many carried
@@ -415,6 +426,8 @@ funnel addon must not start writing into somebody's CRM.
 | `thumbnails.disk` | `public` | Has to be a disk with public URLs; the Control Panel loads the pictures by URL. |
 | `thumbnails.width` / `height` | `640` / `400` | The stored size. The card draws 16:10; another ratio is cropped. |
 | `thumbnails.chrome_path` | `null` | Names the browser when it is not on `PATH`. Named but not executable means no renderer, not a fallback. |
+| `thumbnails.cookies` | `[]` | Cookies the browser carries into the page. Empty means the consent addon's cookie with everything granted, when that addon is installed. |
+| `thumbnails.hide_selectors` | `[]` | CSS selectors hidden before the shot. For a banner no cookie can silence. |
 
 ## Multi-site
 

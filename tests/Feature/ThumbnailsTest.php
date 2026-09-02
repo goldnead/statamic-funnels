@@ -6,6 +6,7 @@ use Goldnead\StatamicFunnels\Contracts\ThumbnailRenderer;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Tests\Support\FakeRenderer;
 use Goldnead\StatamicFunnels\Tests\TestCase;
+use Goldnead\StatamicFunnels\Thumbnails\ConsentCookie;
 use Goldnead\StatamicFunnels\Thumbnails\NullRenderer;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -313,6 +314,53 @@ class ThumbnailsTest extends TestCase
         $this->artisan('funnels:thumbnails')
             ->expectsOutputToContain('No thumbnail renderer')
             ->assertExitCode(1);
+    }
+
+    #[Test]
+    public function configured_cookies_and_selectors_reach_the_renderer(): void
+    {
+        config()->set('statamic-funnels.thumbnails.cookies', ['banner_seen' => 'yes', 'lang' => 'de']);
+        config()->set('statamic-funnels.thumbnails.hide_selectors', ['.cookie-bar', ' #chat ', '']);
+
+        $this->withRenderer();
+        $funnel = $this->funnel();
+
+        $this->save($funnel);
+
+        $this->assertCount(2, $this->renderer->cookies);
+        $this->assertSame(['banner_seen' => 'yes', 'lang' => 'de'], $this->renderer->cookies[0]);
+        $this->assertSame(['.cookie-bar', '#chat'], $this->renderer->hideSelectors[0]);
+    }
+
+    #[Test]
+    public function without_configuration_and_without_the_consent_addon_nothing_is_sent(): void
+    {
+        // The consent addon is not installed on this test host.
+        $this->assertFalse(class_exists('\Goldnead\StatamicConsent\Support\Registry'));
+
+        $this->withRenderer();
+        $funnel = $this->funnel();
+
+        $this->save($funnel);
+
+        $this->assertSame([], $this->renderer->cookies[0]);
+        $this->assertSame([], $this->renderer->hideSelectors[0]);
+    }
+
+    #[Test]
+    public function the_consent_cookie_is_written_the_way_its_script_reads_it(): void
+    {
+        // Mirrors `parse()` in statamic-consent's consent.js: decodeURIComponent,
+        // JSON.parse, `v` must equal the version, `granted` must be an array.
+        $value = ConsentCookie::value(['analytics', 'youtube'], 3);
+
+        $data = json_decode(rawurldecode($value), true);
+
+        $this->assertSame(3, $data['v']);
+        $this->assertSame(['analytics', 'youtube'], $data['granted']);
+        $this->assertIsInt($data['ts']);
+        $this->assertNotEmpty($data['id']);
+        $this->assertDoesNotMatchRegularExpression('/[{}",\[\] ]/', $value, 'The value has to be cookie-safe, as encodeURIComponent makes it.');
     }
 
     #[Test]

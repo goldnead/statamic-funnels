@@ -77,7 +77,13 @@ class StepRenderer
         ]).'?token='.$token;
 
         try {
-            $png = $this->renderer->render($url, Thumbnails::width(), Thumbnails::height());
+            $png = $this->renderer->render(
+                $url,
+                Thumbnails::width(),
+                Thumbnails::height(),
+                Thumbnails::cookies(),
+                Thumbnails::hideSelectors(),
+            );
         } catch (Throwable $e) {
             Log::warning('statamic-funnels: a step thumbnail could not be rendered.', [
                 'funnel' => $funnel->handle,

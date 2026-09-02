@@ -26,7 +26,14 @@ Seite.
   tut und das einmal je Prozess als `notice` sagt. Ohne Renderer: **kein grauer Platzhalter**, die
   Karten sehen aus wie bisher, und die Seitenleiste des Editors sagt still „Vorschaubilder brauchen
   Chromium (siehe Doku)".
-- Config `thumbnails`: `enabled`, `disk`, `width`, `height`, `chrome_path`.
+- **Ohne Cookie-Banner im Bild.** `thumbnails.cookies` (`name => value`) setzt der Browser vor dem
+  Laden; leer und mit `goldnead/statamic-consent` installiert geht dessen Consent-Cookie mit allen
+  Diensten als erteilt mit, im Format seines Skripts (`{ v, granted, ts, how, id }`, URL-kodiert).
+  `thumbnails.hide_selectors` blendet Selektoren vor dem Foto aus, für ein Banner, das kein Cookie
+  beruhigt. Sonst zeigt jede Kachel dasselbe Banner, und eine Landkarte, auf der jede Station gleich
+  aussieht, ist keine.
+- Config `thumbnails`: `enabled`, `disk`, `width`, `height`, `chrome_path`, `cookies`,
+  `hide_selectors`.
 - Braucht `goldnead/statamic-flow-canvas` ^1.3, das den Knoten das Feld `thumbnail` gibt.
 
 ## 1.8.0 — 2026-09-02

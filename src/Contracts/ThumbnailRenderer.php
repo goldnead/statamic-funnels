@@ -19,6 +19,13 @@ interface ThumbnailRenderer
      * and the caller leaves the step as it was. A renderer that *tried* and
      * failed throws instead; the two are different facts and are logged
      * differently.
+     *
+     * `$cookies` (`name => value`) are set for the page's host before it loads,
+     * and `$hideSelectors` name elements to hide — both exist for the one thing
+     * that otherwise sits on top of every picture: a cookie banner.
+     *
+     * @param  array<string, string>  $cookies
+     * @param  list<string>  $hideSelectors
      */
-    public function render(string $url, int $width, int $height): ?string;
+    public function render(string $url, int $width, int $height, array $cookies = [], array $hideSelectors = []): ?string;
 }

@@ -18,7 +18,7 @@ class NullRenderer implements ThumbnailRenderer
 {
     protected static bool $noticed = false;
 
-    public function render(string $url, int $width, int $height): ?string
+    public function render(string $url, int $width, int $height, array $cookies = [], array $hideSelectors = []): ?string
     {
         if (! self::$noticed) {
             self::$noticed = true;

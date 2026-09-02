@@ -27,9 +27,9 @@ class BrowsershotRenderer implements ThumbnailRenderer
         return class_exists(Browsershot::class) && Chromium::find() !== null;
     }
 
-    public function render(string $url, int $width, int $height): ?string
+    public function render(string $url, int $width, int $height, array $cookies = [], array $hideSelectors = []): ?string
     {
-        return Browsershot::url($url)
+        $shot = Browsershot::url($url)
             ->setChromePath($this->chromePath)
             ->windowSize($width, $height)
             ->deviceScaleFactor(1)
@@ -38,7 +38,24 @@ class BrowsershotRenderer implements ThumbnailRenderer
             // `networkidle2`, not `networkidle0`: a page with a live poll or
             // a chat widget never reaches zero connections, and a screenshot
             // that waits for it never happens.
-            ->waitUntilNetworkIdle(false)
-            ->screenshot();
+            ->waitUntilNetworkIdle(false);
+
+        if ($cookies !== []) {
+            // For the page's own host, which is what `useCookies` defaults to;
+            // named anyway so a redirect does not move the goalposts.
+            $shot->useCookies($cookies, (string) parse_url($url, PHP_URL_HOST));
+        }
+
+        if ($hideSelectors !== []) {
+            // puppeteer's `page.addStyleTag`, which Browsershot exposes only as
+            // a raw option. Injected after load, so it beats the page's own
+            // stylesheet and needs the `!important` to beat inline `hidden`
+            // toggles the banner script flips.
+            $shot->setOption('addStyleTag', json_encode([
+                'content' => implode(', ', $hideSelectors).' { display: none !important; }',
+            ]));
+        }
+
+        return $shot->screenshot();
     }
 }

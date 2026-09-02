@@ -47,6 +47,16 @@ class Browsershot
         return $this;
     }
 
+    public function useCookies(array $cookies, ?string $domain = null): static
+    {
+        return $this;
+    }
+
+    public function setOption($key, $value): static
+    {
+        return $this;
+    }
+
     public function screenshot(): string
     {
         return '';

@@ -70,6 +70,42 @@ class Thumbnails
         return max(1, (int) config('statamic-funnels.thumbnails.height', 400));
     }
 
+    /**
+     * Cookies the browser carries into the page, `name => value`.
+     *
+     * Configured ones win. With nothing configured and `statamic-consent`
+     * installed, its own cookie with every service granted — otherwise every
+     * thumbnail is a picture of the cookie banner, and a map on which every
+     * station looks the same is no map.
+     *
+     * @return array<string, string>
+     */
+    public static function cookies(): array
+    {
+        $configured = config('statamic-funnels.thumbnails.cookies', []);
+
+        if (is_array($configured) && $configured !== []) {
+            return array_map('strval', array_filter($configured, 'is_scalar'));
+        }
+
+        return ConsentCookie::default() ?? [];
+    }
+
+    /**
+     * CSS selectors hidden before the picture is taken. For the banner no
+     * cookie can silence.
+     *
+     * @return list<string>
+     */
+    public static function hideSelectors(): array
+    {
+        $configured = config('statamic-funnels.thumbnails.hide_selectors', []);
+
+        return is_array($configured)
+            ? array_values(array_filter(array_map('trim', array_filter($configured, 'is_string'))))
+            : [];
+    }
+
     /** `funnels/thumbs/{funnel}/` — one folder per funnel, so deleting one is deleting a folder. */
     public static function directory(Funnel|int $funnel): string
     {

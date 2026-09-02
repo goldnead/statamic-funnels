@@ -96,6 +96,12 @@ return [
     | loads them by URL. `width` and `height` are the stored size in pixels;
     | the card draws them at 16:10, so keep that ratio.
     |
+    | `cookies` (name => value) travel with the browser into the page. Left
+    | empty, and with goldnead/statamic-consent installed, its consent cookie
+    | is sent with every service granted — otherwise every picture is a picture
+    | of the cookie banner. `hide_selectors` are CSS selectors hidden before
+    | the shot, for a banner no cookie can silence.
+    |
     */
 
     'thumbnails' => [
@@ -104,6 +110,8 @@ return [
         'width' => 640,
         'height' => 400,
         'chrome_path' => env('FUNNELS_CHROME_PATH'),
+        'cookies' => [],
+        'hide_selectors' => [],
     ],
 
     'integrations' => [
