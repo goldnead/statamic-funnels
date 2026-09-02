@@ -25,6 +25,24 @@ use RuntimeException;
 class FunnelMailRenderer
 {
     /**
+     * Eigene Schluessel, deren Wert schon Markup ist und deshalb roh eingesetzt
+     * wird. Genau einer, und er hat einen Grund, der sich nicht wegkonstruieren
+     * laesst: `order.lines` ist eine Liste, `MergeVariables` kennt nur flache
+     * Skalare und keine Schleife, und in einer HTML-Mail trennt Zeilen nur
+     * Markup — ein `\n` faellt beim Rendern zusammen. Der Trenner muss also ein
+     * `<br>` sein, und ein `<br>` ueberlebt kein Escaping.
+     *
+     * Deshalb werden die Teile in {@see self::variables()} einzeln mit `e()`
+     * escaped, dort wo sie zu Markup zusammengesetzt werden, und der Schluessel
+     * wird pro Aufruf als roh angemeldet. Er gehoert NICHT in
+     * `MergeVariables::RAW_VARIABLES` — dort waere er fuer jeden Konsumenten des
+     * Schwester-Addons roh, auch fuer die, die ihn nie escapt haben.
+     *
+     * @var list<string>
+     */
+    public const RAW_VARIABLES = ['order.lines'];
+
+    /**
      * @return array{subject: string, html: string}
      *
      * @throws RuntimeException wenn keine Vorlage gewaehlt, das Addon nicht da
@@ -53,8 +71,13 @@ class FunnelMailRenderer
         $subject = trim((string) $step->config('subject_override')) ?: $resolved['subject'];
 
         return [
-            'subject' => MailTemplates::merge($subject, $data),
-            'html' => MailTemplates::merge($resolved['body'], $data),
+            // Der Betreff ist Text, kein HTML: dort bleibt der Wert roh, sonst
+            // stuende `Mueller &amp; Soehne` in der Betreffzeile.
+            'subject' => MailTemplates::merge($subject, $data, false),
+            // Der Koerper ist HTML: `visitor.name` kommt aus dem Formular und
+            // wird escaped. Einzige Ausnahme ist `order.lines`, das hier schon
+            // als Markup gebaut wird — siehe variables().
+            'html' => MailTemplates::merge($resolved['body'], $data, true, self::RAW_VARIABLES),
         ];
     }
 
@@ -101,6 +124,11 @@ class FunnelMailRenderer
                 'total' => (string) ($order['total'] ?? ''),
                 'currency' => (string) ($order['currency'] ?? ''),
                 'email' => (string) ($order['email'] ?? ''),
+                // Die eine Stelle, an der dieses Addon selbst Markup baut, und
+                // damit die eine Stelle, an der es selbst escapen muss: der
+                // Wert wird als `order.lines` roh eingesetzt
+                // ({@see self::RAW_VARIABLES}), also kommt jeder Teil hier
+                // genau einmal durch `e()`.
                 'lines' => implode('<br>', array_map(
                     fn (array $line) => e((string) $line['name']).' – '.e((string) $line['amount']),
                     (array) ($order['lines'] ?? []),

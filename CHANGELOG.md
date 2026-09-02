@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.9.1 — 2026-09-02
+
+### Fixed — was der Besucher eintippt, kam roh im HTML der Mail an
+
+`statamic-email-templates` setzte bis 2.2.x jeden Wert unverändert ein, und dieses Addon gab ihm
+`visitor.name` und `contact.*` direkt aus dem Formular. Ein Name mit Markup darin wurde damit zu
+Markup in einer Mail. Ab email-templates 2.3.0 escaped die Schwester selbst; ohne die Anpassung hier
+wäre daraus der umgekehrte Fehler geworden — doppelt escapte Bestellzeilen und ein `&amp;` in der
+Betreffzeile.
+
+Drei Änderungen, die zusammengehören:
+
+- **Der Körper wird escaped, der Betreff nicht.** `FunnelMailRenderer::render()` ruft die
+  Zusammenführung für den HTML-Körper mit Escaping und für die Betreffzeile ohne auf. Ein Betreff ist
+  kein HTML; dort wäre `Müller &amp; Söhne` sichtbarer Schaden statt Schutz.
+- **`order.lines` bleibt Markup, angemeldet statt geduldet.** Der Wert wird hier aus `e()`-escapten
+  Teilen mit `<br>` dazwischen gebaut und über den neuen `raw`-Parameter von
+  `MergeVariables::apply()` pro Aufruf als roh übergeben (`FunnelMailRenderer::RAW_VARIABLES`).
+  Der Weg „gar kein Markup mehr im Wert" scheitert an der Sache: `MergeVariables` kennt nur flache
+  Skalare und keine Schleife, und in einer HTML-Mail trennt Zeilen nur Markup — ein `\n` fällt beim
+  Rendern zusammen. Der Schlüssel gehört deshalb ausdrücklich **nicht** in
+  `MergeVariables::RAW_VARIABLES`, wo er für jeden Konsumenten der Schwester roh wäre.
+- **Ältere Schwestern bleiben lauffähig.** `MailTemplates::merge()` reicht die neuen Argumente
+  positional durch, nicht benannt: gegen 2.2.x ignoriert PHP zusätzliche positionale Argumente
+  stillschweigend, ein unbekanntes benanntes Argument wäre ein Fatal mitten im Versand.
+
+### Fixed — der Test-Fake blieb grün, egal was die Schwester tat
+
+`tests/Fakes/email-templates-facade.php` definiert ein eigenes `MergeVariables`, wenn die echte
+Klasse fehlt — und genau das ist sie in dieser Suite immer. Die Kopie hinkte hinterher, also hätte
+die Suite den Fehler oben nie gesehen. Der Fake ist jetzt auf Signatur und Verhalten der echten
+Klasse nachgezogen (`$escape`, `$raw`, `RAW_VARIABLES`), mit einem Vermerk darüber, dass er
+mitgeführt werden muss. Dazu ein Test, der genau die drei Eigenschaften festnagelt: Name aus dem
+Formular escaped, Bestellzeilen mit intaktem `<br>` und genau einmal escaped, Betreff roh.
+
 ## 1.9.0 — 2026-09-02
 
 ### Ein Bild je Seite auf der Leinwand

@@ -106,9 +106,20 @@ class MailTemplates
      * Text, wie er ist; ein sichtbarer Platzhalter ist besser als ein leeres
      * Feld, das niemand bemerkt.
      *
+     * `$escape` und `$raw` reicht die Schwester seit 2.3.0 durch: Werte werden
+     * dort beim Einsetzen escaped, ausser der Aufrufer sagt fuer eine
+     * Nicht-HTML-Ausgabe (Betreff) `false` oder nennt einen eigenen Schluessel,
+     * der schon Markup traegt (`order.lines`).
+     *
+     * **Positional, nicht benannt.** Gegen 2.2.x ist `apply()` zweistellig;
+     * zusaetzliche positionale Argumente ignoriert PHP dort stillschweigend
+     * (das Verhalten ist dann das alte, ungeescapte), ein unbekanntes benanntes
+     * Argument waere ein Fatal mitten im Versand.
+     *
      * @param  array<string, mixed>  $data
+     * @param  list<string>  $raw  Eigene Schluessel, deren Wert schon Markup ist.
      */
-    public static function merge(string $text, array $data): string
+    public static function merge(string $text, array $data, bool $escape = true, array $raw = []): string
     {
         if ($text === '' || ! class_exists(self::MERGE)) {
             return $text;
@@ -116,6 +127,6 @@ class MailTemplates
 
         $merge = self::MERGE;
 
-        return (string) $merge::apply($text, $data);
+        return (string) $merge::apply($text, $data, $escape, $raw);
     }
 }

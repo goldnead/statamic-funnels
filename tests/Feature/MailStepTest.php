@@ -234,6 +234,58 @@ class MailStepTest extends TestCase
         $this->assertSame('maria@example.com', $delivery->to);
     }
 
+    /**
+     * Was der Besucher eintippt, ist Text — auch wenn er wie Markup aussieht.
+     *
+     * Drei Zusicherungen in einem Lauf, weil sie zusammen erst die Aussage
+     * ergeben: der Name aus dem Formular kommt im HTML-Koerper **escaped** an,
+     * die Bestellzeilen behalten ihr `<br>` und sind **genau einmal** escaped
+     * (kein `&amp;amp;`), und die Betreffzeile — kein HTML — bleibt roh.
+     *
+     * Gegen den Stand vor dem 02.09.2026 ist dieser Test rot: dort setzte
+     * `MergeVariables::apply()` jeden Wert unveraendert ein.
+     */
+    #[Test]
+    public function the_body_escapes_what_the_visitor_typed_and_keeps_the_order_lines_intact(): void
+    {
+        EmailTemplates::$templates['bestellung'] = [
+            'subject' => 'Danke, {{ visitor.name }} & bis bald',
+            'body' => '<p>Hallo {{ visitor.name }}</p><p>{{ order.lines }}</p>',
+        ];
+
+        $funnel = $this->funnel(['template' => 'bestellung']);
+
+        $visit = FunnelVisit::create([
+            'funnel_id' => $funnel->id, 'token' => str_repeat('e', 32),
+            'email' => 'maria@example.com', 'name' => 'Müller & <b>Söhne</b>', 'current_node_key' => 'entry_1',
+        ]);
+
+        $step = $funnel->steps()->where('node_key', 'mail_start')->sole();
+
+        $rendered = app(FunnelMailRenderer::class)->render($step, $visit, [
+            'reference' => 'R-1',
+            'total' => '58,00',
+            'currency' => 'EUR',
+            'email' => 'maria@example.com',
+            'lines' => [
+                ['name' => 'Kurs & Buch', 'amount' => '49,00'],
+                ['name' => 'Heft', 'amount' => '9,00'],
+            ],
+        ]);
+
+        // Der Koerper ist HTML: der Name kommt als Text an, nicht als Markup.
+        $this->assertStringContainsString('<p>Hallo Müller &amp; &lt;b&gt;Söhne&lt;/b&gt;</p>', $rendered['html']);
+        $this->assertStringNotContainsString('<b>Söhne</b>', $rendered['html']);
+
+        // Die Bestellzeilen bleiben Markup, und ihre Teile sind genau einmal
+        // escaped — `&amp;amp;` waere der Beweis fuer zweimal.
+        $this->assertStringContainsString('Kurs &amp; Buch – 49,00<br>Heft – 9,00', $rendered['html']);
+        $this->assertStringNotContainsString('&amp;amp;', $rendered['html']);
+
+        // Der Betreff ist kein HTML und bleibt roh.
+        $this->assertSame('Danke, Müller & <b>Söhne</b> & bis bald', $rendered['subject']);
+    }
+
     #[Test]
     public function a_mail_without_a_template_fails_visibly(): void
     {
