@@ -121,7 +121,6 @@ namespace Goldnead\StatamicInsights\Support {
                 return $this->to?->copy()->addSecond()->startOfSecond();
             }
 
-
             public static function fromPreset(?string $preset): self
             {
                 $preset = in_array($preset, self::PRESETS, true) ? $preset : '30d';
