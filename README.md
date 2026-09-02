@@ -379,10 +379,11 @@ digits where the provider named them, without the digits where it did not, and n
 provider did not document for that payment. Announcement and action come from the same place
 (`SavedCard`), so they cannot drift apart.
 
-That place also asks the provider once when the buyer comes back from the checkout before the
-webhook has landed — otherwise the very first buyer sees the offer without the one-click sentence and
-is then charged with one click anyway. A provider that will not answer changes nothing: the page
-falls back to an ordinary checkout, and the webhook settles it a moment later.
+The sentence hangs on the mandate, not on the payment having settled. The buyer comes back from the
+checkout while the webhook is still in flight, and a sentence that waits for it would be missing for
+the very first buyer — who is then charged with one click anyway, unannounced. The charge itself
+still waits: if the payment has not settled by the time the button is pressed, it becomes an ordinary
+checkout. Announced-but-not-charged is an inconvenience; charged-but-not-announced is not.
 
 ### Templates
 

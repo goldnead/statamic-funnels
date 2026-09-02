@@ -213,22 +213,71 @@ class SavedCardTest extends TestCase
 
         $payment = Payment::latest('id')->first();
 
-        // Der Anbieter hat das Geld, der Webhook ist noch unterwegs: genau der
-        // Zustand, in dem der Kaeufer vom Bezahldienst zurueckkommt. Beim
-        // Kauftest am 02.09.2026 lagen zwischen Ruecksprung und Webhook
-        // weniger als eine Sekunde, und in dieser Sekunde rendert die Seite.
-        $this->gateway->markPaid($payment->provider_id, 'erste@example.com', '9996', 'Mastercard');
-        $this->assertFalse($payment->fresh()->isPaid(), 'Der Aufbau taugt nur, solange der Webhook noch nicht durch ist.');
+        // Der Zustand, in dem der Kaeufer vom Bezahldienst zurueckkommt: das
+        // Mandat steht (es wird vor dem Sprung zum Anbieter geschrieben), die
+        // Zahlung ist noch nicht bezahlt gemeldet, und die vier Ziffern hat der
+        // Webhook noch nicht eingetragen. Beim Kauftest am 02.09.2026 lagen
+        // zwischen Ruecksprung und Webhook weniger als eine Sekunde — und in
+        // dieser Sekunde rendert die Seite.
+        $this->assertFalse($payment->isPaid(), 'Der Aufbau taugt nur, solange der Webhook noch nicht durch ist.');
+        $this->assertNotEmpty($payment->customer_reference, 'Das Mandat traegt die Ankuendigung; ohne es prueft der Test nichts.');
+        $this->assertNull($payment->card_last4);
 
-        // Ohne die Rueckfrage stand hier gar kein Hinweis — und beim Klick
-        // danach war der Webhook da, es wurde ein Klick abgebucht, den die
-        // Seite nie angekuendigt hatte.
+        // Angekuendigt wird trotzdem — ohne Ziffern, weil es keine gibt. Vorher
+        // stand hier gar nichts, und beim Klick danach war der Webhook da: es
+        // wurde per Mandat abgebucht, ohne dass die Seite es je gesagt hatte.
         $this->asVisitor()->get('/f/fruehlingskurs/noch-etwas')
             ->assertOk()
             ->assertSee('without entering card details again', false)
-            ->assertSee('9996', false);
+            ->assertDontSee('••••', false);
+    }
 
-        $this->assertTrue($payment->fresh()->isPaid());
+    #[Test]
+    public function announced_but_still_unpaid_falls_back_to_an_ordinary_checkout(): void
+    {
+        $this->funnel();
+        $this->offers();
+
+        $this->asVisitor()->get('/f/fruehlingskurs/anmeldung');
+        $this->asVisitor()->post('/f/fruehlingskurs/capture_1/advance', ['email' => 'erste@example.com']);
+        $this->asVisitor()->get('/f/fruehlingskurs/angebot');
+        $this->asVisitor()->post('/f/fruehlingskurs/offer_1/advance', ['accept' => '1', 'confirmed' => '1']);
+
+        $erste = Payment::latest('id')->first();
+        $bisher = Payment::count();
+
+        // Die andere Richtung derselben Entkopplung, und die muss harmlos sein:
+        // angekuendigt, aber beim Klick immer noch nicht bezahlt. Dann lehnt
+        // FollowUp::eligible() ab, und der Kaeufer geht durch die normale
+        // Kasse — eine Unbequemlichkeit, keine stille Abbuchung.
+        $this->asVisitor()->get('/f/fruehlingskurs/noch-etwas')->assertOk();
+        $this->asVisitor()->post('/f/fruehlingskurs/offer_2/advance', ['accept' => '1', 'confirmed' => '1']);
+
+        $zweite = Payment::latest('id')->first();
+
+        $this->assertSame($bisher + 1, Payment::count());
+        $this->assertNull($zweite->parent_payment_id, 'Ohne bezahlte Erstzahlung darf nichts per Mandat abgebucht werden.');
+        $this->assertNotSame($erste->id, $zweite->id);
+    }
+
+    #[Test]
+    public function a_failed_first_payment_announces_nothing(): void
+    {
+        $this->funnel();
+        $this->offers();
+
+        $this->asVisitor()->get('/f/fruehlingskurs/anmeldung');
+        $this->asVisitor()->post('/f/fruehlingskurs/capture_1/advance', ['email' => 'erste@example.com']);
+        $this->asVisitor()->get('/f/fruehlingskurs/angebot');
+        $this->asVisitor()->post('/f/fruehlingskurs/offer_1/advance', ['accept' => '1', 'confirmed' => '1']);
+
+        // Aus einer gescheiterten Zahlung wird nie eine Abbuchung. Ein Satz
+        // darueber waere schlicht falsch — das Mandat allein reicht nicht.
+        Payment::latest('id')->first()->forceFill(['status' => Payment::STATUS_FAILED])->save();
+
+        $this->asVisitor()->get('/f/fruehlingskurs/noch-etwas')
+            ->assertOk()
+            ->assertDontSee('without entering card details again', false);
     }
 
     #[Test]

@@ -5,18 +5,36 @@ namespace Goldnead\StatamicFunnels\Support;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicPayments\Models\Payment;
 use Goldnead\StatamicPayments\Support\FollowUp;
-use Goldnead\StatamicPayments\Support\Fulfilment;
-use Illuminate\Support\Facades\Log;
-use Throwable;
 
 /**
  * Ob dieser Schritt ohne erneute Karteneingabe abbuchen wuerde — und womit.
  *
- * Es gibt genau eine Antwort auf diese Frage, und zwei Stellen brauchen sie:
- * die Seite, die es dem Kaeufer vorher sagen muss, und die Aktion, die es
- * danach tut. Standen sie getrennt, konnten sie auseinanderlaufen — und das
- * Auseinanderlaufen ist hier nicht kosmetisch, sondern der Unterschied
- * zwischen einer angekuendigten und einer stillen Abbuchung.
+ * Zwei Stellen brauchen eine Antwort: die Seite, die es dem Kaeufer vorher
+ * sagen muss, und die Aktion, die es danach tut. Sie stehen hier zusammen,
+ * damit sie nicht auseinanderlaufen — das Auseinanderlaufen ist nicht
+ * kosmetisch, sondern der Unterschied zwischen einer angekuendigten und einer
+ * stillen Abbuchung.
+ *
+ * **Sie sind trotzdem nicht dieselbe Frage, und der Unterschied ist Absicht.**
+ * Die Aktion fragt {@see FollowUp::eligible()}, also auch, ob die erste Zahlung
+ * schon bezahlt gemeldet ist. Die Ankuendigung fragt das nicht. Der Kaeufer
+ * kommt vom Bezahldienst zurueck, waehrend der Webhook noch unterwegs ist —
+ * beim Kauftest am 02.09.2026 lagen zwischen beidem weniger als eine Sekunde —,
+ * und in dieser Sekunde rendert die Seite. Haengt der Satz an `isPaid()`, sieht
+ * **jeder erste Kaeufer** den Upsell ohne das Ein-Klick-Versprechen; beim Klick
+ * ist der Webhook dann da und es wird per Mandat abgebucht, ohne dass die Seite
+ * es je gesagt hat. Das ist die gefaehrliche Richtung, und sie ist damit zu.
+ *
+ * Die andere Richtung ist harmlos: angekuendigt, aber beim Klick immer noch
+ * nicht bezahlt — dann gibt `eligible()` null zurueck, und der Kaeufer bekommt
+ * die normale Kasse statt eines Ein-Klicks. Eine Unbequemlichkeit, keine
+ * Abbuchung.
+ *
+ * Das Mandat traegt die Ankuendigung, und es steht rechtzeitig da:
+ * `customer_reference` wird **vor** dem Sprung zum Anbieter geschrieben, im
+ * selben Block, der `sequenceType: first` setzt (`Checkout::start()`). Beim
+ * Ruecksprung steht die Spalte also, unabhaengig vom Webhook — ohne dass hier
+ * jemand den Anbieter fragen muesste.
  *
  * Der Kaeufer wird an der Adresse erkannt, nicht am Geraet. Ein Mandat gehoert
  * dem Menschen; wer den Besuchs-Cookie dafuer nimmt, bucht der zweiten Person
@@ -24,26 +42,22 @@ use Throwable;
  */
 final class SavedCard
 {
-    public function __construct(protected FollowUp $followUp, protected Fulfilment $fulfilment) {}
+    public function __construct(protected FollowUp $followUp) {}
 
     /**
      * Die Zahlung, gegen die hier abgebucht wuerde. Null heisst: normale Kasse.
+     *
+     * Die strenge Frage, fuer die Aktion. Sie schliesst `isPaid()` ein.
      */
     public function chargeableFrom(?FunnelVisit $visit): ?Payment
     {
-        if (! $visit || ! $visit->payment_id) {
-            return null;
-        }
-
-        $previous = Payment::find($visit->payment_id);
+        $previous = $this->vorgaenger($visit);
 
         if (! $previous) {
             return null;
         }
 
-        $previous = $this->abgerechnet($previous);
-
-        return $this->followUp->eligible($previous, $visit->email)
+        return $this->followUp->eligible($previous, $visit?->email)
             ? $previous
             : null;
     }
@@ -53,17 +67,18 @@ final class SavedCard
      *
      * `last4` und `label` koennen fehlen, auch wenn abgebucht wird: bei
      * Zahlungsarten ohne Karte gibt es sie nicht, bei Wallet-Zahlungen nennt
-     * der Anbieter oft nur die Marke, und bei Zahlungen von vor dieser Fassung
-     * wurden sie nicht mitgeschrieben. Die Ankuendigung bleibt trotzdem
-     * Pflicht — dann eben ohne die vier Ziffern.
+     * der Anbieter oft nur die Marke, bei Zahlungen von vor dieser Fassung
+     * wurden sie nicht mitgeschrieben — und in der Sekunde nach dem
+     * Ruecksprung hat der Webhook sie noch nicht geschrieben. Die Ankuendigung
+     * bleibt in allen vier Faellen Pflicht, dann eben ohne die vier Ziffern.
      *
      * @return array{last4: string|null, label: string|null}|null
      */
     public function forTemplate(?FunnelVisit $visit): ?array
     {
-        $previous = $this->chargeableFrom($visit);
+        $previous = $this->vorgaenger($visit);
 
-        if (! $previous) {
+        if (! $previous || ! $this->ankuendbar($previous, $visit?->email)) {
             return null;
         }
 
@@ -74,55 +89,35 @@ final class SavedCard
     }
 
     /**
-     * Den Anbieter fragen, wenn der Ruecksprung den Webhook ueberholt hat.
+     * Ob die Seite den Ein-Klick ankuendigen muss.
      *
-     * Der Kaeufer kommt vom Bezahldienst direkt auf den naechsten Schritt
-     * zurueck, und der Webhook, der die Zahlung auf `paid` setzt, ist in dem
-     * Moment oft noch unterwegs. Beim Kauftest am 02.09.2026 lagen zwischen
-     * beidem weniger als eine Sekunde — und in dieser Sekunde rendert die
-     * Seite. Ohne diese Frage sieht **jeder erste Kaeufer** den Upsell ohne
-     * das Ein-Klick-Versprechen und erst nach einem Neuladen mit.
-     *
-     * Das Schlimmere ist nicht der fehlende Satz, sondern was danach passiert:
-     * bis zum Klick ist der Webhook da, die Aktion nimmt den Ein-Klick-Weg,
-     * und abgebucht wird etwas, das die Seite nie angekuendigt hat. Genau
-     * dagegen ist diese Klasse geschrieben.
-     *
-     * `Fulfilment::handle()` ist derselbe Weg, den der Webhook nimmt, und
-     * gegen Doppelausfuehrung gesichert (`fulfilled_at` wird als Anspruch
-     * gesetzt). Er wird nur gefragt, wenn eine Antwort etwas aendern kann:
-     * eine Zahlung, die beim Anbieter liegt und noch nicht bezahlt gemeldet
-     * ist. Eine abgelaufene, abgebrochene oder gescheiterte Zahlung wird nicht
-     * noch einmal angefasst, und `initiated` heisst, dass der Anbieter sie
-     * ueberhaupt noch nicht kennt.
-     *
-     * Wirft etwas, bleibt es beim bekannten Stand. Ein Listener, der beim
-     * Erfuellen scheitert, gibt seinen Anspruch zurueck und wirft weiter —
-     * hier darf das keine oeffentliche Seite in einen Fehler kippen. Der
-     * Webhook stellt erneut zu.
+     * `eligible()` ohne `isPaid()`, und sonst nichts weggelassen: dieselbe
+     * Marken-Schaltung, dasselbe Mandat, derselbe Mensch. Eine gescheiterte,
+     * abgelaufene oder abgebrochene Zahlung kuendigt nichts an — aus der wird
+     * nie eine Abbuchung, und ein Satz darueber waere schlicht falsch.
      */
-    protected function abgerechnet(Payment $payment): Payment
+    protected function ankuendbar(Payment $previous, ?string $email): bool
     {
-        if ($payment->status !== Payment::STATUS_OPEN) {
-            return $payment;
+        $endgueltig = [
+            Payment::STATUS_FAILED,
+            Payment::STATUS_EXPIRED,
+            Payment::STATUS_CANCELED,
+        ];
+
+        return $this->followUp->available()
+            && is_string($previous->customer_reference)
+            && trim($previous->customer_reference) !== ''
+            && ! in_array($previous->status, $endgueltig, true)
+            && $this->followUp->sameBuyer($previous, $email);
+    }
+
+    /** Die Zahlung, die dieser Besuch mitbringt. */
+    protected function vorgaenger(?FunnelVisit $visit): ?Payment
+    {
+        if (! $visit || ! $visit->payment_id) {
+            return null;
         }
 
-        $providerId = trim($payment->provider_id);
-
-        if ($providerId === '' || str_starts_with($providerId, 'pending-')) {
-            return $payment;
-        }
-
-        try {
-            return $this->fulfilment->handle($providerId) ?? $payment;
-        } catch (Throwable $e) {
-            Log::warning('statamic-funnels: the provider could not settle this payment while a step was rendering.', [
-                'payment_id' => $payment->getKey(),
-                'provider_id' => $providerId,
-                'exception' => $e->getMessage(),
-            ]);
-
-            return $payment->fresh() ?? $payment;
-        }
+        return Payment::find($visit->payment_id);
     }
 }
