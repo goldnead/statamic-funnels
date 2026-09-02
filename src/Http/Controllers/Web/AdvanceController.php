@@ -424,7 +424,7 @@ class AdvanceController
             $payment = $this->followUp->accept($previous, $buyHandle, [
                 'funnel' => $funnel->handle,
                 'step' => $step->node_key,
-            ], $angaben + ['offer_handles' => [$buyHandle => $offer->handle]], $visit->email);
+            ], array_merge($angaben, ['offer_handles' => [$buyHandle => $offer->handle]]), $visit->email);
 
             if (! $payment) {
                 return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
