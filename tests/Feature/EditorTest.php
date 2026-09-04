@@ -85,6 +85,40 @@ class EditorTest extends TestCase
         $this->assertFalse($funnel->fresh()->published);
     }
 
+    /**
+     * Ein Funnel hat genau einen Einstieg.
+     *
+     * Adrian am 03.09.2026: „Ich kann mehrere Einstiege erstellen, das soll so
+     * nicht sein" — bestaetigt als Fehler. Der Editor bietet den zweiten gar
+     * nicht mehr an; diese Sperre hier ist die dahinter, denn eine Regel, die
+     * nur im Browser steht, ist keine.
+     *
+     * Warum „irgendwie verhindern" nicht reicht: `entryStep()` nimmt
+     * `firstWhere('type', 'entry')`, also den erstbesten. Mit zwei Einstiegen
+     * entscheidet die Zeilenreihenfolge, welcher gilt, und der Funnel liefe an
+     * einem vorbei, den jemand sichtbar angelegt hat.
+     */
+    #[Test]
+    public function a_second_entry_is_refused_and_nothing_is_saved(): void
+    {
+        $funnel = $this->funnel();
+
+        $graph = $this->graph();
+        $graph['nodes'][] = ['node_key' => 'entry_2', 'type' => 'entry', 'label' => 'Noch ein Start', 'config' => []];
+
+        $this->actingAs($this->user())
+            ->patchJson('/cp/utilities/funnels/'.$funnel->id, $graph)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('nodes');
+
+        // Der Schreibvorgang ist ein Ersetzen: haette die Regel erst im Writer
+        // gegriffen, stuende jetzt ein halber Graph in der Tabelle.
+        $frisch = $funnel->fresh(['steps']);
+        $this->assertSame(1, $frisch->steps->where('type', 'entry')->count());
+        $this->assertNull($frisch->steps->firstWhere('node_key', 'entry_2'));
+        $this->assertFalse($frisch->published, 'Der Rest des Graphen darf auch nicht durchgerutscht sein.');
+    }
+
     #[Test]
     public function it_saves_the_whole_graph(): void
     {

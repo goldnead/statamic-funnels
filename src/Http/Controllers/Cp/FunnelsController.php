@@ -294,7 +294,24 @@ class FunnelsController extends CpController
             'handle' => ['required', 'string', 'max:191', 'regex:/^[a-z0-9][a-z0-9_-]*$/', Rule::unique('funnels', 'handle')->ignore($funnel->id)],
             'published' => ['boolean'],
 
-            'nodes' => ['array'],
+            // Genau ein Einstieg. Adrian am 03.09.2026: „Ich kann mehrere
+            // Einstiege erstellen, das soll so nicht sein" — von ihm als Fehler
+            // bestaetigt. Die Sperre steht hier und nicht nur im Editor, weil
+            // ein zweiter Einstieg sonst still gewinnt: `Funnel::entryStep()`
+            // nimmt `firstWhere('type', 'entry')`, also den erstbesten, und
+            // welcher das ist, entscheidet die Zeilenreihenfolge. Der Funnel
+            // liefe dann an einem Einstieg vorbei, den jemand sichtbar angelegt
+            // hat, und niemand saehe warum.
+            //
+            // Null Einstiege bleiben erlaubt: ein Entwurf darf unfertig sein,
+            // und das Veroeffentlichen prueft das ohnehin.
+            'nodes' => ['array', function ($attribute, $value, $fail) {
+                $entries = collect($value ?? [])->where('type', 'entry')->count();
+
+                if ($entries > 1) {
+                    $fail(__('statamic-funnels::messages.one_entry_only', ['count' => $entries]));
+                }
+            }],
             'nodes.*.node_key' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
             'nodes.*.type' => ['required', 'string', 'max:64'],
             'nodes.*.label' => ['nullable', 'string', 'max:191'],
@@ -330,7 +347,13 @@ class FunnelsController extends CpController
     {
         return [
             'kinds' => [
-                'entry' => ['label' => __('statamic-funnels::nodes.kind_entry'), 'plural' => __('statamic-funnels::nodes.kind_entry_plural'), 'replaceLabel' => __('statamic-funnels::nodes.replace_entry')],
+                // `unique` fuettert eine Weiche, die es in der geteilten
+                // Bibliothek (flow-canvas, NodeLibrary) laengst gibt und die
+                // hier nie gesetzt war: beim Anhaengen eines Schrittes fallen
+                // die einmaligen Arten heraus, beim Ersetzen des Einstiegs
+                // bleiben nur sie uebrig. Ohne das Feld bot der „+" mitten im
+                // Flow einen zweiten Einstieg an — Adrians Befund F27.
+                'entry' => ['label' => __('statamic-funnels::nodes.kind_entry'), 'plural' => __('statamic-funnels::nodes.kind_entry_plural'), 'replaceLabel' => __('statamic-funnels::nodes.replace_entry'), 'unique' => true],
                 'page' => ['label' => __('statamic-funnels::nodes.kind_page'), 'plural' => __('statamic-funnels::nodes.kind_page_plural')],
                 'offer' => ['label' => __('statamic-funnels::nodes.kind_offer'), 'plural' => __('statamic-funnels::nodes.kind_offer_plural')],
                 'finish' => ['label' => __('statamic-funnels::nodes.kind_finish'), 'plural' => __('statamic-funnels::nodes.kind_finish_plural')],

@@ -39,6 +39,7 @@ const props = defineProps({
 // `__()` does not know this addon's language file, and a label written in JS
 // would render as its raw key across the canvas.
 const KINDS = computed(() => withLabels(props.labels.kinds));
+
 const t = (group, key, fallback = '') => props.labels?.[group]?.[key] ?? fallback;
 
 // The output specs travel with the library payload and are evaluated by the
@@ -88,6 +89,82 @@ const pickKind = computed(() => {
         ? 'replace-entry'
         : (pendingTarget.value.fromNodeKey ? 'step' : 'entry');
 });
+
+/**
+ * Die Bibliothek, wie sie angeboten werden darf.
+ *
+ * Ein Funnel hat genau einen Einstieg (von Adrian am 03.09.2026 bestaetigt).
+ * Sobald einer im Graphen liegt, faellt die Einstiegs-Gruppe aus der Auswahl —
+ * man kann keinen zweiten mehr anlegen, statt ihn anzulegen und beim Speichern
+ * abgewiesen zu werden. Der Server prueft es trotzdem noch einmal: eine Sperre,
+ * die nur im Browser steht, ist keine.
+ *
+ * Zwei Ausnahmen, beide notwendig:
+ *
+ * - Beim „Einstieg ersetzen" (`pickKind === 'replace-entry'`) muss die Gruppe
+ *   sichtbar bleiben, sonst oeffnet sich eine leere Liste und der vorhandene
+ *   Einstieg laesst sich nie mehr austauschen.
+ * - Nachgeschlagen wird weiter in der vollstaendigen `props.library`
+ *   (`selectedType`, `addNode`, `setNodeOutputSpecs`): der vorhandene
+ *   Einstiegsknoten braucht seine Beschreibung und seine Ausgaenge.
+ */
+const hasEntry = computed(() => graph.value.nodes.some((n) => n.type === 'entry'));
+
+const availableLibrary = computed(() => {
+    if (!hasEntry.value || pickKind.value === 'replace-entry') return props.library;
+
+    const offered = {};
+    for (const [group, items] of Object.entries(props.library)) {
+        const kept = items.filter((item) => item.kind !== 'entry');
+        if (kept.length) offered[group] = kept;
+    }
+
+    return offered;
+});
+
+/**
+ * Dieselbe Auswahl noch einmal, aber fuer die Gruppenkoepfe der Bibliothek.
+ *
+ * Die Bibliothek baut ihre Reiter aus `kinds`, nicht aus dem Bestand — ohne
+ * diesen Schritt bliebe der Reiter „Einstieg" mit einer 0 daneben stehen und
+ * fragte den Leser, warum dort nichts ist. Nur die Bibliothek bekommt die
+ * gekuerzte Fassung; die Leinwand braucht weiter alle Bezeichnungen, sonst
+ * verliert die vorhandene Einstiegskarte ihre Beschriftung.
+ */
+const libraryKinds = computed(() => {
+    if (!hasEntry.value || pickKind.value === 'replace-entry') return KINDS.value;
+
+    const kinds = { ...KINDS.value };
+    delete kinds.entry;
+
+    return kinds;
+});
+
+/**
+ * Die Felder, die zum aktuellen Zustand des Schrittes passen.
+ *
+ * Ein Feld darf `visible_when: { <handle>: 'filled' }` mitbringen und
+ * erscheint dann nur, wenn das genannte Feld einen Wert hat. Gebraucht wird das
+ * bisher fuer genau eine Sache: die A/B-Variantenfelder haengen an
+ * `split_share`, dem Schalter des Tests (Adrians Befund F25).
+ *
+ * Bewusst nur diese eine Bedingung. Ein Feld, dessen Sichtbarkeit von einer
+ * kleinen Ausdruckssprache abhaengt, ist beim naechsten Lesen teurer als die
+ * drei Zeilen, die sie sich spart.
+ */
+function fieldIsVisible(field) {
+    const rules = field?.visible_when;
+    if (!rules) return true;
+
+    return Object.entries(rules).every(([handle, rule]) => {
+        const value = selected.value?.config?.[handle];
+        const filled = value !== null && value !== undefined && value !== '';
+
+        return rule === 'filled' ? filled : !filled;
+    });
+}
+
+const visibleFields = computed(() => (selectedType.value?.schema ?? []).filter(fieldIsVisible));
 
 function record(tag = null) {
     history.record(tag);
@@ -415,8 +492,8 @@ function searchEntries(query) {
             <NodeLibrary
                 v-if="showLibrary"
                 class="w-72 shrink-0"
-                :library="library"
-                :kinds="KINDS"
+                :library="availableLibrary"
+                :kinds="libraryKinds"
                 :node-icon="nodeIcon"
                 :pick-labels="labels.pick ?? {}"
                 :pick-mode="!!pendingTarget"
@@ -447,7 +524,7 @@ function searchEntries(query) {
                     :adder-labels="labels.adder ?? {}"
                     :nodes="canvasNodes"
                     :edges="graph.edges"
-                    :library="library"
+                    :library="availableLibrary"
                     :selected-key="selectedKey"
                     :node-stats="nodeStats"
                     :pending-target="pendingTarget"
@@ -516,7 +593,7 @@ function searchEntries(query) {
                 </div>
 
                 <Field
-                    v-for="field in selectedType?.schema ?? []"
+                    v-for="field in visibleFields"
                     :key="field.handle"
                     :label="field.label"
                     :instructions="field.instructions"

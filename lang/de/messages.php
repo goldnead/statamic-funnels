@@ -17,6 +17,7 @@ return [
     'steps' => 'Schritte',
     'visits' => 'Besuche',
     'saved' => 'Gespeichert.',
+    'one_entry_only' => 'Ein Funnel hat genau einen Einstieg. Dieser hier hat :count. Entferne die überzähligen, bevor du speicherst.',
     'field_name' => 'Name',
     'field_email' => 'E-Mail',
     'newsletter_label' => 'Ich möchte den Newsletter erhalten.',

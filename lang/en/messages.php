@@ -17,6 +17,7 @@ return [
     'steps' => 'steps',
     'visits' => 'visits',
     'saved' => 'Saved.',
+    'one_entry_only' => 'A funnel has exactly one entry. This one has :count. Remove the extra ones before saving.',
     'field_name' => 'Name',
     'field_email' => 'Email',
     'newsletter_label' => 'I would like to receive the newsletter.',

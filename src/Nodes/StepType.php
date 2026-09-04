@@ -81,11 +81,23 @@ abstract class StepType
      */
     protected static function splitSchema(): array
     {
+        // `split_share` ist der Schalter: leer heisst kein Test (siehe
+        // Support\Split::share()). Die drei Variantenfelder darunter erscheinen
+        // deshalb erst, wenn er gesetzt ist — Adrian am 03.09.2026:
+        // „A/B-Testing-Inhalte nur zeigen, wenn man A/B-Tests aktiviert hat."
+        // Vorher stand auf jedem Seiten-Schritt eine halbe Testkonfiguration,
+        // die die meisten nie brauchen.
+        //
+        // Ausgeblendet wird nur die Anzeige, nie der Wert: wer eine Variante
+        // geschrieben und den Anteil danach geleert hat, findet sie wieder,
+        // sobald er ihn erneut setzt.
+        $onlyWithSplit = ['visible_when' => ['split_share' => 'filled']];
+
         return [
             ['handle' => 'split_share', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_split_share'), 'instructions' => __('statamic-funnels::nodes.field_split_share_help')],
-            ['handle' => 'variant_entry', 'type' => 'entry', 'label' => __('statamic-funnels::nodes.field_variant_entry'), 'instructions' => __('statamic-funnels::nodes.field_variant_entry_help')],
-            ['handle' => 'variant_headline', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_variant_headline')],
-            ['handle' => 'variant_body', 'type' => 'textarea', 'label' => __('statamic-funnels::nodes.field_variant_body')],
+            ['handle' => 'variant_entry', 'type' => 'entry', 'label' => __('statamic-funnels::nodes.field_variant_entry'), 'instructions' => __('statamic-funnels::nodes.field_variant_entry_help'), ...$onlyWithSplit],
+            ['handle' => 'variant_headline', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_variant_headline'), ...$onlyWithSplit],
+            ['handle' => 'variant_body', 'type' => 'textarea', 'label' => __('statamic-funnels::nodes.field_variant_body'), ...$onlyWithSplit],
         ];
     }
 
