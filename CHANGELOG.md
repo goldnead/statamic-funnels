@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.10.0 — 2026-09-05
+
+Drei Befunde aus Adrians Durchgang vom 03.09.2026.
+
+### Funnels im Verkaufs-Abschnitt der Seitenleiste (F36)
+
+Der Bildschirm ist als Statamic-Utility registriert und stand deshalb unter „Hilfsmittel",
+zwischen Cache und PHP-Info. Jetzt hängt er im Verkaufs-Abschnitt, den `statamic-payments` mit
+`Cp\SuiteNav::section()` benennt: derselbe Abschnitt wie Zahlungen, Angebote und Produkte, denn
+Statamic übersetzt Abschnittsnamen nicht, und zwei Schreibweisen ergäben zwei halb gefüllte
+Abschnitte. Route und Recht bleiben; der Eintrag unter „Hilfsmittel" wird ausgehängt, sonst stünde
+der Bildschirm zweimal da.
+
+**Setzt `goldnead/statamic-payments` ab 1.18.0 voraus**, dort erst gibt es `Cp\SuiteNav`.
+
+### Fixed — genau ein Einstieg (F27)
+
+Ein Funnel hat genau einen Einstieg. Bisher ließ der Editor einen zweiten zu, und welcher galt,
+entschied still die Zeilenreihenfolge: `entryStep()` nimmt den ersten Knoten vom Typ `entry`. Drei
+Stellen, weil eine nicht reicht:
+
+- Die Validierung in `update()` weist einen zweiten Einstieg ab und speichert nichts.
+- Der `kinds`-Deskriptor trägt `unique`, was die geteilte Bibliothek in `flow-canvas` längst
+  auswertet: beim Anhängen fallen einmalige Arten heraus, beim Ersetzen bleiben nur sie. Das Feld
+  war hier nur nie gesetzt.
+- Der Reiter „Einstieg" verschwindet, sobald einer da ist, statt mit einer 0 dazustehen. Beim
+  Ersetzen bleibt er sichtbar.
+
+### Fixed — A/B-Felder nur bei eingeschaltetem Test (F25)
+
+Die drei Variantenfelder tragen `visible_when` auf `split_share`, den Schalter des Tests (leer
+heißt kein Test, siehe `Support\Split::share()`). Ausgeblendet wird nur die Anzeige, nie der
+Wert.
+
+Intern: `StepStats` liest die Aggregatspalte `visitors` über `getAttribute()` statt als Property.
+Kein Verhaltensunterschied, ein PHPStan-Befund weniger.
+
 ## 1.9.1 — 2026-09-02
 
 ### Fixed — der Ein-Klick-Hinweis fehlte genau beim ersten Käufer

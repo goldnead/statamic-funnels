@@ -37,7 +37,7 @@ class StepStats
             ->get();
 
         foreach ($rows as $row) {
-            $counts[$row->node_key][$row->event] = (int) $row->visitors;
+            $counts[$row->node_key][$row->event] = (int) $row->getAttribute('visitors');
         }
 
         // Where each step leads. "Continued" means a visitor who was on this
