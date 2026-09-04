@@ -191,6 +191,12 @@ class ServiceProvider extends AddonServiceProvider
         // uebersetzt Abschnittsnamen nicht, zwei Schreibweisen ergaeben zwei
         // halb gefuellte Abschnitte nebeneinander.
         Nav::extend(function ($nav) {
+            // Erst aushaengen, dann einhaengen — sonst steht der Bildschirm
+            // zweimal da: einmal unter „Hilfsmittel", wohin `Utility::register`
+            // ihn haengt, und einmal hier. Die Registrierung bleibt, sie traegt
+            // Route, Recht und Middleware.
+            $nav->remove('Tools', 'Utilities', __('statamic-funnels::messages.utility_nav'));
+
             $nav->create(__('statamic-funnels::messages.utility_nav'))
                 ->section(SuiteNav::section())
                 ->icon('hierarchy-vertical-nav-flow')
