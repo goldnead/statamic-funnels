@@ -14,6 +14,8 @@ use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Support\Facades\Log;
+use Goldnead\StatamicPayments\Cp\SuiteNav;
+use Statamic\Facades\CP\Nav;
 use Statamic\Facades\Utility;
 use Statamic\Providers\AddonServiceProvider;
 use Throwable;
@@ -180,6 +182,21 @@ class ServiceProvider extends AddonServiceProvider
         // `Localize` middleware has set the user's language, so the nav entry
         // would freeze in the application locale.
         Utility::extend(fn () => $this->registerUtility());
+
+        // Der Bildschirm bleibt eine Utility — dieselbe Route, dasselbe Recht.
+        // Was fehlte, war der Weg dorthin: unter „Hilfsmittel" steht er
+        // zwischen Cache und PHP-Info, und genau das hat Adrian am 03.09.2026
+        // als verwirrend gemeldet. Der Abschnittsname kommt aus
+        // `statamic-payments`, an dem dieses Addon ohnehin haengt — Statamic
+        // uebersetzt Abschnittsnamen nicht, zwei Schreibweisen ergaeben zwei
+        // halb gefuellte Abschnitte nebeneinander.
+        Nav::extend(function ($nav) {
+            $nav->create(__('statamic-funnels::messages.utility_nav'))
+                ->section(SuiteNav::section())
+                ->icon('hierarchy-vertical-nav-flow')
+                ->route('utilities.funnels')
+                ->can('access funnels utility');
+        });
 
         return $this;
     }
