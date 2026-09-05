@@ -6,6 +6,25 @@ parameters:
     paths:
         - src
 
+    # Statamic's facades and the optional siblings are reached through
+    # class_exists()-guarded seams and PHPDoc'd arrays; treating the doc types
+    # as certain reports the guards themselves as "always false". Same setting
+    # as in the other addons of the suite.
+    treatPhpDocTypesAsCertain: false
+
+    # Statamic 6 ships these two contracts without the methods the concrete
+    # classes carry: `QueryBuilder` has `whereIn()` on every implementation
+    # and `Entry` has `in()` on the Eloquent and Stache entries alike, but the
+    # interfaces declare neither. Ignored here rather than rebuilt in a stub:
+    # a stub would be a second copy of the Statamic API to keep in step.
+    ignoreErrors:
+        -
+            message: '#Call to an undefined method Statamic\\Contracts\\Entries\\QueryBuilder::whereIn\(\)#'
+            path: src/Http/Controllers/Cp/FunnelsController.php
+        -
+            message: '#Call to an undefined method Statamic\\Contracts\\Entries\\Entry::in\(\)#'
+            path: src/Http/Controllers/Web/FunnelController.php
+
     # Corrects a wrong annotation in Statamic itself, see the stub for why.
     stubFiles:
         - phpstan/AddonServiceProvider.stub

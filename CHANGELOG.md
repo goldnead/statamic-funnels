@@ -13,7 +13,11 @@ Statamic übersetzt Abschnittsnamen nicht, und zwei Schreibweisen ergäben zwei 
 Abschnitte. Route und Recht bleiben; der Eintrag unter „Hilfsmittel" wird ausgehängt, sonst stünde
 der Bildschirm zweimal da.
 
-**Setzt `goldnead/statamic-payments` ab 1.18.0 voraus**, dort erst gibt es `Cp\SuiteNav`.
+`Cp\SuiteNav` gibt es erst seit `goldnead/statamic-payments` 1.18.0, der Constraint erlaubt
+weiterhin `^1.17.1`. Deshalb steht der Aufruf hinter `class_exists()`, wie in `statamic-booking`:
+mit älterem payments bekommt der Bildschirm einen eigenen Abschnitt „Funnels" statt eines
+`Class not found` beim Aufbau der ganzen CP-Navigation. Den gemeinsamen Verkaufs-Abschnitt gibt
+es ab payments 1.18.0.
 
 ### Fixed — genau ein Einstieg (F27)
 
@@ -35,7 +39,11 @@ heißt kein Test, siehe `Support\Split::share()`). Ausgeblendet wird nur die Anz
 Wert.
 
 Intern: `StepStats` liest die Aggregatspalte `visitors` über `getAttribute()` statt als Property.
-Kein Verhaltensunterschied, ein PHPStan-Befund weniger.
+Kein Verhaltensunterschied, ein PHPStan-Befund weniger. PHPStan läuft jetzt ohne Befund:
+`treatPhpDocTypesAsCertain: false` wie in den übrigen Addons der Suite, dazu zwei `ignoreErrors`
+für `QueryBuilder::whereIn()` und `Entry::in()`, die Statamic 6 in seinen Contracts nicht
+deklariert, obwohl jede Implementierung sie trägt. `tests/Fakes/insights-table-metric.php` auf
+insights 1.2.1 nachgezogen (`bucketed()` sortiert die Eimer explizit).
 
 ## 1.9.1 — 2026-09-02
 

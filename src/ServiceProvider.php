@@ -197,8 +197,16 @@ class ServiceProvider extends AddonServiceProvider
             // Route, Recht und Middleware.
             $nav->remove('Tools', 'Utilities', __('statamic-funnels::messages.utility_nav'));
 
+            // `SuiteNav` gibt es erst seit payments 1.18.0, der Constraint
+            // erlaubt aelter. Ohne Wache faellt die ganze CP-Navigation mit
+            // "Class not found"; mit ihr bekommt eine Installation mit
+            // aelterem payments einen eigenen Abschnitt, wie booking es macht.
+            $section = class_exists(SuiteNav::class)
+                ? SuiteNav::section()
+                : __('statamic-funnels::messages.utility_nav');
+
             $nav->create(__('statamic-funnels::messages.utility_nav'))
-                ->section(SuiteNav::section())
+                ->section($section)
                 ->icon('hierarchy-vertical-nav-flow')
                 ->route('utilities.funnels')
                 ->can('access funnels utility');
