@@ -14,8 +14,6 @@ return [
     'field_published' => 'Live',
     'draft' => 'Draft',
     'live' => 'Live',
-    'steps' => 'steps',
-    'visits' => 'visits',
     'saved' => 'Saved.',
     'one_entry_only' => 'A funnel has exactly one entry. This one has :count. Remove the extra ones before saving.',
     'field_name' => 'Name',
@@ -53,9 +51,7 @@ return [
     // older than the text, or somebody edited the form.
     'consent_version' => 'Version :version',
     'consent_stale' => 'The terms have changed. Please reload the page and confirm again.',
-    // The funnel table's column headings. Separate keys, because `steps` and
-    // `visits` are suffixes behind a number ("3 steps") and a heading with no
-    // number in front of it reads differently.
+    // The funnel table's column headings.
     'column_title' => 'Title',
     'column_status' => 'Status',
     'column_steps' => 'Steps',

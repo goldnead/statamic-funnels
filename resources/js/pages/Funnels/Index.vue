@@ -97,11 +97,10 @@ function reload() {
             :allow-search="false"
             :allow-presets="false"
             :allow-customizing-columns="false"
-            class="mt-4"
             @refreshing="reload"
         >
             <template #cell-title="{ row: funnel }">
-                <Link :href="funnel.edit_url" class="font-semibold">{{ funnel.title }}</Link>
+                <Link :href="funnel.edit_url">{{ funnel.title }}</Link>
                 <span class="block font-mono text-2xs text-gray-600 dark:text-gray-400">{{ funnel.handle }}</span>
             </template>
 

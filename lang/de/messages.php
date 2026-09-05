@@ -14,8 +14,6 @@ return [
     'field_published' => 'Live',
     'draft' => 'Entwurf',
     'live' => 'Live',
-    'steps' => 'Schritte',
-    'visits' => 'Besuche',
     'saved' => 'Gespeichert.',
     'one_entry_only' => 'Ein Funnel hat genau einen Einstieg. Dieser hier hat :count. Entferne die überzähligen, bevor du speicherst.',
     'field_name' => 'Name',
@@ -53,9 +51,7 @@ return [
     // aelter als der Text, oder jemand hat am Formular gedreht.
     'consent_version' => 'Fassung :version',
     'consent_stale' => 'Die Bedingungen haben sich geändert. Bitte lade die Seite neu und bestätige erneut.',
-    // Die Spaltenkoepfe der Funnel-Tabelle. Eigene Schluessel, weil `steps`
-    // und `visits` als Suffix hinter einer Zahl stehen („3 Schritte") und ein
-    // Kopf ohne Zahl davor anders klingt als ein Suffix.
+    // Die Spaltenkoepfe der Funnel-Tabelle.
     'column_title' => 'Titel',
     'column_status' => 'Status',
     'column_steps' => 'Schritte',
