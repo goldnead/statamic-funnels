@@ -1,20 +1,33 @@
 <script setup>
-import { computed, ref } from 'vue';
-import { Head, router } from '@statamic/cms/inertia';
+import { ref } from 'vue';
+import { Head, Link, router } from '@statamic/cms/inertia';
 import {
     Header, Button, Badge, EmptyStateMenu, EmptyStateItem, DocsCallout,
-    CommandPaletteItem, Stack, Heading, Field, Input, ConfirmationModal,
+    CommandPaletteItem, Stack, Heading, Field, Input, Listing, DropdownItem,
 } from '@statamic/cms/ui';
 
 /**
  * The list of funnels.
  *
- * A plain list rather than a `Listing`: a site has a handful of funnels, not a
- * thousand, and the machinery a Listing brings — server paging, saved views,
- * column preferences — would be scaffolding around six rows.
+ * Core's `<Listing>` in its client-side mode: the rows arrive whole with the
+ * page, and the component supplies the column headings, the sorting, the
+ * checkbox column and the row menu. The hand-rolled stack of cards this
+ * replaced had none of those — Adrian on 03.09.2026: "sollte auch eine
+ * typische Statamic-Tabelle sein und nicht so."
+ *
+ * `:items` rather than `:url`: a site has a handful of funnels, not a
+ * thousand, so there is nothing to page through and no second endpoint to
+ * keep in step with this one. Sorting and searching then happen in the
+ * browser, over the rows already on the page.
  */
 const props = defineProps({
     funnels: { type: Array, default: () => [] },
+    // Field names have to match the keys on a row: client-side sorting reads
+    // `row[column.field]`.
+    columns: { type: Array, required: true },
+    // No action URL, no checkboxes and no bulk toolbar. It is also what the
+    // row menu posts to when someone deletes a funnel.
+    actionUrl: { type: String, required: true },
     createUrl: { type: String, required: true },
     // Built with `cp_route()` on the server. A hard-coded `/cp/...` breaks on
     // every site that has moved its Control Panel, which Statamic invites.
@@ -35,23 +48,15 @@ function create() {
 }
 
 /**
- * Deleting asks first.
+ * After an action ran, fetch the rows again.
  *
- * A funnel takes its visits and its record of who got how far with it. Core
- * asks before every destructive action, and a screen that deletes on one click
- * is the one in the Control Panel that does not.
+ * The listing owns its own copy of them, and in client-side mode its refresh
+ * has nothing to fetch from — so a deleted funnel would sit in the table until
+ * the next full page load. The Inertia reload is what actually replaces the
+ * `funnels` prop the listing is watching.
  */
-const deleting = ref(null);
-
-const deletePrompt = computed(() => deleting.value
-    ? __('statamic-funnels::messages.delete_body', { title: deleting.value.title, visits: deleting.value.visits_count })
-    : '');
-
-function confirmRemove() {
-    const funnel = deleting.value;
-    deleting.value = null;
-
-    if (funnel) router.delete(funnel.delete_url, { preserveScroll: true });
+function reload() {
+    router.reload({ only: ['funnels'] });
 }
 </script>
 
@@ -79,46 +84,57 @@ function confirmRemove() {
             />
         </EmptyStateMenu>
 
-        <div v-else class="grid gap-3">
-            <div
-                v-for="funnel in funnels"
-                :key="funnel.id"
-                class="flex items-center gap-4 rounded-lg border border-content-border bg-content-bg p-4"
-            >
-                <div class="min-w-0 flex-1">
-                    <a :href="funnel.edit_url" class="font-medium hover:text-primary">{{ funnel.title }}</a>
-                    <span class="block font-mono text-2xs text-gray-500 dark:text-gray-400">{{ funnel.handle }}</span>
-                </div>
+        <!-- Search, presets and column customising are off: with six rows a
+             search field is furniture, and presets and saved columns need
+             server-side scopes and a preferences prefix this screen has no
+             use for. What stays on is what the feedback asked for — headings,
+             sorting, selection, the row menu. -->
+        <Listing
+            v-else
+            :items="funnels"
+            :columns="columns"
+            :action-url="actionUrl"
+            :allow-search="false"
+            :allow-presets="false"
+            :allow-customizing-columns="false"
+            class="mt-4"
+            @refreshing="reload"
+        >
+            <template #cell-title="{ row: funnel }">
+                <Link :href="funnel.edit_url" class="font-semibold">{{ funnel.title }}</Link>
+                <span class="block font-mono text-2xs text-gray-600 dark:text-gray-400">{{ funnel.handle }}</span>
+            </template>
 
+            <template #cell-published="{ row: funnel }">
                 <Badge
-                    :color="funnel.published ? 'green' : 'amber'"
+                    :color="funnel.published ? 'green' : 'default'"
                     :text="funnel.published ? __('statamic-funnels::messages.live') : __('statamic-funnels::messages.draft')"
+                    pill
                 />
+            </template>
 
-                <span class="tabular-nums text-sm text-gray-600 dark:text-gray-400">
-                    {{ funnel.steps_count }} {{ __('statamic-funnels::messages.steps') }}
-                </span>
-                <span class="tabular-nums text-sm text-gray-600 dark:text-gray-400">
-                    {{ funnel.visits_count }} {{ __('statamic-funnels::messages.visits') }}
-                </span>
+            <template #cell-steps_count="{ value }">
+                <span class="tabular-nums">{{ value }}</span>
+            </template>
 
-                <Button icon="edit" :text="__('Edit')" :href="funnel.edit_url" />
-                <Button icon="trash" variant="ghost" :text="__('Delete')" @click="deleting = funnel" />
-            </div>
-        </div>
+            <template #cell-visits_count="{ value }">
+                <span class="tabular-nums">{{ value }}</span>
+            </template>
 
-        <!-- `:open`, not `v-if`: the modal owns its own visibility and focus
-             trap, and mounting it conditionally means it never opens — which
-             looks exactly like a Delete button that does nothing. -->
-        <ConfirmationModal
-            :open="deleting !== null"
-            :title="__('statamic-funnels::messages.delete_title')"
-            :body-text="deletePrompt"
-            :button-text="__('Delete')"
-            danger
-            @update:open="deleting = $event ? deleting : null"
-            @confirm="confirmRemove"
-        />
+            <!-- Deleting is not here: it is a server action, so it arrives in
+                 the same menu underneath the separator, with the Control
+                 Panel's own confirmation in front of it and the same wording
+                 whether one row or twenty are selected. -->
+            <template #prepended-row-actions="{ row: funnel }">
+                <DropdownItem icon="edit" :text="__('Edit')" :href="funnel.edit_url" />
+                <DropdownItem
+                    icon="external-link"
+                    :text="__('statamic-funnels::messages.open_public')"
+                    :href="funnel.public_url"
+                    target="_blank"
+                />
+            </template>
+        </Listing>
 
         <Stack v-model:open="open" size="narrow">
             <div class="flex h-full flex-col bg-content-bg">

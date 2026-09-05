@@ -53,8 +53,18 @@ return [
     // older than the text, or somebody edited the form.
     'consent_version' => 'Version :version',
     'consent_stale' => 'The terms have changed. Please reload the page and confirm again.',
-    'delete_title' => 'Delete this funnel?',
-    'delete_body' => '“:title” goes, along with :visits visits and everything recorded in them. This cannot be undone.',
+    // The funnel table's column headings. Separate keys, because `steps` and
+    // `visits` are suffixes behind a number ("3 steps") and a heading with no
+    // number in front of it reads differently.
+    'column_title' => 'Title',
+    'column_status' => 'Status',
+    'column_steps' => 'Steps',
+    'column_visits' => 'Visits',
+    'open_public' => 'View public page',
+    'funnel_action_delete' => 'Delete',
+    'funnel_action_delete_button' => 'Delete|Delete :count funnels',
+    'funnel_action_delete_confirm' => 'Delete this funnel? Its steps, its visits and everything recorded in them go with it. This cannot be undone.|Delete these :count funnels? Their steps, their visits and everything recorded in them go with them. This cannot be undone.',
+    'funnel_action_deleted' => 'Funnel deleted.|:count funnels deleted.',
     'preview' => 'Preview',
     'preview_previous' => 'Previous step',
     'preview_next' => 'Next step',

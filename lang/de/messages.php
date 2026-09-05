@@ -53,8 +53,18 @@ return [
     // aelter als der Text, oder jemand hat am Formular gedreht.
     'consent_version' => 'Fassung :version',
     'consent_stale' => 'Die Bedingungen haben sich geändert. Bitte lade die Seite neu und bestätige erneut.',
-    'delete_title' => 'Funnel löschen?',
-    'delete_body' => '„:title" wird gelöscht, samt :visits Besuchen und allem, was darin steht. Das lässt sich nicht rückgängig machen.',
+    // Die Spaltenkoepfe der Funnel-Tabelle. Eigene Schluessel, weil `steps`
+    // und `visits` als Suffix hinter einer Zahl stehen („3 Schritte") und ein
+    // Kopf ohne Zahl davor anders klingt als ein Suffix.
+    'column_title' => 'Titel',
+    'column_status' => 'Status',
+    'column_steps' => 'Schritte',
+    'column_visits' => 'Besuche',
+    'open_public' => 'Öffentlich ansehen',
+    'funnel_action_delete' => 'Löschen',
+    'funnel_action_delete_button' => 'Löschen|:count Funnels löschen',
+    'funnel_action_delete_confirm' => 'Diesen Funnel löschen? Seine Schritte, Besuche und alles, was darin steht, gehen mit. Das lässt sich nicht rückgängig machen.|Diese :count Funnels löschen? Ihre Schritte, Besuche und alles, was darin steht, gehen mit. Das lässt sich nicht rückgängig machen.',
+    'funnel_action_deleted' => 'Funnel gelöscht.|:count Funnels gelöscht.',
     'preview' => 'Vorschau',
     'preview_previous' => 'Vorheriger Schritt',
     'preview_next' => 'Nächster Schritt',

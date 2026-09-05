@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Statamic\Facades\Action;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry as EntryFacade;
 use Statamic\Facades\Form;
@@ -50,6 +51,11 @@ class FunnelsController extends CpController
                 ->get()
                 ->map(fn (Funnel $funnel) => $this->row($funnel))
                 ->all(),
+            'columns' => $this->columns(),
+            // Without an action URL the listing renders no checkboxes and no
+            // bulk toolbar, which is the difference between this screen and the
+            // Collections screen a user just came from.
+            'actionUrl' => cp_route('utilities.funnels.actions'),
             'createUrl' => cp_route('utilities.funnels.store'),
             'indexUrl' => cp_route('utilities.funnels'),
         ]);
@@ -329,15 +335,6 @@ class FunnelsController extends CpController
         return back()->with('message', __('statamic-funnels::messages.saved'));
     }
 
-    public function destroy(Request $request, Funnel $funnel)
-    {
-        $this->authorizeAccess();
-
-        $funnel->delete();
-
-        return redirect(cp_route('utilities.funnels'));
-    }
-
     /**
      * Every word the editor shows, translated on the server.
      *
@@ -440,6 +437,27 @@ class FunnelsController extends CpController
     }
 
     /**
+     * The table's head.
+     *
+     * Labels are translated here rather than in the template because the
+     * listing prints `column.label` as it receives it, and the field names have
+     * to match the keys `row()` writes — client-side sorting reads
+     * `row[column.field]`, so a column whose field is not a key on the row
+     * sorts every row to the same place.
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function columns(): array
+    {
+        return [
+            ['field' => 'title', 'label' => __('statamic-funnels::messages.column_title'), 'visible' => true, 'sortable' => true],
+            ['field' => 'published', 'label' => __('statamic-funnels::messages.column_status'), 'visible' => true, 'sortable' => true],
+            ['field' => 'steps_count', 'label' => __('statamic-funnels::messages.column_steps'), 'visible' => true, 'sortable' => true],
+            ['field' => 'visits_count', 'label' => __('statamic-funnels::messages.column_visits'), 'visible' => true, 'sortable' => true],
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     protected function row(Funnel $funnel): array
@@ -452,8 +470,10 @@ class FunnelsController extends CpController
             'steps_count' => $funnel->steps_count,
             'visits_count' => $funnel->visits_count,
             'edit_url' => cp_route('utilities.funnels.edit', $funnel->id),
-            'delete_url' => cp_route('utilities.funnels.destroy', $funnel->id),
             'public_url' => route('statamic-funnels.entry', $funnel->handle),
+            // Handed over rather than fetched: the row menu would otherwise ask
+            // the server the moment it is opened.
+            'actions' => Action::for($funnel, []),
         ];
     }
 

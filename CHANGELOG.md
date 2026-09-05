@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.11.0 — 2026-09-05
+
+### Die Funnel-Übersicht ist eine Statamic-Tabelle (F24)
+
+Adrian am 03.09.2026: „sollte auch eine typische Statamic-Tabelle sein und nicht so." Die Liste war
+ein gestapelter Eigenbau aus Karten: keine Spaltenköpfe, keine Sortierung, keine Mehrfachauswahl,
+kein Zeilenmenü, und sieben Funnels füllten den Bildschirm. Jetzt läuft sie über core's `<Listing>`
+in der klientseitigen Betriebsart (`:items`), mit den Spalten Titel (Kennung darunter), Status,
+Schritte und Besuche. Sortieren geht über jeden Spaltenkopf und wirkt wirklich, weil die Rohdaten
+schon auf der Seite liegen.
+
+Der Kopfkommentar der Datei begründete den Eigenbau damit, dass ein `Listing` „Gerüst um sechs
+Zeilen" sei. Das galt für die servergetriebene Betriebsart mit Paging, gespeicherten Ansichten und
+Spalten-Vorlieben — nicht für `:items`, das genau die Tabelle bringt und nichts davon verlangt.
+
+### Löschen ist eine Aktion, kein eigener Knopf
+
+„Bearbeiten" und der öffentliche Link stehen im „…"-Menü der Zeile. Das Löschen kommt aus einer
+echten Statamic-Aktion (`statamic_funnels_delete_funnel`) über einen `ActionController`. Damit
+bedient derselbe Code eine Zeile und zwanzig ausgewählte: die Mehrfachauswahl ist keine wirkungslose
+Ankreuzspalte, sondern räumt wirklich auf, und Rückfrage, Ablehnung und Meldung kommen vom Control
+Panel statt aus einer Nachbildung im Addon.
+
+Die Löschroute `DELETE /cp/utilities/funnels/{funnel}` und der eigene Bestätigungsdialog sind
+entfallen; wer sie direkt aufgerufen hat, nimmt jetzt `POST /cp/utilities/funnels/actions`.
+
 ## 1.10.0 — 2026-09-05
 
 Drei Befunde aus Adrians Durchgang vom 03.09.2026.

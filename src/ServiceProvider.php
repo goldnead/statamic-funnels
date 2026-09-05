@@ -3,6 +3,7 @@
 namespace Goldnead\StatamicFunnels;
 
 use Goldnead\StatamicFunnels\Contracts\ThumbnailRenderer;
+use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelActionsController;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelsController;
 use Goldnead\StatamicFunnels\Integrations\Insights\Completed;
 use Goldnead\StatamicFunnels\Integrations\Insights\CompletionRate;
@@ -227,10 +228,14 @@ class ServiceProvider extends AddonServiceProvider
             ->routes(function ($router) {
                 $router->post('/', [FunnelsController::class, 'store'])->name('store');
                 $router->get('entries', [FunnelsController::class, 'entries'])->name('entries');
+                // What the listing's row menu and its bulk toolbar post to.
+                // Above `{funnel}` on purpose, so `actions` is never read as a
+                // funnel id.
+                $router->post('actions', [FunnelActionsController::class, 'run'])->name('actions');
+                $router->post('actions/list', [FunnelActionsController::class, 'bulkActions'])->name('actions.list');
                 $router->post('{funnel}/preview', [FunnelsController::class, 'preview'])->name('preview');
                 $router->get('{funnel}/edit', [FunnelsController::class, 'edit'])->name('edit');
                 $router->patch('{funnel}', [FunnelsController::class, 'update'])->name('update');
-                $router->delete('{funnel}', [FunnelsController::class, 'destroy'])->name('destroy');
             });
     }
 }

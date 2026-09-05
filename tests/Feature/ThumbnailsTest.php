@@ -311,9 +311,18 @@ class ThumbnailsTest extends TestCase
 
         $this->save($funnel);
 
+        // Deleting runs through the listing's action endpoint, the same route
+        // the row menu and the bulk toolbar post to. There is no delete route
+        // beside it any more.
         $this->actingAs($this->user())
-            ->delete('/cp/utilities/funnels/'.$funnel->id)
-            ->assertRedirect();
+            ->postJson('/cp/utilities/funnels/actions', [
+                'action' => 'statamic_funnels_delete_funnel',
+                'selections' => [(string) $funnel->id],
+                'values' => [],
+                'context' => [],
+            ])
+            ->assertOk()
+            ->assertJson(['success' => true]);
 
         $this->assertSame([], Storage::disk('public')->allFiles());
     }
