@@ -38,7 +38,8 @@
   "extra": {
     "statamic": {
       "name": "Statamic Funnels",
-      "description": "A path a visitor walks: pages, forms, offers and payments in one flow."
+      "description": "A path a visitor walks: pages, forms, offers and payments in one flow.",
+      "developer-url": "https://adriangoldner.dev"
     },
     "laravel": {
       "providers": [
