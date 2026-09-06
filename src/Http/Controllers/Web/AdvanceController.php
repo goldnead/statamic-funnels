@@ -415,6 +415,9 @@ class AdvanceController
         // wie ein Upsell ohne Anschrift.
         $angaben = self::mitEinwilligung($angaben, Consent::details($offer, $visit, $consentText));
 
+        // Ob der Ein-Klick-Weg genommen wird, entscheidet sich hier — und er
+        // ist eine Abkuerzung, kein Ausgang. Scheitert er, geht es unten ueber
+        // die normale Kasse weiter.
         if ($previous) {
             // Ueber welches Angebot verkauft wurde, ausgesprochen statt
             // vorausgesetzt. Am Kassenweg heftet der Katalog es an die Zeile;
@@ -426,28 +429,63 @@ class AdvanceController
                 'step' => $step->node_key,
             ], array_merge($angaben, ['offer_handles' => [$buyHandle => $offer->handle]]), $visit->email);
 
-            if (! $payment) {
-                return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
+            // Ging der Ein-Klick-Weg nicht, ist das **kein Ende, sondern ein
+            // Umweg.**
+            //
+            // Bis 06.09.2026 stand hier ein `withErrors('offer_unavailable')`,
+            // und solange payments nur die Kundenkennung weiterreichte, fiel
+            // das kaum auf: Mollie suchte sich selbst ein gueltiges Mandat und
+            // der Kauf ging durch — mit der falschen Karte, dem Fehler, den
+            // `backlog-payments-mandat-ausdruecklich-belasten` behebt.
+            //
+            // Seit payments das angekuendigte Mandat ausdruecklich benennt,
+            // lehnt der Anbieter ab, wenn es tot ist: abgelaufene Karte,
+            // Ruecklastschrift, Widerruf bei der Bank. Der frueher seltene Fall
+            // ist damit ein normaler geworden — und ein Abweisen an dieser
+            // Stelle waere eine Sackgasse. Die zurueckgeworfene Seite zeigt
+            // denselben Ein-Klick-Knopf, `chargeableFrom()` fragt nicht nach
+            // dem Mandat, und `alreadyTaken()` zaehlt gescheiterte Zeilen
+            // nicht: der Kaeufer koennte beliebig oft klicken und jedes Mal
+            // scheitern.
+            //
+            // Also faellt es durch. Unten steht der Kassenweg, der genau dafuer
+            // da ist: einmal Kartendaten eingeben und kaufen. Ein verlorener
+            // Klick ist besser als ein verlorener Verkauf, und beides ist
+            // besser als eine falsche Abbuchung.
+            //
+            // `$previous` wird verworfen, damit nichts weiter unten wieder auf
+            // die gespeicherte Karte zeigt. Die gescheiterte Zeile bleibt als
+            // Beleg stehen; `alreadyTaken()` laesst sie nicht zaehlen, der
+            // Kassenweg ist also frei.
+            if ($payment) {
+                $this->rememberPending($visit, $step, $payment);
+
+                // A recurring charge is usually accepted now and settled later,
+                // so the payment comes back `pending` more often than not.
+                // Moving on here would be the one thing this whole family is
+                // written against: treating acceptance as payment. The webhook
+                // decides, exactly as on the checkout path —
+                // `AdvanceOnPayment` picks it up.
+                if (! $payment->isPaid()) {
+                    return $this->waiting($funnel, $step);
+                }
+
+                $next = $this->walk->advance($visit, $step, 'accepted', FunnelStepEvent::ACCEPTED, [
+                    'payment_id' => $payment->getKey(),
+                ]);
+
+                FunnelOfferAccepted::dispatch($visit->fresh() ?? $visit, $step, $payment);
+
+                return $this->go($funnel, $next);
             }
 
-            $this->rememberPending($visit, $step, $payment);
-
-            // A recurring charge is usually accepted now and settled later, so
-            // the payment comes back `pending` more often than not. Moving on
-            // here would be the one thing this whole family is written against:
-            // treating acceptance as payment. The webhook decides, exactly as
-            // on the checkout path — `AdvanceOnPayment` picks it up.
-            if (! $payment->isPaid()) {
-                return $this->waiting($funnel, $step);
-            }
-
-            $next = $this->walk->advance($visit, $step, 'accepted', FunnelStepEvent::ACCEPTED, [
-                'payment_id' => $payment->getKey(),
+            // Sonst faellt es durch — siehe der Block darueber. Kein `return`,
+            // keine Fehlermeldung: unten steht der Kassenweg.
+            Log::info('statamic-funnels: der Ein-Klick-Kauf ging nicht, es geht ueber die Kasse weiter.', [
+                'funnel' => $funnel->handle,
+                'step' => $step->node_key,
+                'previous_payment_id' => $previous->getKey(),
             ]);
-
-            FunnelOfferAccepted::dispatch($visit->fresh() ?? $visit, $step, $payment);
-
-            return $this->go($funnel, $next);
         }
 
         // Back into the funnel, not to the site's thank-you page. A buyer who

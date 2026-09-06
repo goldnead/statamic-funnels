@@ -82,9 +82,40 @@ final class SavedCard
             return null;
         }
 
+        // Die Ziffern nur, wenn auch belegt ist, dass GENAU diese Karte
+        // belastet wird.
+        //
+        // `mandate_id` sagt, welches Einzugsrecht die Folgeabbuchung benennt
+        // (statamic-payments, seit 06.09.2026). Steht die Spalte leer, reicht
+        // payments nur die Kundenkennung weiter und der Anbieter waehlt selbst
+        // — dann sind „•••• 9996" eine Behauptung ueber eine Karte, die es
+        // vielleicht nicht wird.
+        //
+        // Betroffen sind vor allem Zeilen aus dem Fenster zwischen dem 31.08.
+        // (seit da gibt es `card_last4`) und dem 06.09. (seit da `mandate_id`).
+        // Klein, aber nicht null.
+        //
+        // Was dann passiert, ist kein Verlust: `saved_card_unnamed` in der
+        // Vorlage sagt weiter, dass ohne neue Karteneingabe abgebucht wird —
+        // nur ohne die Ziffern. Der Ein-Klick bleibt, die Behauptung faellt
+        // weg. Genau der Fall, fuer den die Vorlage ihre dritte Fassung schon
+        // hat.
+        //
+        // **Nur wenn payments die Spalte ueberhaupt kennt.** Dieses Paket laeuft
+        // auch gegen aeltere payments-Fassungen, und dort gibt es weder
+        // `mandate_id` noch das Pinnen. Die Ziffern dann zu verschlucken waere
+        // eine Verschlechterung ohne Gegenwert: die Ankuendigung wuerde
+        // vager, ohne dass die Abbuchung genauer wird. Also: kennt payments
+        // Mandate, muss eines dastehen; kennt es sie nicht, bleibt es beim
+        // alten Verhalten.
+        $kenntMandate = array_key_exists('mandate_id', $previous->getAttributes());
+
+        $belegt = ! $kenntMandate
+            || (is_string($previous->mandate_id) && trim($previous->mandate_id) !== '');
+
         return [
-            'last4' => $previous->card_last4,
-            'label' => $previous->card_label,
+            'last4' => $belegt ? $previous->card_last4 : null,
+            'label' => $belegt ? $previous->card_label : null,
         ];
     }
 

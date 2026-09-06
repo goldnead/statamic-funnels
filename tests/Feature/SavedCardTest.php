@@ -261,6 +261,53 @@ class SavedCardTest extends TestCase
     }
 
     #[Test]
+    public function a_dead_mandate_falls_back_to_the_checkout_instead_of_a_dead_end(): void
+    {
+        $this->funnel();
+        $this->offers();
+
+        $first = $this->paysOnce('erste@example.com');
+        $this->assertNotNull($first->customer_reference);
+
+        $bisher = Payment::count();
+
+        // Das Mandat ist tot: abgelaufene Karte, Ruecklastschrift, Widerruf bei
+        // der Bank. Der Anbieter lehnt ab.
+        //
+        // Bis 06.09.2026 endete der Kauf hier mit einer Fehlermeldung, und der
+        // Kaeufer stand vor demselben Ein-Klick-Knopf, der gerade nicht
+        // funktioniert hatte. Solange payments nur die Kundenkennung
+        // weiterreichte, war das selten; seit es das angekuendigte Mandat
+        // ausdruecklich benennt (backlog-payments-mandat-ausdruecklich-belasten),
+        // ist es der normale Ausgang eines toten Mandats — und damit ein
+        // verlorener Verkauf ohne Ausweg.
+        //
+        // Jetzt faellt es auf die normale Kasse durch: einmal Kartendaten
+        // eingeben und kaufen.
+        $this->gateway->refuseFollowUp = true;
+
+        $this->asVisitor()->get('/f/fruehlingskurs/noch-etwas')->assertOk();
+        $antwort = $this->asVisitor()->post('/f/fruehlingskurs/offer_2/advance', ['accept' => '1', 'confirmed' => '1']);
+
+        $antwort->assertSessionHasNoErrors();
+
+        // Zwei neue Zeilen: die gescheiterte Ein-Klick-Zeile als Beleg, und die
+        // Zahlung des Kassenwegs, die den Kauf traegt.
+        $this->assertSame($bisher + 2, Payment::count());
+
+        $gescheitert = Payment::where('parent_payment_id', $first->id)->first();
+        $this->assertNotNull($gescheitert, 'Die angenommene Bestellung soll als Beleg stehen bleiben.');
+        $this->assertSame(Payment::STATUS_FAILED, $gescheitert->status);
+
+        // Die Zahlung, die den Kauf jetzt traegt, ist eine eigene — kein
+        // Nachfassen auf einem toten Mandat.
+        $neueste = Payment::latest('id')->first();
+        $this->assertNull($neueste->parent_payment_id);
+        $this->assertNotSame(Payment::STATUS_FAILED, $neueste->status);
+        $this->assertSame('erste@example.com', $neueste->email);
+    }
+
+    #[Test]
     public function a_failed_first_payment_announces_nothing(): void
     {
         $this->funnel();
