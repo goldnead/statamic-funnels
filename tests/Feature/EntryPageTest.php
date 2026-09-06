@@ -184,21 +184,42 @@ class EntryPageTest extends TestCase
     #[Test]
     public function the_picker_only_offers_pages_a_visitor_could_be_sent_to(): void
     {
-        $this->entry();
+        $entry = $this->entry();
+        $funnel = $this->funnel(['entry' => $entry->id()]);
 
         // A collection with no route has no URLs, so an entry in it is not a
         // page and offering it in the picker would be a bug shaped like a
-        // feature.
+        // feature. Die Regel steckt jetzt in der `collections`-Einstellung des
+        // Kernfeldtyps statt in einer eigenen Suchroute.
         Collection::make('snippets')->save();
         tap(Entry::make()->collection('snippets')->slug('bruchstueck')->published(true)->data(['title' => 'Bruchstück']))->save();
 
         $user = tap(User::make()->email('studio@example.com')->makeSuper())->save();
 
-        $response = $this->actingAs($user)->getJson(cp_route('utilities.funnels.entries'));
+        $response = $this->actingAs($user)
+            ->withHeaders(['X-Inertia' => 'true'])
+            ->get(cp_route('utilities.funnels.edit', $funnel->id))
+            ->assertOk();
 
-        $labels = collect($response->json('options'))->pluck('label');
+        $fields = $response->json('props.entryField.blueprint.tabs.0.sections.0.fields');
+        $entry = collect($fields)->firstWhere('handle', 'entry');
 
-        $this->assertTrue($labels->contains('Frühlingskurs'));
-        $this->assertFalse($labels->contains('Bruchstück'));
+        // Der Kernfeldtyp, nicht eine nachgebaute Combobox.
+        $this->assertSame('entries', $entry['type']);
+        $this->assertSame('relationship', $entry['component']);
+        $this->assertSame(1, $entry['max_items']);
+
+        $this->assertContains('pages', $entry['collections']);
+        $this->assertNotContains('snippets', $entry['collections']);
+
+        // Der Feldtyp liest die Titel der schon gewaehlten Seite aus den
+        // Metadaten. Kommen die nicht je Knoten mit, zeigt ein gespeicherter
+        // Schritt eine leere Auswahl statt der Seite, auf die er zeigt.
+        $meta = $response->json('props.entryField.meta.entry_1.entry');
+
+        $this->assertSame(
+            ['Frühlingskurs'],
+            collect($meta['data'] ?? [])->pluck('title')->all()
+        );
     }
 }

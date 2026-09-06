@@ -17,8 +17,8 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Statamic\Facades\Action;
+use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
-use Statamic\Facades\Entry as EntryFacade;
 use Statamic\Facades\Form;
 use Statamic\Facades\Site;
 use Statamic\Http\Controllers\CP\CpController;
@@ -32,9 +32,6 @@ use Statamic\Http\Controllers\CP\CpController;
  */
 class FunnelsController extends CpController
 {
-    /** How many entries one picker request returns. */
-    protected const ENTRY_LIMIT = 100;
-
     public function __construct(
         protected StepRegistry $registry,
         protected GraphWriter $writer,
@@ -149,13 +146,11 @@ class FunnelsController extends CpController
                 'value' => $offer->handle,
                 'label' => $offer->name.($offer->amount() ? ' · '.$offer->amount().' '.$offer->currency() : ''),
             ])->all(),
-            // Entries are not sent whole. A site with five thousand pages would
-            // put five thousand rows into the page payload for a field most
-            // steps never use, so the picker searches instead — and gets the
-            // ones already chosen up front, so a saved step shows a title
-            // rather than an id.
-            'entries' => $this->entryOptions(null, $funnel),
-            'entriesUrl' => cp_route('utilities.funnels.entries'),
+            // Die Seitenauswahl: Statamics `entries`-Feldtyp, nicht eine
+            // Combobox mit eigener Suchroute. Eintraege reisen nicht mit —
+            // Suche, Auswahl-Stack und Titel holt der Feldtyp selbst ueber
+            // die Kernrouten, wie in jedem anderen Publish-Formular auch.
+            'entryField' => $this->entryField($funnel),
             'previewUrl' => cp_route('utilities.funnels.preview', $funnel->id),
             // The same device list the Control Panel's own Live Preview offers,
             // read from the same config key. A funnel preview that invented its
@@ -221,70 +216,99 @@ class FunnelsController extends CpController
         ]);
     }
 
-    /** What the entry picker searches. */
-    public function entries(Request $request)
+    /**
+     * Die Seitenauswahl eines Schritts — Statamics eigener `entries`-Feldtyp.
+     *
+     * Adrian am 03.09.2026: „sollte nicht nur eine Combobox sein sondern die
+     * ausfuehrliche Entry-Auswahl, die man in Statamic auch an anderer Stelle
+     * gewohnt ist." Genau die gibt es fertig; nachgebaut wurde vorher eine
+     * Combobox mit eigener Suchroute, die weder Auswahl-Stack noch
+     * Collection-Filter noch Statusanzeige kannte.
+     *
+     * Gebaut wird ein Ein-Feld-Blueprint je Handle, den ein Schritt-Schema als
+     * `entry` deklariert (heute `entry` und `variant_entry`), mit Beschriftung
+     * und Hilfetext aus demselben Schema — der Panel zeigt also weiter die
+     * Worte des Addons, nicht die des Feldtyps.
+     *
+     * `collections` traegt die eine Regel weiter, die der alte Picker
+     * durchsetzte: nur Collections mit Route. Ein Schritt, der auf einen
+     * routenlosen Eintrag zeigt, rendert zwar, ist aber keine Seite.
+     *
+     * Das Metadaten-Paket kommt je Knoten, weil der Feldtyp die Titel der
+     * bereits gewaehlten Eintraege daraus liest. `''` ist der leere Fall: ein
+     * Schritt, den der Editor gerade erst angelegt hat.
+     *
+     * @return array{blueprint: array<string, mixed>, meta: array<string, array<string, mixed>>}
+     */
+    protected function entryField(Funnel $funnel): array
     {
-        $this->authorizeAccess();
+        $blueprint = $this->entryBlueprint();
+        $handles = $blueprint->fields()->all()->keys()->all();
 
-        return response()->json([
-            'options' => $this->entryOptions((string) $request->query('search', '')),
-        ]);
+        $meta = ['' => $blueprint->fields()->preProcess()->meta()->all()];
+
+        foreach ($funnel->steps as $step) {
+            $values = collect($handles)
+                ->mapWithKeys(fn (string $handle) => [$handle => $step->config[$handle] ?? null])
+                ->all();
+
+            $meta[$step->node_key] = $blueprint->fields()->addValues($values)->preProcess()->meta()->all();
+        }
+
+        return ['blueprint' => $blueprint->toPublishArray(), 'meta' => $meta];
     }
 
     /**
-     * Entries as picker options.
+     * Jedes Feld, das irgendein Schritt-Typ als `entry` deklariert, nach Handle.
      *
-     * Only what a visitor could actually be shown: published entries in
-     * collections that have a route. A step pointing at a routeless entry would
-     * render, but nothing about it would be a page, and the picker offering it
-     * is the kind of choice that only shows up as a bug later.
+     * Aus der Registry gelesen statt hier aufgezaehlt: ein Schritt-Typ, der
+     * morgen ein drittes Seitenfeld mitbringt, bekommt die Auswahl ohne
+     * Aenderung an dieser Datei.
      *
-     * @return list<array<string, string>>
+     * @return array<string, array<string, mixed>>
      */
-    protected function entryOptions(?string $search = null, ?Funnel $funnel = null): array
+    protected function entryHandles(): array
+    {
+        return collect($this->registry->all())
+            ->flatMap(fn (string $class) => $class::schema())
+            ->filter(fn ($field) => is_array($field)
+                && ($field['type'] ?? null) === 'entry'
+                && is_string($field['handle'] ?? null))
+            ->keyBy('handle')
+            ->all();
+    }
+
+    protected function entryBlueprint(): \Statamic\Fields\Blueprint
     {
         $collections = Collection::all()
             ->filter(fn ($collection) => $collection->route(Site::default()->handle()) !== null)
             ->map(fn ($collection) => $collection->handle())
-            ->values();
-
-        if ($collections->isEmpty()) {
-            return [];
-        }
-
-        $query = EntryFacade::query()
-            ->whereIn('collection', $collections->all())
-            ->where('published', true);
-
-        if ($search !== null && $search !== '') {
-            $query->where('title', 'like', '%'.$search.'%');
-        }
-
-        $entries = $query->orderBy('title')->limit(self::ENTRY_LIMIT)->get();
-
-        // Whatever the funnel already points at, even if the search or the
-        // limit would have left it out. Otherwise editing an unrelated step
-        // silently blanks a picker that had a value.
-        if ($funnel) {
-            $chosen = $funnel->steps
-                ->map(fn ($step) => $step->config['entry'] ?? null)
-                ->filter(fn ($id) => is_string($id) && $id !== '')
-                ->reject(fn ($id) => $entries->contains(fn ($entry) => $entry->id() === $id))
-                ->map(fn ($id) => EntryFacade::find($id))
-                ->filter();
-
-            $entries = $entries->merge($chosen);
-        }
-
-        return $entries
-            ->map(fn ($entry) => [
-                'value' => (string) $entry->id(),
-                'label' => (string) $entry->get('title', $entry->slug()),
-                'group' => (string) ($entry->collection()->title() ?? $entry->collection()->handle()),
-            ])
-            ->sortBy(fn (array $option) => $option['group'].$option['label'])
             ->values()
             ->all();
+
+        // Ohne eine einzige Collection mit Route gibt es keine Seite, auf die
+        // ein Schritt zeigen koennte — der alte Picker lieferte hier eine leere
+        // Liste. Dem Feldtyp `collections: []` zu geben hiesse „alle", und beim
+        // Vorladen der Spalten wirft er dann `Collection [] not found`. Also
+        // gar kein Feld statt eines kaputten.
+        if ($collections === []) {
+            return Blueprint::makeFromFields([]);
+        }
+
+        return Blueprint::makeFromFields(
+            collect($this->entryHandles())
+                ->map(fn (array $field, string $handle) => array_filter([
+                    'type' => 'entries',
+                    'display' => $field['label'] ?? $handle,
+                    'instructions' => $field['instructions'] ?? null,
+                    'collections' => $collections,
+                    'max_items' => 1,
+                    // Eine Seite entsteht in ihrer Collection, nicht in einem
+                    // Seitenpanel des Funnel-Editors.
+                    'create' => false,
+                ], fn ($value) => $value !== null))
+                ->all()
+        );
     }
 
     public function update(Request $request, Funnel $funnel)
@@ -388,7 +412,6 @@ class FunnelsController extends CpController
             ],
             'fields' => [
                 'label' => __('statamic-funnels::nodes.field_label'),
-                'entryPlaceholder' => __('statamic-funnels::nodes.field_entry_placeholder'),
             ],
             // The words for the deadline's three kinds. Handles in a config
             // panel read as `rolling`, which is not a word anybody chose.

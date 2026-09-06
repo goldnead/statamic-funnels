@@ -70,7 +70,6 @@ return [
     'output_declined' => 'declined',
     'output_submitted' => 'submitted',
     'field_label' => 'Label',
-    'field_entry_placeholder' => 'Search pages…',
     'field_entry' => 'Page',
     'field_entry_help' => 'A Statamic entry. Its own template and its own content, built where you build every other page. Beats the fields below.',
     'field_template' => 'Template',

@@ -227,7 +227,6 @@ class ServiceProvider extends AddonServiceProvider
             ->docsUrl('https://github.com/goldnead/statamic-funnels#readme')
             ->routes(function ($router) {
                 $router->post('/', [FunnelsController::class, 'store'])->name('store');
-                $router->get('entries', [FunnelsController::class, 'entries'])->name('entries');
                 // What the listing's row menu and its bulk toolbar post to.
                 // Above `{funnel}` on purpose, so `actions` is never read as a
                 // funnel id.

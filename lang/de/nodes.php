@@ -70,7 +70,6 @@ return [
     'output_declined' => 'abgelehnt',
     'output_submitted' => 'abgeschickt',
     'field_label' => 'Bezeichnung',
-    'field_entry_placeholder' => 'Seiten suchen…',
     'field_entry' => 'Seite',
     'field_entry_help' => 'Ein Statamic-Entry. Eigene Vorlage, eigener Inhalt, gebaut wo du jede andere Seite baust. Schlägt die Felder darunter.',
     'field_template' => 'Vorlage',

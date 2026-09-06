@@ -1,7 +1,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { Head, router } from '@statamic/cms/inertia';
-import { Header, Button, Badge, Field, Input, Select, Textarea, Switch, Heading, Combobox } from '@statamic/cms/ui';
+import {
+    Header, Button, Badge, Field, Input, Select, Textarea, Switch, Heading,
+    PublishContainer, PublishFields, PublishFieldsProvider,
+} from '@statamic/cms/ui';
 import { Canvas, NodeLibrary, setNodeOutputSpecs, useHistory } from '@goldnead/flow-canvas';
 import { nodeIcon, withLabels } from '../../support/nodeKinds.js';
 import PreviewPanel from '../../components/PreviewPanel.vue';
@@ -22,8 +25,9 @@ const props = defineProps({
     publicUrl: { type: String, required: true },
     forms: { type: Array, default: () => [] },
     offers: { type: Array, default: () => [] },
-    entries: { type: Array, default: () => [] },
-    entriesUrl: { type: String, default: '' },
+    // `{ blueprint, meta }` fuer Statamics `entries`-Feldtyp. `meta` je
+    // Knotenschluessel, `''` fuer einen Schritt, den es beim Laden noch nicht gab.
+    entryField: { type: Object, default: null },
     previewUrl: { type: String, default: '' },
     devices: { type: Array, default: () => [] },
     stats: { type: Object, default: () => ({}) },
@@ -434,38 +438,66 @@ const thumbnailHint = computed(
 /** The two versions of the selected step, when it is running a test. */
 const selectedSplit = computed(() => (selectedKey.value ? (props.splits?.[selectedKey.value] ?? null) : null));
 
-// The entry picker searches the server rather than filtering a list that was
-// sent with the page. A site with thousands of pages should not pay for them in
-// every editor load, and `ignoreFilter` is what stops the Combobox from also
-// filtering the answer it just received.
-const entryOptions = ref([...props.entries]);
-let entrySearchTimer = null;
+/**
+ * Die Seitenauswahl: Statamics eigener `entries`-Feldtyp, gefahren durch einen
+ * `PublishContainer` — derselbe Weg, den die Kampagnen-Maske im Marketing-Addon
+ * schon nimmt, und der einzige, auf dem ein Kernfeldtyp ausserhalb eines
+ * Publish-Formulars seinen Kontext bekommt.
+ *
+ * Der Graph bleibt unveraendert: `config.entry` ist weiter eine Eintrags-ID als
+ * Zeichenkette. Der Feldtyp arbeitet mit einer Liste (`max_items: 1` heisst ein
+ * Element, nicht kein Array), also wird an genau dieser Naht umgepackt — und
+ * nirgends sonst. Speichern, Vorschau und Auslieferung lesen weiter, was sie
+ * immer gelesen haben.
+ */
+const entryBlueprintFields = computed(
+    () => props.entryField?.blueprint?.tabs?.[0]?.sections?.[0]?.fields ?? [],
+);
 
-function searchEntries(query) {
-    if (!props.entriesUrl) return;
+const entryHandles = computed(() => entryBlueprintFields.value.map((field) => field.handle));
 
-    clearTimeout(entrySearchTimer);
-    entrySearchTimer = setTimeout(async () => {
-        try {
-            const url = `${props.entriesUrl}?search=${encodeURIComponent(query ?? '')}`;
-            const response = await fetch(url, { headers: { Accept: 'application/json' } });
-            if (!response.ok) return;
-            const body = await response.json();
-            // Keep whatever is currently chosen in the list. Dropping it would
-            // blank the field's own label while the menu is open.
-            const chosen = entryOptions.value.filter(
-                (option) => option.value === selected.value?.config?.entry,
-            );
-            const fresh = body.options ?? [];
-            entryOptions.value = [
-                ...fresh,
-                ...chosen.filter((c) => !fresh.some((f) => f.value === c.value)),
-            ];
-        } catch {
-            // A failed search leaves the previous options standing, which is
-            // more useful than an empty menu.
+/** Die Metadaten des gewaehlten Knotens; fuer einen frisch angelegten der leere Satz. */
+const entryMeta = computed(
+    () => props.entryField?.meta?.[selectedKey.value] ?? props.entryField?.meta?.[''] ?? {},
+);
+
+const entryValues = ref({});
+
+function readEntryValues() {
+    const config = selected.value?.config ?? {};
+
+    return Object.fromEntries(
+        entryHandles.value.map((handle) => [handle, config[handle] ? [config[handle]] : []]),
+    );
+}
+
+// Beim Knotenwechsel neu aus dem Graphen lesen. Der Container wird ueber `:key`
+// ohnehin neu aufgebaut, damit der Feldtyp mit den Metadaten des neuen Knotens
+// startet statt mit denen des vorigen.
+watch(selectedKey, () => { entryValues.value = readEntryValues(); }, { immediate: true });
+
+function applyEntryValues(next) {
+    entryValues.value = next;
+
+    if (!selected.value) return;
+
+    let changed = false;
+
+    for (const handle of entryHandles.value) {
+        const value = (next?.[handle] ?? [])[0] ?? null;
+
+        if (selected.value.config[handle] !== value) {
+            selected.value.config[handle] = value;
+            changed = true;
         }
-    }, 250);
+    }
+
+    if (changed) record(`entry:${selected.value.node_key}`);
+}
+
+/** Nur das eine Feld zeichnen, an der Stelle, an der das Schritt-Schema es fuehrt. */
+function entryFieldsFor(handle) {
+    return entryBlueprintFields.value.filter((field) => field.handle === handle);
 }
 </script>
 
@@ -592,36 +624,47 @@ function searchEntries(query) {
                     </div>
                 </div>
 
-                <Field
-                    v-for="field in visibleFields"
-                    :key="field.handle"
-                    :label="field.label"
-                    :instructions="field.instructions"
-                    class="mb-4"
+                <!-- Der Container haelt den Zustand fuer die Seitenfelder. Er
+                     umschliesst die ganze Schleife, weil ein Feldtyp seinen
+                     Kontext nur von einem Vorfahren bekommt; gezeichnet wird
+                     trotzdem nur das eine Feld, an seiner Stelle im Schema.
+                     `:key` baut ihn beim Knotenwechsel neu auf, sonst zeigte er
+                     die Auswahl des vorigen Schritts weiter. -->
+                <PublishContainer
+                    :key="`entries-${selected.node_key}`"
+                    name="funnel-step-entries"
+                    :blueprint="entryField?.blueprint"
+                    :meta="entryMeta"
+                    :model-value="entryValues"
+                    :track-dirty-state="false"
+                    @update:model-value="applyEntryValues"
                 >
-                    <Combobox
-                        v-if="field.type === 'entry'"
-                        v-model="selected.config[field.handle]"
-                        :options="entryOptions"
-                        :placeholder="t('fields', 'entryPlaceholder', 'Search pages…')"
-                        searchable
-                        clearable
-                        ignore-filter
-                        @search="searchEntries"
-                        @update:model-value="record(`entry:${selected.node_key}`)"
-                    />
-                    <Select
-                        v-else-if="field.type === 'form' || field.type === 'offer' || field.type === 'select'"
-                        v-model="selected.config[field.handle]"
-                        :options="optionsFor(field)"
-                    />
-                    <Textarea
-                        v-else-if="field.type === 'textarea'"
-                        v-model="selected.config[field.handle]"
-                        :rows="4"
-                    />
-                    <Input v-else v-model="selected.config[field.handle]" />
-                </Field>
+                    <template v-for="field in visibleFields" :key="field.handle">
+                        <div v-if="field.type === 'entry'" class="mb-4">
+                            <PublishFieldsProvider :fields="entryFieldsFor(field.handle)">
+                                <PublishFields />
+                            </PublishFieldsProvider>
+                        </div>
+                        <Field
+                            v-else
+                            :label="field.label"
+                            :instructions="field.instructions"
+                            class="mb-4"
+                        >
+                            <Select
+                                v-if="field.type === 'form' || field.type === 'offer' || field.type === 'select'"
+                                v-model="selected.config[field.handle]"
+                                :options="optionsFor(field)"
+                            />
+                            <Textarea
+                                v-else-if="field.type === 'textarea'"
+                                v-model="selected.config[field.handle]"
+                                :rows="4"
+                            />
+                            <Input v-else v-model="selected.config[field.handle]" />
+                        </Field>
+                    </template>
+                </PublishContainer>
 
                 <!-- The ways out, and what to hang on each. The canvas's "+" only
                      exists on an output with no edge yet; this is how a step that
