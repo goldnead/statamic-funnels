@@ -2,6 +2,7 @@
 
 namespace Goldnead\StatamicFunnels;
 
+use Goldnead\BrandContext\Settings\SettingsRegistry;
 use Goldnead\StatamicFunnels\Contracts\ThumbnailRenderer;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelActionsController;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelsController;
@@ -12,11 +13,13 @@ use Goldnead\StatamicFunnels\Integrations\Insights\Visits;
 use Goldnead\StatamicFunnels\Integrations\LeadHubBridge;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
+use Goldnead\StatamicFunnels\Support\Settings;
 use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
 use Goldnead\StatamicPayments\Cp\SuiteNav;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Support\Facades\Log;
 use Statamic\Facades\CP\Nav;
+use Statamic\Facades\Permission;
 use Statamic\Facades\Utility;
 use Statamic\Providers\AddonServiceProvider;
 use Throwable;
@@ -54,13 +57,30 @@ class ServiceProvider extends AddonServiceProvider
         $this->app->singleton(ThumbnailRenderer::class, fn () => Thumbnails::detectRenderer());
     }
 
+    /**
+     * In `boot()`, nicht in `bootAddon()`, und das ist keine Stilfrage.
+     *
+     * brand-context legt die gespeicherten Werte aus einem `app->booted()`
+     * auf die Config, absichtlich erst dann, damit jedes Provider-`boot()`
+     * seine Anmeldung hinter sich hat. `bootAddon()` läuft selbst aus einem
+     * `app->booted()` (Statamics AddonServiceProvider), und welches der beiden
+     * zuerst feuert, hängt an der Ladereihenfolge der Pakete: eine Anmeldung
+     * von dort wirkte auf manchen Installationen und auf anderen nicht.
+     */
+    public function boot(): void
+    {
+        parent::boot();
+
+        app(SettingsRegistry::class)->register(Settings::class);
+    }
+
     public function bootAddon()
     {
         $this->loadTranslationsFrom(__DIR__.'/../lang', 'statamic-funnels');
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'statamic-funnels');
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
 
-        $this->bootUtility()->bootCookie();
+        $this->bootUtility()->bootCookie()->bootPermissions();
 
         $this->registerInsightsMetrics();
 
@@ -173,6 +193,26 @@ class ServiceProvider extends AddonServiceProvider
     protected function bootCookie(): self
     {
         EncryptCookies::except(FunnelWalk::COOKIE);
+
+        return $this;
+    }
+
+    /**
+     * Das Recht, das den Abschnitt dieses Addons auf der geteilten
+     * Einstellungsseite freigibt.
+     *
+     * Neu vergeben, nicht umbenannt: dieses Addon hatte bisher kein eigenes
+     * Recht. Ohne die Registrierung hier ließe es sich in keiner
+     * Benutzergruppe vergeben und nur ein Super-Admin käme an die Seite.
+     */
+    protected function bootPermissions(): self
+    {
+        Permission::extend(function (): void {
+            Permission::group('statamic-funnels', __('statamic-funnels::settings.permission_group'), function (): void {
+                Permission::register('manage funnels settings')
+                    ->label(__('statamic-funnels::settings.permission_manage'));
+            });
+        });
 
         return $this;
     }

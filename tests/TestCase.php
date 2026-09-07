@@ -17,9 +17,15 @@ abstract class TestCase extends AddonTestCase
 
     protected FakeGateway $gateway;
 
+    /**
+     * brand-context stellt die Einstellungs-Schicht und muss vor diesem Addon
+     * booten — sonst gibt es beim Anmelden noch keine Registry, an die man
+     * sich anmelden könnte.
+     */
     protected function getPackageProviders($app)
     {
         return array_merge(parent::getPackageProviders($app), [
+            \Goldnead\BrandContext\ServiceProvider::class,
             \Goldnead\StatamicPayments\ServiceProvider::class,
             \Goldnead\StatamicOffers\ServiceProvider::class,
         ]);
@@ -59,6 +65,10 @@ abstract class TestCase extends AddonTestCase
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadMigrationsFrom(__DIR__.'/../vendor/goldnead/statamic-payments/database/migrations');
         $this->loadMigrationsFrom(__DIR__.'/../vendor/goldnead/statamic-offers/database/migrations');
+        // Die Marken-Tabelle. Ohne sie kann die Einstellungs-Schicht keine
+        // Marke aufloesen und weigert sich zu speichern — was richtig ist,
+        // aber hier wie ein Fehler dieses Addons aussaehe.
+        $this->loadMigrationsFrom(__DIR__.'/../vendor/goldnead/statamic-brand-context/database/migrations');
 
         // A fake provider, because a test that needs the network is a test that
         // gets skipped.
