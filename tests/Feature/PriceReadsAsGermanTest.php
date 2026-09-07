@@ -40,10 +40,13 @@ class PriceReadsAsGermanTest extends TestCase
     #[Test]
     public function the_offer_page_writes_the_price_the_way_the_language_does(): void
     {
-        if (! class_exists(\NumberFormatter::class)) {
-            $this->markTestSkipped('ext-intl is what knows how a language writes a number.');
-        }
-
+        // Bis 07.09.2026 stand hier ein `markTestSkipped`, wenn `ext-intl`
+        // fehlte. Genau die Umgebung, die der Skip uebersprang, laeuft auf
+        // adriangoldner.com: im Container ist die Erweiterung nicht
+        // installiert, und in der Kasse stand „520.00 €". Der Rueckfall in
+        // `Offer::localise()` kennt die gelaeufigen Schreibweisen inzwischen
+        // selbst, also wird hier nichts mehr uebersprungen — der Test muss
+        // gerade dort greifen, wo er bisher schwieg.
         $this->funnelMitPreis(124950);
         $this->app->setLocale('de');
 
@@ -58,10 +61,6 @@ class PriceReadsAsGermanTest extends TestCase
     #[Test]
     public function the_same_page_in_english_writes_it_the_english_way(): void
     {
-        if (! class_exists(\NumberFormatter::class)) {
-            $this->markTestSkipped('ext-intl is what knows how a language writes a number.');
-        }
-
         $this->funnelMitPreis(124950);
         $this->app->setLocale('en');
 

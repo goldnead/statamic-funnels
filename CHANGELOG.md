@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.13.0 — 2026-09-07
+
+**Die Kassenseite erfährt jetzt, in welchem Rhythmus gezahlt wird.** 1.12.0 hat den Ratenkauf
+richtig verbucht — aber die Seite darüber wusste weiterhin nichts davon, und eine Vorlage kann
+nur schreiben, was sie erfährt. Auf adriangoldner.com stand deshalb fest verdrahtet
+**„Einmalig · kein Abo"** über einem Vertrag über drei Raten.
+
+Das ist keine Beschriftung, sondern eine Pflichtangabe: § 312j Abs. 2 BGB will Gesamtpreis und
+Laufzeit unmittelbar über dem Bestellknopf. Ein Käufer, der „520 €, einmalig" liest und 1.560 €
+schuldet, hat nicht gelesen, was er kauft.
+
+Der Schritt gibt der Vorlage jetzt `offer:plan` heraus, oder `null`:
+
+| Schlüssel | Bedeutung |
+|---|---|
+| `interval` | wie der Anbieter ihn schreibt, „1 month" |
+| `interval_label` | in Worten, „monatlich" — übersetzt, sonst unverändert durchgereicht |
+| `times` | wie viele Zahlungen insgesamt, `null` bei einem Abo ohne Ende |
+| `times_remaining` | wie viele nach der heutigen noch kommen |
+| `total` / `total_local` | der Gesamtpreis, maschinenlesbar und für Menschen |
+| `trial_days` | Testphase, wenn eine läuft |
+
+Gefragt wird der **Katalog**, nicht das Angebot: das ist die Stelle, an der die Zahlung ihren
+Preis holt, und eine Seite, die einen anderen Rhythmus nennt als den, der abgebucht wird, wäre
+genau der Fehler, den diese Angabe verhindern soll. Bei einem Abo ohne Ende steht keine
+Gesamtsumme dabei — sie steht erst fest, wenn gekündigt wird.
+
+### Der Test, der sich selbst übersprang
+
+`PriceReadsAsGermanTest` sprang ab, wenn `ext-intl` fehlte. Genau diese Umgebung läuft auf
+adriangoldner.com, und dort stand in der Kasse „520.00 €". Der Rückfall in
+`statamic-offers` 1.8.2 kennt die geläufigen Schreibweisen inzwischen selbst, also wird hier
+nichts mehr übersprungen: der Test muss gerade dort greifen, wo er bisher schwieg.
+
 ## 1.12.0 — 2026-09-07
 
 **Ein Ratenangebot in der Kasse wurde einmal abgebucht und galt als bezahlt.** Der Fehler sah

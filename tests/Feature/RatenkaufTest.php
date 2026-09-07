@@ -2,7 +2,9 @@
 
 namespace Goldnead\StatamicFunnels\Tests\Feature;
 
+use Goldnead\StatamicFunnels\Http\Controllers\Web\FunnelController;
 use Goldnead\StatamicFunnels\Models\Funnel;
+use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Tests\TestCase;
 use Goldnead\StatamicOffers\Models\Offer;
@@ -201,6 +203,57 @@ class RatenkaufTest extends TestCase
         // belastet, Vereinbarung keine.
         $this->assertNull($zweite->parent_payment_id);
         $this->assertIsArray($zweite->meta['subscription_intent'] ?? null);
+    }
+
+    /**
+     * Die Kassenseite muss den Rhythmus nennen, nicht nur den heutigen Betrag.
+     *
+     * § 312j Abs. 2 BGB will Gesamtpreis und Laufzeit unmittelbar ueber dem
+     * Bestellknopf. Ohne diesen Schluessel kann eine Vorlage nur raten — und
+     * die auf adriangoldner.com riet falsch: sie schrieb „Einmalig · kein Abo"
+     * ueber einen Vertrag ueber drei Raten, weil sie nichts Besseres wusste.
+     */
+    #[Test]
+    public function die_kassenseite_bekommt_den_rhythmus_mit(): void
+    {
+        $this->funnel();
+        $this->app->setLocale('de');
+
+        $raten = $this->angebotsdaten('kasse_raten');
+
+        $this->assertIsArray($raten['plan'] ?? null, 'die Seite erfaehrt nichts vom Rhythmus');
+        $this->assertSame('1 month', $raten['plan']['interval']);
+        $this->assertSame('monatlich', $raten['plan']['interval_label']);
+        $this->assertSame(3, $raten['plan']['times']);
+        $this->assertSame(2, $raten['plan']['times_remaining']);
+
+        // Der Gesamtpreis, nicht die Rate: 3 x 35 €.
+        $this->assertSame('105.00', $raten['plan']['total']);
+        $this->assertSame('105,00', $raten['plan']['total_local']);
+    }
+
+    #[Test]
+    public function ein_angebot_ohne_rhythmus_meldet_keinen(): void
+    {
+        $this->funnel();
+
+        // Null, nicht ein leeres Feld: eine Vorlage fragt `{{ if plan }}`, und
+        // ein leeres Array waere dort wahr.
+        $this->assertNull($this->angebotsdaten('kasse')['plan']);
+    }
+
+    /**
+     * Was die Vorlage ueber das Angebot dieses Schritts erfaehrt.
+     *
+     * @return array<string, mixed>
+     */
+    protected function angebotsdaten(string $nodeKey): array
+    {
+        $steuerung = app(FunnelController::class);
+        $methode = new \ReflectionMethod($steuerung, 'offerFor');
+        $methode->setAccessible(true);
+
+        return $methode->invoke($steuerung, FunnelStep::where('node_key', $nodeKey)->firstOrFail());
     }
 
     #[Test]

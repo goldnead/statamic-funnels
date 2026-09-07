@@ -47,6 +47,17 @@ return [
     'saved_card_digits' => 'Wird ohne erneute Karteneingabe von deiner Karte •••• :last4 abgebucht.',
     'saved_card_unnamed' => 'Wird ohne erneute Karteneingabe von dem Zahlungsmittel abgebucht, mit dem du eben bezahlt hast.',
     'offer_unavailable' => 'Dieses Angebot ist gerade nicht verfügbar.',
+
+    // Der Takt einer Ratenzahlung oder eines Abos, in Worten. Steht auf der
+    // Kassenseite über dem Bestellknopf und ist dort eine Pflichtangabe
+    // (§ 312j Abs. 2 BGB), keine Beschriftung. Was hier fehlt, geht in der
+    // Schreibweise des Anbieters durch („1 month") — hässlich, aber nie falsch.
+    'interval_1 week' => 'wöchentlich',
+    'interval_1 month' => 'monatlich',
+    'interval_3 months' => 'vierteljährlich',
+    'interval_6 months' => 'halbjährlich',
+    'interval_12 months' => 'jährlich',
+    'interval_1 year' => 'jährlich',
     // Der zurueckgeschickte Wortlaut passt nicht zum geltenden: die Seite ist
     // aelter als der Text, oder jemand hat am Formular gedreht.
     'consent_version' => 'Fassung :version',

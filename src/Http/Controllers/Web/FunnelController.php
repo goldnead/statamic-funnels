@@ -18,6 +18,8 @@ use Goldnead\StatamicFunnels\Support\PreviewToken;
 use Goldnead\StatamicFunnels\Support\SavedCard;
 use Goldnead\StatamicFunnels\Support\Split;
 use Goldnead\StatamicOffers\Models\Offer;
+use Goldnead\StatamicPayments\Support\Catalogue;
+use Goldnead\StatamicPayments\Support\Subscriptions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Statamic\Contracts\Entries\Entry;
@@ -616,6 +618,77 @@ class FunnelController
             ], $offer->bumpOffers()),
             // Whether the page should show a field for a code at all.
             'coupons' => (bool) config('statamic-funnels.coupons', true),
+            // **Der Zahlungsrhythmus, wenn das Angebot einen fuehrt.**
+            //
+            // Nicht Schmuck, sondern Pflichtangabe: § 312j Abs. 2 BGB will den
+            // Gesamtpreis und die Laufzeit unmittelbar ueber dem Bestellknopf.
+            // Ohne diesen Schluessel kann eine Vorlage nur raten, und die
+            // Vorlage auf adriangoldner.com riet falsch — sie schrieb
+            // „Einmalig · kein Abo" ueber einen Vertrag ueber drei Raten.
+            'plan' => $this->planFor($prefix.$offer->handle, $offer->currency()),
         ];
+    }
+
+    /**
+     * Was die Kassenseite ueber den Rhythmus sagen muss, oder null.
+     *
+     * Gefragt wird der **Katalog**, nicht das Angebot. Beide antworten heute
+     * dasselbe, aber der Katalog ist die Stelle, an der die Zahlung ihren Preis
+     * holt — und eine Seite, die einen anderen Rhythmus nennt als den, der
+     * abgebucht wird, ist genau der Fehler, den diese Angabe verhindern soll.
+     *
+     * Bei einer festen Anzahl steht die Gesamtsumme dabei. Bei einem Abo ohne
+     * Ende nicht: sie steht erst fest, wenn gekuendigt wird, und eine erfundene
+     * waere eine Preisangabe, die nicht stimmt.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function planFor(string $handle, ?string $currency): ?array
+    {
+        if (! class_exists(Subscriptions::class)) {
+            return null;
+        }
+
+        $plan = app(Subscriptions::class)->planFor($handle);
+
+        if (! $plan) {
+            return null;
+        }
+
+        $rate = app(Catalogue::class)->find($handle)['amount_cent'] ?? null;
+        $times = $plan['times'];
+        $gesamt = is_int($rate) && is_int($times) ? $rate * $times : null;
+
+        return [
+            'interval' => $plan['interval'],
+            'interval_label' => self::intervalLabel($plan['interval']),
+            'times' => $times,
+            // Wie viele Einzuege nach dem heutigen noch kommen. Ausgerechnet
+            // hier und nicht in der Vorlage: „Danach 2 x 520 €" ist eine
+            // Preisangabe, und Rechnen gehoert nicht in eine Seite, die kein
+            // Test anfasst.
+            'times_remaining' => is_int($times) ? max(0, $times - 1) : null,
+            'trial_days' => $plan['trial_days'] ?: null,
+            'total' => $gesamt === null ? null : number_format($gesamt / 100, 2, '.', ''),
+            'total_local' => Offer::localise($gesamt),
+            'currency' => $currency,
+        ];
+    }
+
+    /**
+     * Der Rhythmus in Worten, oder unveraendert, wenn es dafuer keine gibt.
+     *
+     * Mollie nimmt „1 month", „3 months", „1 year" und einiges dazwischen. Fuer
+     * die gelaeufigen steht eine Uebersetzung bereit; alles andere geht so
+     * durch, wie der Anbieter es schreibt. Haesslicher als eine erfundene
+     * Formulierung, und dafuer nie falsch — was hier steht, ist eine
+     * Preisangabe.
+     */
+    protected static function intervalLabel(string $interval): string
+    {
+        $schluessel = 'statamic-funnels::messages.interval_'.trim($interval);
+        $wort = __($schluessel);
+
+        return is_string($wort) && $wort !== $schluessel ? $wort : trim($interval);
     }
 }

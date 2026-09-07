@@ -47,6 +47,15 @@ return [
     'saved_card_digits' => 'Charged to your card •••• :last4, without entering card details again.',
     'saved_card_unnamed' => 'Charged to the payment method you just used, without entering card details again.',
     'offer_unavailable' => 'This offer is not available right now.',
+
+    // The rhythm of an instalment plan or subscription, in words. Stands above
+    // the order button, where it is a required statement rather than a label.
+    'interval_1 week' => 'weekly',
+    'interval_1 month' => 'monthly',
+    'interval_3 months' => 'quarterly',
+    'interval_6 months' => 'twice a year',
+    'interval_12 months' => 'yearly',
+    'interval_1 year' => 'yearly',
     // The wording sent back does not match the one in force: the page is
     // older than the text, or somebody edited the form.
     'consent_version' => 'Version :version',
