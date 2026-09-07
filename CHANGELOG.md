@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.12.0 — 2026-09-07
+
+**Ein Ratenangebot in der Kasse wurde einmal abgebucht und galt als bezahlt.** Der Fehler sah
+aus wie ein Verkauf, und das ist die schlimmste Form: bei „3 × 520 €" flossen 520 €, der Zugang
+wurde vollständig erteilt, und die beiden fehlenden Raten tauchten nirgends auf. Keine
+Fehlermeldung, keine offene Forderung, kein Log-Eintrag.
+
+Die Ursache lag nicht im Katalog. `statamic-offers` 1.8.0 gibt den Plan eines Angebots korrekt
+heraus; die Kasse fragte ihn nur nie. `AdvanceController::offer()` rief `Checkout::start()`, und
+das kennt keine Zahlungsrhythmen — die Absicht, aus der der Webhook später eine Vereinbarung
+baut, kann eine aufrufende Strecke auch nicht selbst anheften (`PaymentDetails::RESERVED_META`).
+
+Trägt das Angebot ein `interval`, geht der Kauf jetzt über `Subscriptions::start()` (neu in
+payments 1.20.0: nimmt einen Korb, nicht nur einen Handle). Der Korb fährt mit; die
+Folgeeinzüge belasten nur den Betrag des Angebots, ein Bump daneben ist damit einmal gekauft
+und nicht jede Rate wieder.
+
+Zwei Ränder gehören dazu:
+
+- **Der Ein-Klick-Weg über die gespeicherte Karte gilt für Raten nicht.** `FollowUp::accept()`
+  belastet einmal und legt keine Vereinbarung an — es wäre derselbe stille Fehler noch einmal,
+  eine Methode weiter oben. Der Käufer gibt seine Daten hier ein weiteres Mal ein; das ist der
+  Preis dafür, dass die Vereinbarung wirklich zustande kommt.
+- **Kann der Betrieb keine Vereinbarungen** (kein abo-fähiger Anbieter, oder Mandate
+  ausgeschaltet), wird die Ratenoption abgelehnt statt einmal abgebucht. Wer „3 × 520 €"
+  gelesen hat und 520 € einmal bezahlt, hat nicht dasselbe gekauft.
+
+### Das Test-Double konnte weniger als der Anbieter
+
+Zweimal dieselbe Geschichte, beide hier behoben. `Tests\Support\FakeGateway` war nur ein
+`FollowUpGateway` — `Subscriptions::available()` gab damit false, und der ganze Ratenzweig war
+aus keinem Test dieses Pakets erreichbar, während Mollie ihn im Betrieb geht. Und `markPaid()`
+gab kein Mandat zurück, obwohl Mollie bei einer ersten Zahlung eines anlegt; seit payments 1.19
+nennt `SavedCard` die Kartenziffern nur, wenn eines auf der Zeile steht.
+
+### Fassungsgrenzen nachgezogen
+
+`statamic-offers` von `^1.2` auf `^1.8`, `statamic-payments` von `^1.17.1` auf `^1.20`. Die
+alte Grenze war nicht nur zu niedrig, sie verfälschte die Tests: `CheckoutOrderTest` prüfte
+gegen ein vendortes offers 1.2.0 und behauptete, ein Angebot ohne eigene Belehrung zeige keine.
+Seit offers 1.6.0 führt die Konfiguration eine gesetzliche Vorgabe-Belehrung, und auf
+adriangoldner.com steht sie seit Wochen in der Kasse. Der Test misst jetzt die Auslieferung.
+**An der Reihenfolge über dem Bestellknopf ändert sich nichts** — die Wache dafür steht
+unverändert.
+
+Dazu ein Ignore-Eintrag in `phpstan.neon` entfernt, dessen Fund es seit „Seitenauswahl eines
+Schritts ist Statamics Entries-Feldtyp" nicht mehr gibt.
+
 ## 1.11.0 — 2026-09-05
 
 ### Die Funnel-Übersicht ist eine Statamic-Tabelle (F24)

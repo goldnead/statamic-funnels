@@ -22,6 +22,7 @@ use Goldnead\StatamicPayments\Models\Payment;
 use Goldnead\StatamicPayments\Support\Checkout;
 use Goldnead\StatamicPayments\Support\FollowUp;
 use Goldnead\StatamicPayments\Support\PaymentDetails;
+use Goldnead\StatamicPayments\Support\Subscriptions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -42,6 +43,7 @@ class AdvanceController
         protected Checkout $checkout,
         protected FollowUp $followUp,
         protected SavedCard $savedCard,
+        protected Subscriptions $subscriptions,
     ) {}
 
     public function __invoke(Request $request, string $funnel, string $nodeKey)
@@ -387,6 +389,33 @@ class AdvanceController
         $prefix = (string) config('statamic-offers.handle_prefix', 'offer:');
         $buyHandle = $prefix.$offer->handle;
 
+        // **Traegt das Angebot einen Zahlungsrhythmus, ist dieser Schritt kein
+        // Betrag, sondern der Beginn einer Vereinbarung.**
+        //
+        // Bis hier stand nur `Checkout::start()`, und das kennt keine Plaene.
+        // Ein Angebot mit `interval` (statamic-offers 1.8.0) wurde damit genau
+        // einmal abgebucht — bei „3 x 520 Euro" flossen 520 Euro, der Zugang
+        // wurde vollstaendig freigeschaltet, und die beiden fehlenden Raten
+        // tauchten nirgends auf: kein Fehler, keine Meldung, keine offene
+        // Forderung. Der Katalog gab den Plan seit 1.8.0 korrekt heraus, nur
+        // fragte ihn auf diesem Weg niemand.
+        $plan = $this->subscriptions->planFor($buyHandle);
+
+        // Kann dieser Betrieb ueberhaupt keine Vereinbarungen (kein
+        // Abo-faehiger Anbieter, oder Mandate ausgeschaltet), dann ist ein
+        // Ratenangebot hier nicht kaufbar — und das wird gesagt, statt es als
+        // Einmalzahlung durchzuwinken. Ein Kaeufer, der „3 x 520" gelesen hat
+        // und 520 einmal bezahlt, hat nicht dasselbe gekauft.
+        if ($plan && ! $this->subscriptions->canStart()) {
+            Log::error('statamic-funnels: ein Angebot mit Zahlungsrhythmus wurde angeboten, aber dieser Betrieb kann keine Vereinbarungen beginnen.', [
+                'funnel' => $funnel->handle,
+                'step' => $step->node_key,
+                'offer' => $offer->handle,
+            ]);
+
+            return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
+        }
+
         // Already paid once in this walk, by this same person? Then this is a
         // follow-up, charged against what the first payment left behind, and
         // the buyer types nothing. Otherwise it is a first checkout and they go
@@ -418,7 +447,16 @@ class AdvanceController
         // Ob der Ein-Klick-Weg genommen wird, entscheidet sich hier — und er
         // ist eine Abkuerzung, kein Ausgang. Scheitert er, geht es unten ueber
         // die normale Kasse weiter.
-        if ($previous) {
+        //
+        // **Fuer ein Angebot mit Rhythmus gibt es diese Abkuerzung nicht.**
+        // `FollowUp::accept()` belastet die hinterlegte Zahlungsart einmal; es
+        // legt keine Vereinbarung an, und es kann es auch nicht — dazu gehoert
+        // ein `sequenceType: first` an den Anbieter, und genau das setzt nur
+        // die Kasse. Ein Ein-Klick-Kauf auf einer Ratenoption waere also wieder
+        // die eine stille Abbuchung statt drei. Der Kaeufer gibt seine Daten
+        // hier ein weiteres Mal ein; das ist der Preis dafuer, dass die
+        // Vereinbarung wirklich zustande kommt.
+        if ($previous && ! $plan) {
             // Ueber welches Angebot verkauft wurde, ausgesprochen statt
             // vorausgesetzt. Am Kassenweg heftet der Katalog es an die Zeile;
             // beim Ein-Klick-Weg blieb `payment_items.offer` bis payments
@@ -510,13 +548,29 @@ class AdvanceController
         // kommt fuer die Rechnung zu spaet. Fehlt sie, wird nichts erfunden —
         // dann ist es ein Kauf unter 250 Euro, und die Kleinbetragsrechnung
         // kommt ohne aus (§ 33 UStDV).
-        $result = $this->checkout->start($basket->handles(), array_filter([
+        $kaeufer = array_filter([
             'email' => $visit->email,
             'name' => $visit->name,
             'country' => $angaben['country'] ?? null,
-        ], static fn ($wert): bool => $wert !== null && $wert !== ''), $accepted?->slug
+        ], static fn ($wert): bool => $wert !== null && $wert !== '');
+
+        $zurueck = $accepted?->slug
             ? route('statamic-funnels.step', [$funnel->handle, $accepted->slug])
-            : route('statamic-funnels.entry', $funnel->handle), $basket->discount(), $angaben);
+            : route('statamic-funnels.entry', $funnel->handle);
+
+        // Zwei Wege, ein Ziel: beide legen dieselbe Zahlung an und schicken zum
+        // Anbieter. Der Unterschied ist die Absicht, die an der Zahlung haengt
+        // — `subscription_intent`, aus dem der Webhook spaeter die Vereinbarung
+        // baut. Die kann eine aufrufende Strecke nicht selbst anheften
+        // (`PaymentDetails::RESERVED_META`), deshalb geht es hier ueber
+        // `Subscriptions::start()` statt ueber `Checkout::start()`.
+        //
+        // Der Korb faehrt mit. Die Folgeeinzuege belasten nur den Betrag des
+        // ersten Handles; ein Bump neben einer Ratenoption ist damit einmal
+        // gekauft und nicht jede Rate wieder.
+        $result = $plan
+            ? $this->subscriptions->start($basket->handles(), $kaeufer, $zurueck, $angaben, $basket->discount())
+            : $this->checkout->start($basket->handles(), $kaeufer, $zurueck, $basket->discount(), $angaben);
 
         if (! $result) {
             return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);

@@ -2,10 +2,12 @@
 
 namespace Goldnead\StatamicFunnels\Tests\Support;
 
-use Goldnead\StatamicPayments\Contracts\FollowUpGateway;
+use Goldnead\StatamicPayments\Contracts\SubscriptionGateway;
 use Goldnead\StatamicPayments\Models\Payment;
+use Goldnead\StatamicPayments\Models\Subscription;
 use Goldnead\StatamicPayments\Support\CheckoutSession;
 use Goldnead\StatamicPayments\Support\RemotePayment;
+use Goldnead\StatamicPayments\Support\RemoteSubscription;
 use RuntimeException;
 
 /**
@@ -15,8 +17,16 @@ use RuntimeException;
  * gespeicherte Karte belastet, aus jedem Test dieses Pakets heraus
  * unerreichbar — und genau dort sass der Fehler, bei dem die zweite Person am
  * selben Rechner auf die Karte der ersten gebucht wurde.
+ *
+ * **Und Abos, seit 07.09.2026.** Dieselbe Geschichte ein zweites Mal: solange
+ * das Double nur `FollowUpGateway` war, gab `Subscriptions::available()` false,
+ * und jede Kasse mit einem Ratenangebot lief hier in die Ablehnung. Der Zweig,
+ * der aus einer Ratenoption eine Vereinbarung macht, war damit aus keinem Test
+ * dieses Pakets erreichbar — waehrend Mollie ihn im Betrieb sehr wohl geht.
+ * Ein Double, das weniger kann als der Anbieter, macht den Unterschied
+ * unsichtbar statt sichtbar.
  */
-class FakeGateway implements FollowUpGateway
+class FakeGateway implements SubscriptionGateway
 {
     /** @var array<string, RemotePayment> */
     public array $remote = [];
@@ -46,8 +56,27 @@ class FakeGateway implements FollowUpGateway
         return $this->remote[$providerId] ?? throw new RuntimeException('no such payment');
     }
 
-    public function markPaid(string $providerId, ?string $email = null, ?string $cardLast4 = null, ?string $cardLabel = null): void
-    {
+    /**
+     * Eine bezahlte Zahlung, wie der Anbieter sie meldet.
+     *
+     * **Das Mandat gehoert dazu.** Mollie legt bei einer `sequenceType: first`
+     * eines an und nennt es in der Antwort; seit payments 1.19 belastet die
+     * Folgeabbuchung genau dieses angekuendigte Mandat, und `SavedCard` nennt
+     * die Kartenziffern nur, wenn eines auf der Zeile steht. Ein Double ohne
+     * Mandat sagt also „bezahlt, aber nichts gemerkt" — ein Zustand, den es
+     * beim Anbieter nicht gibt, und der den ganzen Ein-Klick-Zweig dieses
+     * Pakets unsichtbar wirken laesst.
+     *
+     * Wer den Fall ohne Mandat prueft (Wallet, altes payments), gibt hier
+     * ausdruecklich `mandateId: null` mit.
+     */
+    public function markPaid(
+        string $providerId,
+        ?string $email = null,
+        ?string $cardLast4 = null,
+        ?string $cardLabel = null,
+        ?string $mandateId = 'mdt_1',
+    ): void {
         $this->remote[$providerId] = new RemotePayment(
             providerId: $providerId,
             status: Payment::STATUS_PAID,
@@ -55,6 +84,7 @@ class FakeGateway implements FollowUpGateway
             email: $email,
             cardLast4: $cardLast4,
             cardLabel: $cardLabel,
+            mandateId: $mandateId,
         );
     }
 
@@ -103,5 +133,57 @@ class FakeGateway implements FollowUpGateway
         $this->remote[$id] = new RemotePayment($id, Payment::STATUS_OPEN, $this->metadata[$id]);
 
         return $this->remote[$id];
+    }
+
+    public bool $refuseSubscriptions = false;
+
+    /** @var array<string, RemoteSubscription> */
+    public array $subscriptions = [];
+
+    /** Was der letzte `createSubscription()` bekam, damit ein Test hinsehen kann. */
+    public array $lastSubscriptionPayload = [];
+
+    public function supportsSubscriptions(): bool
+    {
+        return ! $this->refuseSubscriptions;
+    }
+
+    public function createSubscription(string $customerReference, array $payload): RemoteSubscription
+    {
+        if ($this->refuseSubscriptions || ! in_array($customerReference, $this->mandates, true)) {
+            // Wie Mollie: ohne Mandat keine Vereinbarung. Ein Double, das hier
+            // nachgibt, laesst genau den Fall durch, der im Betrieb monatelang
+            // still scheitert.
+            throw new RuntimeException('no mandate for '.$customerReference);
+        }
+
+        $this->lastSubscriptionPayload = $payload;
+        $id = 'sub_'.(count($this->subscriptions) + 1);
+
+        // `pending`, nicht `active`: der Anbieter nimmt die Vereinbarung an und
+        // bucht erst zum Termin ab.
+        $this->subscriptions[$id] = new RemoteSubscription(
+            providerId: $id,
+            status: Subscription::STATUS_PENDING,
+            nextPaymentAt: $payload['startDate'] ?? null,
+        );
+
+        return $this->subscriptions[$id];
+    }
+
+    public function cancelSubscription(string $customerReference, string $subscriptionId): RemoteSubscription
+    {
+        $this->subscriptions[$subscriptionId] = new RemoteSubscription(
+            providerId: $subscriptionId,
+            status: Subscription::STATUS_CANCELLED,
+        );
+
+        return $this->subscriptions[$subscriptionId];
+    }
+
+    public function fetchSubscription(string $customerReference, string $subscriptionId): RemoteSubscription
+    {
+        return $this->subscriptions[$subscriptionId]
+            ?? throw new RuntimeException('no such subscription');
     }
 }

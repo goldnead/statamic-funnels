@@ -12,15 +12,16 @@ parameters:
     # as in the other addons of the suite.
     treatPhpDocTypesAsCertain: false
 
-    # Statamic 6 ships these two contracts without the methods the concrete
-    # classes carry: `QueryBuilder` has `whereIn()` on every implementation
-    # and `Entry` has `in()` on the Eloquent and Stache entries alike, but the
-    # interfaces declare neither. Ignored here rather than rebuilt in a stub:
-    # a stub would be a second copy of the Statamic API to keep in step.
+    # Statamic 6 ships `Entry` without a method the concrete classes carry:
+    # `in()` sitzt auf der Eloquent- wie auf der Stache-Fassung, das Interface
+    # nennt es nicht. Ignored here rather than rebuilt in a stub: a stub would
+    # be a second copy of the Statamic API to keep in step.
+    #
+    # Der Eintrag zu `QueryBuilder::whereIn()` stand bis 07.09.2026 daneben und
+    # zeigte auf `FunnelsController`. Der Aufruf ist dort seit „Seitenauswahl
+    # eines Schritts ist Statamics Entries-Feldtyp" nicht mehr; ein Ignore ohne
+    # Fund ist bei `reportUnmatchedIgnoredErrors` selbst ein Fehler.
     ignoreErrors:
-        -
-            message: '#Call to an undefined method Statamic\\Contracts\\Entries\\QueryBuilder::whereIn\(\)#'
-            path: src/Http/Controllers/Cp/FunnelsController.php
         -
             message: '#Call to an undefined method Statamic\\Contracts\\Entries\\Entry::in\(\)#'
             path: src/Http/Controllers/Web/FunnelController.php

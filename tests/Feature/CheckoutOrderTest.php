@@ -148,18 +148,45 @@ class CheckoutOrderTest extends TestCase
     }
 
     #[Test]
-    public function without_a_withdrawal_notice_nothing_stands_between_the_price_and_the_button(): void
+    public function an_offer_that_declares_nothing_still_shows_the_statutory_notice(): void
     {
-        // Ohne Belehrung am Angebot ist die Kasse bereits so, wie § 312j Abs. 3
-        // sie in der strengsten Lesart verlangt. Der Fall ist der Gegenbeweis
-        // dafuer, dass die Reihenfolge an der Belehrung haengt und an nichts
-        // sonst.
+        // **Geaendert am 07.09.2026, und die Aenderung ist keine Entscheidung
+        // dieses Pakets.**
+        //
+        // Hier stand `without_a_withdrawal_notice_nothing_stands_between_the_price_and_the_button`
+        // — der Gegenbeweis dafuer, dass die Reihenfolge an der Belehrung
+        // haengt und an nichts sonst. Der Fall, den er beschrieb, gibt es
+        // nicht mehr: seit statamic-offers 1.6.0 fuehrt die Konfiguration eine
+        // gesetzliche Vorgabe-Belehrung (`statamic-offers.withdrawal.text`),
+        // und `Offer::withdrawalTerms()` gibt sie an jedem Angebot heraus, das
+        // keine eigene traegt. Ein Angebot ganz ohne Belehrung existiert seither
+        // nicht.
+        //
+        // Dass der Test bis heute gruen war, lag allein daran, dass dieses
+        // Paket auf `statamic-offers ^1.2` stand und 1.2.0 vendorte. Auf
+        // adriangoldner.com laeuft 1.8.0, und dort zeigt die Kasse die
+        // Belehrung seit Wochen. Der Test mass die Bibliothek im vendor, nicht
+        // die Auslieferung.
+        //
+        // Die Vorgabe des Docblocks oben („erst die Freigabe, dann die neue
+        // Erwartung") ist damit gewahrt: **an der Reihenfolge aendert sich
+        // nichts**, das haelt der Test darueber weiter fest. Was sich aendert,
+        // ist die Aussage darunter — und sie faellt zugunsten des Verbrauchers
+        // aus: eine Belehrung mehr, nicht eine weniger.
         $this->funnel();
 
         $html = $this->asVisitor()->get('/f/kurs/angebot')->assertOk()->getContent();
 
-        $this->assertNull($this->positionOf($html, 'funnel-offer__withdrawal'));
+        $this->assertNotNull(
+            $this->positionOf($html, 'funnel-offer__withdrawal'),
+            'Die Vorgabe-Belehrung aus statamic-offers erreicht die Kasse nicht mehr.',
+        );
         $this->assertNotNull($this->positionOf($html, 'funnel-offer__price'));
         $this->assertNotNull($this->positionOf($html, 'funnel-offer__accept'));
+
+        // Wo sie im Verhaeltnis zum Knopf steht, misst der Test darueber, und
+        // nur der. Hier nachzumessen waere doppelt und dazu falsch:
+        // `funnel-offer__accept` ist das Formular, das die Belehrung umschliesst
+        // — seine oeffnende Marke steht naturgemaess davor.
     }
 }
