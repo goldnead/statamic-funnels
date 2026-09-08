@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.15.0 — 2026-09-08
+
+### Added: the buyer picks how to pay, at the checkout
+
+An offer that carries `pricing_options` (statamic-offers 1.10.0) now shows them at the checkout as a
+radio group — one row per way to pay, with the amount and, where there is a rhythm, how often and
+what it comes to in total. Until now a funnel step could only offer one price, and the only way to
+show somebody two was to make them decline the first.
+
+The chosen key travels through `AdvanceController::offer()` into the handle the payment is built
+from (`offer:choiraccelerator:raten3`), so everything downstream — the plan, the payment methods, the
+invoice line — reads it off the catalogue exactly as it always did.
+
+Three refusals rather than three silent fallbacks. A key the offer does not carry, no key at all
+while the offer lists some, and a key posted at an offer that lists none: each sends the buyer back
+with a message instead of charging the base price. All three are the same form arriving stale, and
+"then just the full price" would be a charge for an amount nobody clicked.
+
+Where the chosen option carries a rhythm, the one-click path over a saved card stays closed — it
+charges once and cannot open an agreement — and the checkout offers only the payment methods that
+can leave a mandate behind (statamic-payments).
+
+The bundled `step.antlers.html` renders the group. A site with its own checkout template adds it from
+`offer:pricing_options`; without the block the page keeps working and shows the offer's own price.
+
+### Fixed: a refused order says why
+
+The shipped checkout never rendered errors, so every refusal landed on a page that stayed silent —
+an expired countdown, an offer that stopped being sellable, a stale consent text, and now a missing
+or unknown way to pay. The buyer pressed "order", came back to the same page and saw no reason,
+which from the outside is indistinguishable from a broken button.
+
+The controller hands the messages to the template explicitly, for the same reason `csrf_field` is
+handed over next to it: a hand-built `view()` does not run Statamic's cascade, and Laravel's
+`$errors` is a `ViewErrorBag` that Antlers cannot loop over.
+
 ## 1.14.0 — 2026-09-08
 
 ### The funnels utility no longer answers HTTP 500 when its tables are missing

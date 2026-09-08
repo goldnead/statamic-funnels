@@ -70,6 +70,20 @@ abstract class TestCase extends AddonTestCase
         // aber hier wie ein Fehler dieses Addons aussaehe.
         $this->loadMigrationsFrom(__DIR__.'/../vendor/goldnead/statamic-brand-context/database/migrations');
 
+        // Die Sprachdateien der Geschwister, aus demselben Grund wie ihre
+        // Migrationen daneben.
+        //
+        // Beide registrieren sie in `bootAddon()`, und das laeuft nur, wenn
+        // Statamic das Paket ueber sein Manifest als Addon erkennt. Hier sind
+        // sie gewoehnliche Pakete, also lief es nie — und jeder Satz, der aus
+        // ihren Dateien kommt, stand im Test als roher Schluessel da
+        // (`statamic-payments::messages.invoice_line_installment` statt
+        // „Rate 1 von 3"). Das sah aus wie ein Fehler in der Rechnungszeile und
+        // war einer im Aufbau: auf einer echten Site sind beide Addons, und
+        // dort stimmt der Satz.
+        $this->app['translator']->addNamespace('statamic-payments', __DIR__.'/../vendor/goldnead/statamic-payments/lang');
+        $this->app['translator']->addNamespace('statamic-offers', __DIR__.'/../vendor/goldnead/statamic-offers/lang');
+
         // A fake provider, because a test that needs the network is a test that
         // gets skipped.
         $this->gateway = new FakeGateway;

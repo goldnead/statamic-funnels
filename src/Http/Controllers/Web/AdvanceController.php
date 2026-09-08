@@ -380,14 +380,41 @@ class AdvanceController
         // What was actually ticked and typed, checked against the offer rather
         // than believed. The browser says which boxes were checked; the offer
         // says which boxes exist, and only their intersection is bought.
+        // **Welche Zahlweise gewaehlt wurde.** Gegen das Angebot geprueft, nicht
+        // geglaubt: die Seite sagt, was angeklickt war, das Angebot sagt, was
+        // es gibt, und nur die Schnittmenge wird gekauft. Dieselbe Regel wie
+        // fuer die Bumps eine Zeile darunter, und aus demselben Grund — sonst
+        // waere der Preis eine Angabe aus dem Browser.
+        $gewaehlt = trim((string) $request->input('pricing_option', ''));
+        $optionen = $offer->pricingOptions();
+
+        if ($optionen !== [] && $offer->pricingOption($gewaehlt) === null) {
+            // Fuehrt ein Angebot Zahlweisen, ist eine davon Pflicht. Ohne
+            // Auswahl auf den Grundpreis zurueckzufallen hiesse, eine
+            // Abbuchung zu waehlen, die niemand angeklickt hat — und wer mit
+            // einem veralteten Formular ankommt, soll die Seite neu sehen und
+            // nicht ueberrascht bezahlen.
+            return back()->withErrors(['offer' => __('statamic-funnels::messages.pricing_option_missing')]);
+        }
+
+        if ($optionen === [] && $gewaehlt !== '') {
+            // Umgekehrt genauso: eine Auswahl an einem Angebot ohne Zahlweisen
+            // ist ein Formular, das nicht zu dieser Seite gehoert.
+            return back()->withErrors(['offer' => __('statamic-funnels::messages.pricing_option_missing')]);
+        }
+
         $basket = Basket::make(
             $offer,
             array_values(array_filter((array) $request->input('bumps', []), 'is_string')),
             config('statamic-funnels.coupons', true) ? (string) $request->input('coupon', '') : null,
+            $optionen === [] ? null : $gewaehlt,
         );
 
-        $prefix = (string) config('statamic-offers.handle_prefix', 'offer:');
-        $buyHandle = $prefix.$offer->handle;
+        // Der Handle, der die Zahlung traegt — mit der gewaehlten Zahlweise
+        // daran, sonst waere der Plan darunter der des Angebots und nicht der
+        // der Option. Der Korb hat ihn schon gebaut; hier wird er nur gelesen,
+        // damit es nicht zwei Stellen gibt, die ihn zusammensetzen.
+        $buyHandle = $basket->handles()[0];
 
         // **Traegt das Angebot einen Zahlungsrhythmus, ist dieser Schritt kein
         // Betrag, sondern der Beginn einer Vereinbarung.**

@@ -270,6 +270,22 @@ class FunnelController
             'funnel' => $context,
             'csrf_field' => csrf_field(),
             'csrf_token' => csrf_token(),
+            // **Warum der letzte Versuch nichts gekauft hat.**
+            //
+            // Aus demselben Grund wie `csrf_field` daneben ausdruecklich
+            // uebergeben: ein von Hand gebautes `view()` laeuft nicht durch
+            // Statamics Kaskade, und Laravels `$errors` ist ein
+            // `ViewErrorBag`, ueber den Antlers nicht laufen kann. Ohne diese
+            // Zeile landete jede Verweigerung der Kasse auf einer Seite, die
+            // schweigt — abgelaufener Countdown, Angebot nicht verkaeuflich,
+            // veralteter Einwilligungstext, fehlende oder unbekannte
+            // Zahlweise. Der Kaeufer drueckt „Bestellen", kommt zurueck und
+            // sieht keinen Grund; von einem kaputten Knopf ist das von aussen
+            // nicht zu unterscheiden.
+            //
+            // Als flache Liste von Saetzen, weil eine Vorlage sie so ausgeben
+            // kann, ohne die Feldnamen des Formulars zu kennen.
+            'errors' => array_values(session('errors')?->getBag('default')?->all() ?? []),
         ] + $context);
     }
 
@@ -626,6 +642,33 @@ class FunnelController
             // Vorlage auf adriangoldner.com riet falsch — sie schrieb
             // „Einmalig · kein Abo" ueber einen Vertrag ueber drei Raten.
             'plan' => $this->planFor($prefix.$offer->handle, $offer->currency()),
+            // **Die Zahlweisen zur Auswahl.** Leer heisst „ein Preis", und
+            // dann bleibt die Seite genau die, die sie vorher war.
+            //
+            // Je Option derselbe Satz Angaben wie fuer das Angebot selbst,
+            // ueber denselben Weg geholt: `plan` kommt aus dem Katalog, nicht
+            // aus der Angebotszeile. Eine Seite, die einen anderen Rhythmus
+            // nennt als den, der abgebucht wird, ist der Fehler, gegen den
+            // diese Angabe geschrieben ist — und bei drei Optionen
+            // nebeneinander gibt es drei Gelegenheiten dafuer.
+            'pricing_options' => array_map(fn (array $option) => [
+                'key' => $option['key'],
+                // Der Schluessel, wenn niemand eine Bezeichnung eingetragen
+                // hat. Der Rueckfall steht hier und nicht im Modell: dort
+                // gelesen wuerde er beim naechsten Speichern im CP als
+                // Bezeichnung in der Spalte landen, ohne dass jemand ihn
+                // getippt hat. Haesslich in der Kasse ist besser als eine
+                // erfundene Bezeichnung in der Datenbank.
+                'label' => $option['label'] !== '' ? $option['label'] : $option['key'],
+                'type' => $option['type'],
+                // Zwei Formen, wie beim Angebot darueber: `amount` behaelt den
+                // Punkt fuer alles, was parst, `amount_local` ist das, was ein
+                // Mensch liest.
+                'amount' => number_format($option['amount_cent'] / 100, 2, '.', ''),
+                'amount_local' => Offer::localise($option['amount_cent']),
+                'currency' => $offer->currency(),
+                'plan' => $this->planFor($prefix.$offer->handle.':'.$option['key'], $offer->currency()),
+            ], $offer->pricingOptions()),
         ];
     }
 

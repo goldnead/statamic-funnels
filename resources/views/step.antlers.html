@@ -121,9 +121,60 @@
                     {{ if offer:compare_at }}<s>{{ offer:compare_at }} {{ offer:currency }}</s>{{ /if }}
                 </p>
 
+                {{# Warum der letzte Versuch nichts gekauft hat.
+
+                    Ohne diesen Block landet jede Verweigerung auf einer Seite,
+                    die schweigt: der Kaeufer drueckt „Bestellen", kommt auf
+                    dieselbe Seite zurueck und sieht keinen Grund. Die Kasse
+                    lehnt an fuenf Stellen ab — abgelaufener Countdown,
+                    Angebot nicht verkaeuflich, veralteter Einwilligungstext,
+                    fehlende oder unbekannte Zahlweise — und jede davon ist eine
+                    Aussage an den Kaeufer, keine an das Log. #}}
+                {{ if errors }}
+                    <ul class="funnel-offer__errors" role="alert">
+                        {{ errors }}<li>{{ value }}</li>{{ /errors }}
+                    </ul>
+                {{ /if }}
+
+
                 <form method="POST" action="{{ action }}" class="funnel-offer__accept" {{ if countdown:expired }}hidden{{ /if }}>
                     {{ csrf_field }}
                     <input type="hidden" name="accept" value="1">
+
+                    {{# Wie gezahlt wird. Nur wenn das Angebot mehrere Zahlweisen
+                        fuehrt; sonst steht der eine Preis oben und die Seite
+                        bleibt die, die sie war.
+
+                        Radios, kein Auswahlfeld: drei Preise nebeneinander sind
+                        eine Entscheidung, und die trifft man besser, wenn man
+                        alle drei sieht. Die erste ist vorbelegt, damit ein
+                        Klick auf „Bestellen" nie ins Leere geht.
+
+                        Der Rhythmus steht an der Zeile, nicht darunter: § 312j
+                        Abs. 2 BGB will Gesamtpreis und Laufzeit dort, wo
+                        bestellt wird, und bei drei Optionen gilt das je Option. #}}
+                    {{ if offer:pricing_options }}
+                        <fieldset class="funnel-offer__pricing">
+                            <legend>{{ trans key="statamic-funnels::messages.pricing_option_legend" }}</legend>
+                            {{ offer:pricing_options }}
+                                <label class="funnel-pricing-option">
+                                    <input type="radio" name="pricing_option" value="{{ key }}"{{ if first }} checked{{ /if }} required>
+                                    <span class="funnel-pricing-option__text">
+                                        <strong>{{ label }}</strong>
+                                        {{# Der Betrag steht genau einmal je Zeile. Bei einem
+                                            Rhythmus sagt die Plan-Zeile ihn ohnehin — daneben
+                                            noch einmal „520,00 EUR" liest sich wie ein zweiter
+                                            Preis und nicht wie derselbe. #}}
+                                        {{ if plan }}
+                                            <span class="funnel-pricing-option__plan">{{ if plan:times }}{{ plan:times }} × {{ amount_local }} {{ currency }}, {{ plan:interval_label }}{{ if plan:total_local }} · {{ trans key="statamic-funnels::messages.total_label" }} {{ plan:total_local }} {{ currency }}{{ /if }}{{ else }}{{ amount_local }} {{ currency }}, {{ plan:interval_label }}{{ /if }}{{# Die Testphase gehoert zur Preisangabe, nicht daneben: § 312j Abs. 2 BGB will sie dort, wo bestellt wird. #}}{{ if plan:trial_days }} · {{ trans key="statamic-funnels::messages.trial_days_label" }} {{ plan:trial_days }}{{ /if }}</span>
+                                        {{ else }}
+                                            <span class="funnel-pricing-option__price">{{ amount_local }} {{ currency }}</span>
+                                        {{ /if }}
+                                    </span>
+                                </label>
+                            {{ /offer:pricing_options }}
+                        </fieldset>
+                    {{ /if }}
 
                     {{# The tick-boxes beside the order button. Which ones exist
                         is decided by the offer, never by this page: a template
