@@ -2,446 +2,449 @@
 
 ## 1.13.0 — 2026-09-07
 
-**Die Kassenseite erfährt jetzt, in welchem Rhythmus gezahlt wird.** 1.12.0 hat den Ratenkauf
-richtig verbucht — aber die Seite darüber wusste weiterhin nichts davon, und eine Vorlage kann
-nur schreiben, was sie erfährt. Auf adriangoldner.com stand deshalb fest verdrahtet
-**„Einmalig · kein Abo"** über einem Vertrag über drei Raten.
+**The checkout page is now told in which rhythm the buyer pays.** 1.12.0 booked instalment
+purchases correctly — but the page above it still knew nothing about them, and a template can
+only print what it is told. On adriangoldner.com the hard-wired line **“One-off · no
+subscription”** therefore sat above a contract over three instalments.
 
-Das ist keine Beschriftung, sondern eine Pflichtangabe: § 312j Abs. 2 BGB will Gesamtpreis und
-Laufzeit unmittelbar über dem Bestellknopf. Ein Käufer, der „520 €, einmalig" liest und 1.560 €
-schuldet, hat nicht gelesen, was er kauft.
+That is not a label but a mandatory disclosure: § 312j Abs. 2 BGB wants the total price and the
+term immediately above the order button. A buyer who reads “520 €, one-off” and owes 1,560 € has
+not read what he is buying.
 
-Der Schritt gibt der Vorlage jetzt `offer:plan` heraus, oder `null`:
+The step now hands the template `offer:plan`, or `null`:
 
-| Schlüssel | Bedeutung |
+| Key | Meaning |
 |---|---|
-| `interval` | wie der Anbieter ihn schreibt, „1 month" |
-| `interval_label` | in Worten, „monatlich" — übersetzt, sonst unverändert durchgereicht |
-| `times` | wie viele Zahlungen insgesamt, `null` bei einem Abo ohne Ende |
-| `times_remaining` | wie viele nach der heutigen noch kommen |
-| `total` / `total_local` | der Gesamtpreis, maschinenlesbar und für Menschen |
-| `trial_days` | Testphase, wenn eine läuft |
+| `interval` | as the provider writes it, “1 month” |
+| `interval_label` | in words, “monthly” — translated, otherwise passed through unchanged |
+| `times` | how many payments in total, `null` for a subscription without an end |
+| `times_remaining` | how many are still to come after today's |
+| `total` / `total_local` | the total price, machine-readable and for humans |
+| `trial_days` | trial period, if one is running |
 
-Gefragt wird der **Katalog**, nicht das Angebot: das ist die Stelle, an der die Zahlung ihren
-Preis holt, und eine Seite, die einen anderen Rhythmus nennt als den, der abgebucht wird, wäre
-genau der Fehler, den diese Angabe verhindern soll. Bei einem Abo ohne Ende steht keine
-Gesamtsumme dabei — sie steht erst fest, wenn gekündigt wird.
+What is asked is the **catalogue**, not the offer: that is where the payment fetches its price,
+and a page naming a rhythm other than the one being charged would be exactly the error this
+disclosure is meant to prevent. For a subscription without an end no total is given — it is
+only settled once it is cancelled.
 
-### Der Test, der sich selbst übersprang
+### The test that skipped itself
 
-`PriceReadsAsGermanTest` sprang ab, wenn `ext-intl` fehlte. Genau diese Umgebung läuft auf
-adriangoldner.com, und dort stand in der Kasse „520.00 €". Der Rückfall in
-`statamic-offers` 1.8.2 kennt die geläufigen Schreibweisen inzwischen selbst, also wird hier
-nichts mehr übersprungen: der Test muss gerade dort greifen, wo er bisher schwieg.
+`PriceReadsAsGermanTest` bailed out when `ext-intl` was missing. That is precisely the
+environment running on adriangoldner.com, and the checkout there read “520.00 €”. The fallback
+in `statamic-offers` 1.8.2 now knows the common notations itself, so nothing is skipped here any
+more: the test has to bite exactly where it used to stay silent.
 
 ## 1.12.0 — 2026-09-07
 
-**Ein Ratenangebot in der Kasse wurde einmal abgebucht und galt als bezahlt.** Der Fehler sah
-aus wie ein Verkauf, und das ist die schlimmste Form: bei „3 × 520 €" flossen 520 €, der Zugang
-wurde vollständig erteilt, und die beiden fehlenden Raten tauchten nirgends auf. Keine
-Fehlermeldung, keine offene Forderung, kein Log-Eintrag.
+**An instalment offer in the checkout was charged once and counted as paid.** The failure looked
+like a sale, which is the worst form of it: with “3 × 520 €” exactly 520 € moved, access was
+granted in full, and the two missing instalments turned up nowhere. No error message, no open
+receivable, no log entry.
 
-Die Ursache lag nicht im Katalog. `statamic-offers` 1.8.0 gibt den Plan eines Angebots korrekt
-heraus; die Kasse fragte ihn nur nie. `AdvanceController::offer()` rief `Checkout::start()`, und
-das kennt keine Zahlungsrhythmen — die Absicht, aus der der Webhook später eine Vereinbarung
-baut, kann eine aufrufende Strecke auch nicht selbst anheften (`PaymentDetails::RESERVED_META`).
+The cause was not in the catalogue. `statamic-offers` 1.8.0 hands out an offer's plan correctly;
+the checkout simply never asked for it. `AdvanceController::offer()` called `Checkout::start()`,
+which knows nothing about payment rhythms — and the intent from which the webhook later builds a
+subscription agreement cannot be attached by a calling route either
+(`PaymentDetails::RESERVED_META`).
 
-Trägt das Angebot ein `interval`, geht der Kauf jetzt über `Subscriptions::start()` (neu in
-payments 1.20.0: nimmt einen Korb, nicht nur einen Handle). Der Korb fährt mit; die
-Folgeeinzüge belasten nur den Betrag des Angebots, ein Bump daneben ist damit einmal gekauft
-und nicht jede Rate wieder.
+If the offer carries an `interval`, the purchase now goes through `Subscriptions::start()` (new
+in payments 1.20.0: it takes a cart, not just a handle). The cart travels along; the follow-up
+charges debit only the offer's amount, so an order bump next to it is bought once and not again
+with every instalment.
 
-Zwei Ränder gehören dazu:
+Two edges belong to this:
 
-- **Der Ein-Klick-Weg über die gespeicherte Karte gilt für Raten nicht.** `FollowUp::accept()`
-  belastet einmal und legt keine Vereinbarung an — es wäre derselbe stille Fehler noch einmal,
-  eine Methode weiter oben. Der Käufer gibt seine Daten hier ein weiteres Mal ein; das ist der
-  Preis dafür, dass die Vereinbarung wirklich zustande kommt.
-- **Kann der Betrieb keine Vereinbarungen** (kein abo-fähiger Anbieter, oder Mandate
-  ausgeschaltet), wird die Ratenoption abgelehnt statt einmal abgebucht. Wer „3 × 520 €"
-  gelesen hat und 520 € einmal bezahlt, hat nicht dasselbe gekauft.
+- **The one-click path over the saved card does not apply to instalments.** `FollowUp::accept()`
+  charges once and creates no agreement — it would be the same silent failure again, one method
+  further up. The buyer enters their details one more time here; that is the price for the
+  agreement actually coming into existence.
+- **If the installation cannot do agreements** (no subscription-capable provider, or mandates
+  switched off), the instalment option is refused rather than charged once. Someone who read
+  “3 × 520 €” and paid 520 € once has not bought the same thing.
 
-### Das Test-Double konnte weniger als der Anbieter
+### The test double could do less than the provider
 
-Zweimal dieselbe Geschichte, beide hier behoben. `Tests\Support\FakeGateway` war nur ein
-`FollowUpGateway` — `Subscriptions::available()` gab damit false, und der ganze Ratenzweig war
-aus keinem Test dieses Pakets erreichbar, während Mollie ihn im Betrieb geht. Und `markPaid()`
-gab kein Mandat zurück, obwohl Mollie bei einer ersten Zahlung eines anlegt; seit payments 1.19
-nennt `SavedCard` die Kartenziffern nur, wenn eines auf der Zeile steht.
+The same story twice, both fixed here. `Tests\Support\FakeGateway` was only a `FollowUpGateway` —
+`Subscriptions::available()` therefore returned false, and the whole instalment branch was
+unreachable from any test in this package, while Mollie walks it in production. And `markPaid()`
+returned no mandate although Mollie creates one on a first payment; since payments 1.19
+`SavedCard` names the card digits only when a mandate is on the row.
 
-### Fassungsgrenzen nachgezogen
+### Version constraints raised
 
-`statamic-offers` von `^1.2` auf `^1.8`, `statamic-payments` von `^1.17.1` auf `^1.20`. Die
-alte Grenze war nicht nur zu niedrig, sie verfälschte die Tests: `CheckoutOrderTest` prüfte
-gegen ein vendortes offers 1.2.0 und behauptete, ein Angebot ohne eigene Belehrung zeige keine.
-Seit offers 1.6.0 führt die Konfiguration eine gesetzliche Vorgabe-Belehrung, und auf
-adriangoldner.com steht sie seit Wochen in der Kasse. Der Test misst jetzt die Auslieferung.
-**An der Reihenfolge über dem Bestellknopf ändert sich nichts** — die Wache dafür steht
-unverändert.
+`statamic-offers` from `^1.2` to `^1.8`, `statamic-payments` from `^1.17.1` to `^1.20`. The old
+constraint was not merely too low, it falsified the tests: `CheckoutOrderTest` ran against a
+vendored offers 1.2.0 and claimed that an offer without a withdrawal notice
+(Widerrufsbelehrung) of its own shows none. Since offers 1.6.0 the configuration carries a
+statutory default notice, and on adriangoldner.com it has been in the checkout for weeks. The
+test now measures what actually ships. **Nothing changes about the order above the order
+button** — the guard for that stands unchanged.
 
-Dazu ein Ignore-Eintrag in `phpstan.neon` entfernt, dessen Fund es seit „Seitenauswahl eines
-Schritts ist Statamics Entries-Feldtyp" nicht mehr gibt.
+Along with it, an ignore entry in `phpstan.neon` was removed whose finding has not existed since
+“a step's page selection is Statamic's entries fieldtype”.
 
 ## 1.11.0 — 2026-09-05
 
-### Die Funnel-Übersicht ist eine Statamic-Tabelle (F24)
+### The funnel index is a Statamic table (F24)
 
-Adrian am 03.09.2026: „sollte auch eine typische Statamic-Tabelle sein und nicht so." Die Liste war
-ein gestapelter Eigenbau aus Karten: keine Spaltenköpfe, keine Sortierung, keine Mehrfachauswahl,
-kein Zeilenmenü, und sieben Funnels füllten den Bildschirm. Jetzt läuft sie über core's `<Listing>`
-in der klientseitigen Betriebsart (`:items`), mit den Spalten Titel (Kennung darunter), Status,
-Schritte und Besuche. Sortieren geht über jeden Spaltenkopf und wirkt wirklich, weil die Rohdaten
-schon auf der Seite liegen.
+Adrian on 03.09.2026: “this should be a typical Statamic table too, not like this.” The list was
+a stacked, hand-built set of cards: no column headers, no sorting, no multiple selection, no row
+menu, and seven funnels filled the screen. It now runs on core's `<Listing>` in client-side mode
+(`:items`), with the columns Title (handle underneath), Status, Steps and Visits. Sorting works
+from every column header and really takes effect, because the raw data is already on the page.
 
-Der Kopfkommentar der Datei begründete den Eigenbau damit, dass ein `Listing` „Gerüst um sechs
-Zeilen" sei. Das galt für die servergetriebene Betriebsart mit Paging, gespeicherten Ansichten und
-Spalten-Vorlieben — nicht für `:items`, das genau die Tabelle bringt und nichts davon verlangt.
+The file's header comment justified the hand-built version by calling a `Listing` “scaffolding
+around six rows”. That held for the server-driven mode with paging, saved views and column
+preferences — not for `:items`, which brings exactly the table and demands none of it.
 
-### Löschen ist eine Aktion, kein eigener Knopf
+### Deleting is an action, not a button of its own
 
-„Bearbeiten" und der öffentliche Link stehen im „…"-Menü der Zeile. Das Löschen kommt aus einer
-echten Statamic-Aktion (`statamic_funnels_delete_funnel`) über einen `ActionController`. Damit
-bedient derselbe Code eine Zeile und zwanzig ausgewählte: die Mehrfachauswahl ist keine wirkungslose
-Ankreuzspalte, sondern räumt wirklich auf, und Rückfrage, Ablehnung und Meldung kommen vom Control
-Panel statt aus einer Nachbildung im Addon.
+“Edit” and the public link sit in the row's “…” menu. Deleting comes from a real Statamic action
+(`statamic_funnels_delete_funnel`) through an `ActionController`. The same code therefore serves
+one row and twenty selected ones: the multiple selection is not a checkbox column without effect
+but really clears up, and confirmation, refusal and message come from the Control Panel instead
+of from a replica inside the addon.
 
-Die Löschroute `DELETE /cp/utilities/funnels/{funnel}` und der eigene Bestätigungsdialog sind
-entfallen; wer sie direkt aufgerufen hat, nimmt jetzt `POST /cp/utilities/funnels/actions`.
+The delete route `DELETE /cp/utilities/funnels/{funnel}` and the addon's own confirmation dialog
+are gone; anyone who called them directly now uses `POST /cp/utilities/funnels/actions`.
 
 ## 1.10.0 — 2026-09-05
 
-Drei Befunde aus Adrians Durchgang vom 03.09.2026.
+Three findings from Adrian's walkthrough on 03.09.2026.
 
-### Funnels im Verkaufs-Abschnitt der Seitenleiste (F36)
+### Funnels in the sales section of the sidebar (F36)
 
-Der Bildschirm ist als Statamic-Utility registriert und stand deshalb unter „Hilfsmittel",
-zwischen Cache und PHP-Info. Jetzt hängt er im Verkaufs-Abschnitt, den `statamic-payments` mit
-`Cp\SuiteNav::section()` benennt: derselbe Abschnitt wie Zahlungen, Angebote und Produkte, denn
-Statamic übersetzt Abschnittsnamen nicht, und zwei Schreibweisen ergäben zwei halb gefüllte
-Abschnitte. Route und Recht bleiben; der Eintrag unter „Hilfsmittel" wird ausgehängt, sonst stünde
-der Bildschirm zweimal da.
+The screen is registered as a Statamic utility and therefore sat under “Utilities”, between
+Cache and PHP Info. It now hangs in the sales section that `statamic-payments` names with
+`Cp\SuiteNav::section()`: the same section as Payments, Offers and Products, because Statamic
+does not translate section names and two spellings would produce two half-filled sections. Route
+and permission stay; the entry under “Utilities” is unhooked, otherwise the screen would appear
+twice.
 
-`Cp\SuiteNav` gibt es erst seit `goldnead/statamic-payments` 1.18.0, der Constraint erlaubt
-weiterhin `^1.17.1`. Deshalb steht der Aufruf hinter `class_exists()`, wie in `statamic-booking`:
-mit älterem payments bekommt der Bildschirm einen eigenen Abschnitt „Funnels" statt eines
-`Class not found` beim Aufbau der ganzen CP-Navigation. Den gemeinsamen Verkaufs-Abschnitt gibt
-es ab payments 1.18.0.
+`Cp\SuiteNav` only exists from `goldnead/statamic-payments` 1.18.0 on, while the constraint still
+allows `^1.17.1`. The call therefore sits behind `class_exists()`, as in `statamic-booking`: with
+an older payments the screen gets a section of its own, “Funnels”, instead of a
+`Class not found` while the whole CP navigation is being built. The shared sales section exists
+from payments 1.18.0.
 
-### Fixed — genau ein Einstieg (F27)
+### Fixed — exactly one entry step (F27)
 
-Ein Funnel hat genau einen Einstieg. Bisher ließ der Editor einen zweiten zu, und welcher galt,
-entschied still die Zeilenreihenfolge: `entryStep()` nimmt den ersten Knoten vom Typ `entry`. Drei
-Stellen, weil eine nicht reicht:
+A funnel has exactly one entry step. Until now the editor allowed a second one, and which of them
+counted was decided silently by row order: `entryStep()` takes the first node of type `entry`.
+Three places, because one is not enough:
 
-- Die Validierung in `update()` weist einen zweiten Einstieg ab und speichert nichts.
-- Der `kinds`-Deskriptor trägt `unique`, was die geteilte Bibliothek in `flow-canvas` längst
-  auswertet: beim Anhängen fallen einmalige Arten heraus, beim Ersetzen bleiben nur sie. Das Feld
-  war hier nur nie gesetzt.
-- Der Reiter „Einstieg" verschwindet, sobald einer da ist, statt mit einer 0 dazustehen. Beim
-  Ersetzen bleibt er sichtbar.
+- The validation in `update()` rejects a second entry step and saves nothing.
+- The `kinds` descriptor carries `unique`, which the shared library in `flow-canvas` has long
+  evaluated: when appending, unique kinds drop out; when replacing, only they remain. The field
+  had simply never been set here.
+- The “Entry” tab disappears as soon as one exists, instead of standing there with a 0. When
+  replacing, it stays visible.
 
-### Fixed — A/B-Felder nur bei eingeschaltetem Test (F25)
+### Fixed — A/B fields only when the test is switched on (F25)
 
-Die drei Variantenfelder tragen `visible_when` auf `split_share`, den Schalter des Tests (leer
-heißt kein Test, siehe `Support\Split::share()`). Ausgeblendet wird nur die Anzeige, nie der
-Wert.
+The three variant fields carry `visible_when` on `split_share`, the test's switch (empty means no
+test, see `Support\Split::share()`). Only the display is hidden, never the value.
 
-Intern: `StepStats` liest die Aggregatspalte `visitors` über `getAttribute()` statt als Property.
-Kein Verhaltensunterschied, ein PHPStan-Befund weniger. PHPStan läuft jetzt ohne Befund:
-`treatPhpDocTypesAsCertain: false` wie in den übrigen Addons der Suite, dazu zwei `ignoreErrors`
-für `QueryBuilder::whereIn()` und `Entry::in()`, die Statamic 6 in seinen Contracts nicht
-deklariert, obwohl jede Implementierung sie trägt. `tests/Fakes/insights-table-metric.php` auf
-insights 1.2.1 nachgezogen (`bucketed()` sortiert die Eimer explizit).
+Internally: `StepStats` reads the aggregate column `visitors` through `getAttribute()` instead of
+as a property. No behavioural difference, one PHPStan finding fewer. PHPStan now runs without a
+finding: `treatPhpDocTypesAsCertain: false` as in the suite's other addons, plus two
+`ignoreErrors` for `QueryBuilder::whereIn()` and `Entry::in()`, which Statamic 6 does not declare
+in its contracts although every implementation carries them.
+`tests/Fakes/insights-table-metric.php` brought up to insights 1.2.1 (`bucketed()` sorts the
+buckets explicitly).
 
 ## 1.9.1 — 2026-09-02
 
-### Fixed — der Ein-Klick-Hinweis fehlte genau beim ersten Käufer
+### Fixed — the one-click notice was missing for exactly the first-time buyer
 
-Nach dem Rücksprung vom Bezahldienst rendert der Upsell-Schritt, bevor der Webhook die Zahlung auf
-`paid` gesetzt hat — beim Kauftest am 02.09.2026 lagen zwischen beidem weniger als eine Sekunde. In
-dieser Sekunde hielt `FollowUp::eligible()` die Vorgängerzahlung für unbezahlt, und die Seite sagte
-nichts über die gespeicherte Karte. Erst ein Neuladen brachte den Satz. In der scharfen Fassung
-betrifft das **jeden** ersten Käufer.
+After the return from the payment provider the upsell step renders before the webhook has set the
+payment to `paid` — in the purchase test on 02.09.2026 less than a second lay between the two. In
+that second `FollowUp::eligible()` held the preceding payment to be unpaid, and the page said
+nothing about the saved card. Only a reload brought the sentence. In the live version this
+affects **every** first-time buyer.
 
-Der fehlende Satz ist dabei nicht das Schlimmste: bis zum Klick ist der Webhook da, die Aktion nimmt
-den Ein-Klick-Weg, und abgebucht wird etwas, das die Seite nie angekündigt hat.
+The missing sentence is not the worst of it: by the time of the click the webhook has arrived,
+the action takes the one-click path, and something is charged that the page never announced.
 
-`SavedCard` trennt deshalb die zwei Fragen, die es vorher in einer beantwortete. Die **Aktion** fragt
-weiter `FollowUp::eligible()`, `isPaid()` eingeschlossen. Die **Ankündigung** hängt am Mandat:
-`customer_reference` wird vor dem Sprung zum Anbieter geschrieben, im selben Block, der
-`sequenceType: first` setzt — beim Rücksprung steht die Spalte also, ganz ohne Rückfrage beim
-Anbieter. Fehlen in dieser Sekunde noch die vier Ziffern, greift `saved_card_unnamed`.
+`SavedCard` therefore separates the two questions it used to answer as one. The **action** still
+asks `FollowUp::eligible()`, `isPaid()` included. The **announcement** hangs on the mandate:
+`customer_reference` is written before the jump to the provider, in the same block that sets
+`sequenceType: first` — so on the return the column is filled, entirely without a query back to
+the provider. If the four digits are still missing in that second, `saved_card_unnamed` takes
+over.
 
-Die verbleibende Fehlerrichtung ist die harmlose: angekündigt, beim Klick immer noch nicht bezahlt,
-also normale Kasse statt Ein-Klick. Eine Unbequemlichkeit, keine Abbuchung. Aus einer gescheiterten,
-abgelaufenen oder abgebrochenen Zahlung wird gar nichts angekündigt.
+The remaining direction of error is the harmless one: announced, still not paid at the moment of
+the click, therefore the ordinary checkout instead of one click. An inconvenience, not a charge.
+Nothing at all is announced from a failed, expired or cancelled payment.
 
-### Fixed — „von deiner  •••• 9996"
+### Fixed — “from your  •••• 9996”
 
-Der genannte Kartensatz hing allein an den vier Ziffern. Nennt der Anbieter die Ziffern, aber nicht
-die Marke — bei Wallet-Zahlungen der Normalfall —, entstand eine Lücke mitten im Satz. Jetzt drei
-Fälle: Marke und Ziffern, nur Ziffern (neuer Schlüssel `saved_card_digits`), keins von beidem. Gesagt
-wird es in allen dreien, nur mit weniger Details.
+The card sentence hung on the four digits alone. If the provider names the digits but not the
+brand — the normal case with wallet payments — a gap appeared in the middle of the sentence. Now
+three cases: brand and digits, digits only (new key `saved_card_digits`), neither of the two. It
+is said in all three, only with fewer details.
 
-### Fixed — `payment_items.offer` beim Upsell
+### Fixed — `payment_items.offer` on the upsell
 
-Der Ein-Klick-Weg übergibt jetzt `offer_handles` an `FollowUp::accept()`, so wie der Kassenweg es
-über den Katalog bekommt. Ohne das blieb die Spalte genau bei der Upsell-Zeile leer, und der
-Upsell-Bericht in `statamic-insights` ordnete den Umsatz keinem Angebot zu.
+The one-click path now passes `offer_handles` to `FollowUp::accept()`, the way the checkout path
+receives it through the catalogue. Without that the column stayed empty on exactly the upsell
+row, and the upsell report in `statamic-insights` attributed the revenue to no offer.
 
-**Die Abhängigkeit steigt deshalb auf `goldnead/statamic-payments: ^1.17.1`.** Das ist kein Komfort,
-sondern Pflicht. `PaymentDetails::ALLOWED` kennt `offer_handles` erst ab 1.17.0, und
-`FollowUp::accept()` ruft `PaymentDetails::from()` als erste Zeile — gegen 1.16 endete der
-Ein-Klick-Kauf damit in einer ungefangenen `InvalidArgumentException` auf einer öffentlichen
-POST-Route. Gegen 1.17.0 wird der Schlüssel zwar angenommen, aber nicht geschrieben; die Spalte
-bliebe still leer. Erst 1.17.1 tut beides.
+**The dependency therefore rises to `goldnead/statamic-payments: ^1.17.1`.** That is not
+convenience but necessity. `PaymentDetails::ALLOWED` only knows `offer_handles` from 1.17.0 on,
+and `FollowUp::accept()` calls `PaymentDetails::from()` as its first line — against 1.16 the
+one-click purchase therefore ended in an uncaught `InvalidArgumentException` on a public POST
+route. Against 1.17.0 the key is accepted but not written; the column would stay silently empty.
+Only 1.17.1 does both.
 
-### Fixed — was der Besucher eintippt, kam roh im HTML der Mail an
+### Fixed — what the visitor types arrived raw in the mail's HTML
 
-`statamic-email-templates` setzte bis 2.2.x jeden Wert unverändert ein, und dieses Addon gab ihm
-`visitor.name` und `contact.*` direkt aus dem Formular. Ein Name mit Markup darin wurde damit zu
-Markup in einer Mail. Ab email-templates 2.3.0 escaped die Schwester selbst; ohne die Anpassung hier
-wäre daraus der umgekehrte Fehler geworden — doppelt escapte Bestellzeilen und ein `&amp;` in der
-Betreffzeile.
+Up to 2.2.x `statamic-email-templates` inserted every value unchanged, and this addon handed it
+`visitor.name` and `contact.*` straight from the form. A name with markup in it therefore became
+markup in a mail. From email-templates 2.3.0 the sibling escapes on its own; without the
+adjustment here that would have turned into the opposite error — doubly escaped order lines and
+an `&amp;` in the subject line.
 
-Drei Änderungen, die zusammengehören:
+Three changes that belong together:
 
-- **Der Körper wird escaped, der Betreff nicht.** `FunnelMailRenderer::render()` ruft die
-  Zusammenführung für den HTML-Körper mit Escaping und für die Betreffzeile ohne auf. Ein Betreff ist
-  kein HTML; dort wäre `Müller &amp; Söhne` sichtbarer Schaden statt Schutz.
-- **`order.lines` bleibt Markup, angemeldet statt geduldet.** Der Wert wird hier aus `e()`-escapten
-  Teilen mit `<br>` dazwischen gebaut und über den neuen `raw`-Parameter von
-  `MergeVariables::apply()` pro Aufruf als roh übergeben (`FunnelMailRenderer::RAW_VARIABLES`).
-  Der Weg „gar kein Markup mehr im Wert" scheitert an der Sache: `MergeVariables` kennt nur flache
-  Skalare und keine Schleife, und in einer HTML-Mail trennt Zeilen nur Markup — ein `\n` fällt beim
-  Rendern zusammen. Der Schlüssel gehört deshalb ausdrücklich **nicht** in
-  `MergeVariables::RAW_VARIABLES`, wo er für jeden Konsumenten der Schwester roh wäre.
-- **Ältere Schwestern bleiben lauffähig.** `MailTemplates::merge()` reicht die neuen Argumente
-  positional durch, nicht benannt: gegen 2.2.x ignoriert PHP zusätzliche positionale Argumente
-  stillschweigend, ein unbekanntes benanntes Argument wäre ein Fatal mitten im Versand.
+- **The body is escaped, the subject is not.** `FunnelMailRenderer::render()` calls the merge
+  with escaping for the HTML body and without it for the subject line. A subject is not HTML;
+  there `Müller &amp; Söhne` would be visible damage rather than protection.
+- **`order.lines` stays markup, declared rather than tolerated.** The value is built here from
+  `e()`-escaped parts with `<br>` between them and passed as raw per call through the new `raw`
+  parameter of `MergeVariables::apply()` (`FunnelMailRenderer::RAW_VARIABLES`). The route “no
+  markup in the value at all” fails on the substance: `MergeVariables` knows only flat scalars
+  and no loop, and in an HTML mail only markup separates lines — a `\n` collapses when rendered.
+  The key therefore explicitly does **not** belong in `MergeVariables::RAW_VARIABLES`, where it
+  would be raw for every consumer of the sibling.
+- **Older siblings stay runnable.** `MailTemplates::merge()` passes the new arguments
+  positionally, not by name: against 2.2.x PHP silently ignores additional positional arguments,
+  whereas an unknown named argument would be a fatal in the middle of a send.
 
-### Fixed — der Test-Fake blieb grün, egal was die Schwester tat
+### Fixed — the test fake stayed green whatever the sibling did
 
-`tests/Fakes/email-templates-facade.php` definiert ein eigenes `MergeVariables`, wenn die echte
-Klasse fehlt — und genau das ist sie in dieser Suite immer. Die Kopie hinkte hinterher, also hätte
-die Suite den Fehler oben nie gesehen. Der Fake ist jetzt auf Signatur und Verhalten der echten
-Klasse nachgezogen (`$escape`, `$raw`, `RAW_VARIABLES`), mit einem Vermerk darüber, dass er
-mitgeführt werden muss. Dazu ein Test, der genau die drei Eigenschaften festnagelt: Name aus dem
-Formular escaped, Bestellzeilen mit intaktem `<br>` und genau einmal escaped, Betreff roh.
+`tests/Fakes/email-templates-facade.php` defines a `MergeVariables` of its own when the real
+class is missing — and in this suite it always is. The copy lagged behind, so the suite would
+never have seen the error above. The fake is now brought up to the real class's signature and
+behaviour (`$escape`, `$raw`, `RAW_VARIABLES`), with a note that it has to be kept in step. Plus
+a test that pins exactly the three properties: the name from the form escaped, order lines with
+an intact `<br>` and escaped exactly once, the subject raw.
 
 ## 1.9.0 — 2026-09-02
 
-### Ein Bild je Seite auf der Leinwand
+### One image per page on the canvas
 
-Nach dem Speichern wird jeder **Seiten**-Schritt fotografiert, und die Karte auf der Leinwand zeigt
-das Bild als 16:10-Kachel über dem Titel. Aus dem Graphen wird eine Landkarte: man erkennt eine
-Station am Aussehen ihrer Seite, nicht nur am Namen. Mail-Knoten bekommen kein Bild, sie haben keine
-Seite.
+After saving, every **page** step is photographed, and the card on the canvas shows the image as
+a 16:10 tile above the title. The graph becomes a map: you recognise a station by what its page
+looks like, not only by its name. Mail nodes get no image, they have no page.
 
-- Das Foto entsteht **nicht beim Laden des Editors**, sondern in einem Job (`RenderStepThumbnail`,
-  queued, eindeutig je Schritt bis zum Start; auf der `sync`-Queue nach der Antwort) nach dem
-  Speichern. Er lädt die Seite über dieselbe Vorschau-Route
-  wie das Vorschau-Panel, mit einem `PreviewToken`, das nach dem Foto wieder gelöscht wird, und
-  schreibt nichts: kein Besuch, kein Ereignis, keine Impression.
-- Ein Schritt wird nur neu fotografiert, wenn sich an ihm etwas geändert hat (Fingerabdruck aus
-  Typ, Label, Slug, Konfiguration). `php please funnels:thumbnails {funnel?} {--force}` rendert
-  nach, etwa nach einer Änderung am Eintrag hinter einer Seite.
-- Ablage auf `thumbnails.disk` (Standard `public`) unter `funnels/thumbs/<funnel>/<node_key>-<hmac>.png`
-  (16 Hex-Zeichen HMAC unter `APP_KEY`, damit die Bilder eines Entwurfs nicht aus den Editor-URLs
-  erratbar sind),
-  Pfad und `rendered_at` in `funnel_steps.config['thumbnail']`. Der Schlüssel gehört dem Server:
-  ein zweites Speichern vor dem Neuladen wirft das Bild nicht weg. Ein gelöschter Schritt nimmt
-  sein Bild mit, ein gelöschter Funnel seinen Ordner.
-- **Renderer hinter einem Contract** (`Contracts\ThumbnailRenderer`). Browsershot, wenn
-  `spatie/browsershot` installiert ist **und** ein Chromium gefunden wird (auf `PATH`, in den
-  üblichen Mac-Pfaden oder unter `thumbnails.chrome_path`). Sonst ein `NullRenderer`, der nichts
-  tut und das einmal je Prozess als `notice` sagt. Ohne Renderer: **kein grauer Platzhalter**, die
-  Karten sehen aus wie bisher, und die Seitenleiste des Editors sagt still „Vorschaubilder brauchen
-  Chromium (siehe Doku)".
-- **Ohne Cookie-Banner im Bild.** `thumbnails.cookies` (`name => value`) setzt der Browser vor dem
-  Laden; leer und mit `goldnead/statamic-consent` installiert geht dessen Consent-Cookie mit allen
-  Diensten als erteilt mit, im Format seines Skripts (`{ v, granted, ts, how, id }`, URL-kodiert).
-  `thumbnails.hide_selectors` blendet Selektoren vor dem Foto aus, für ein Banner, das kein Cookie
-  beruhigt. Sonst zeigt jede Kachel dasselbe Banner, und eine Landkarte, auf der jede Station gleich
-  aussieht, ist keine.
+- The photo is taken **not when the editor loads** but in a job (`RenderStepThumbnail`, queued,
+  unique per step until it starts; on the `sync` queue after the response) after saving. It loads
+  the page through the same preview route as the preview panel, with a `PreviewToken` that is
+  deleted again after the photo, and writes nothing: no visit, no event, no impression.
+- A step is only photographed again when something about it has changed (a fingerprint of type,
+  label, slug and configuration). `php please funnels:thumbnails {funnel?} {--force}` renders
+  afterwards, for instance after a change to the entry behind a page.
+- Stored on `thumbnails.disk` (default `public`) under `funnels/thumbs/<funnel>/<node_key>-<hmac>.png`
+  (16 hex characters of HMAC under `APP_KEY`, so that a draft's images cannot be guessed from the
+  editor URLs),
+  with the path and `rendered_at` in `funnel_steps.config['thumbnail']`. The key belongs to the
+  server: a second save before a reload does not throw the image away. A deleted step takes its
+  image with it, a deleted funnel its folder.
+- **The renderer sits behind a contract** (`Contracts\ThumbnailRenderer`). Browsershot when
+  `spatie/browsershot` is installed **and** a Chromium is found (on `PATH`, in the usual Mac
+  paths, or under `thumbnails.chrome_path`). Otherwise a `NullRenderer` that does nothing and
+  says so once per process as a `notice`. Without a renderer: **no grey placeholder**, the cards
+  look as they did before, and the editor's sidebar quietly says “thumbnails need Chromium (see
+  the docs)”.
+- **No cookie banner in the image.** The browser sets `thumbnails.cookies` (`name => value`)
+  before loading; left empty and with `goldnead/statamic-consent` installed, that addon's consent
+  cookie travels along with every service granted, in the format of its script
+  (`{ v, granted, ts, how, id }`, URL-encoded). `thumbnails.hide_selectors` hides selectors
+  before the photo, for a banner that no cookie quiets. Otherwise every tile shows the same
+  banner, and a map on which every station looks alike is not one.
 - Config `thumbnails`: `enabled`, `disk`, `width`, `height`, `chrome_path`, `cookies`,
   `hide_selectors`.
-- Braucht `goldnead/statamic-flow-canvas` ^1.3, das den Knoten das Feld `thumbnail` gibt.
+- Requires `goldnead/statamic-flow-canvas` ^1.3, which gives the nodes the `thumbnail` field.
 
 ## 1.8.0 — 2026-09-02
 
-### Mail-Knoten auf der Leinwand
+### Mail nodes on the canvas
 
-Ein neuer Knoten `mail`, der **an einem Ausgang hängt und nie betreten wird**. Eine Regel: die
-Mail geht raus, wenn der Besuch den Ausgang nimmt, an dem sie hängt — `default` heißt weiter
-(Seite) oder abgeschickt (Formular), `accepted` heißt bezahlt (erst per Webhook), `declined`
-heißt abgelehnt. Der Abschluss hat keinen Ausgang; „der Weg ist zu Ende" ist der Ausgang, der
-dorthin führt. Der Weg führt an der Mail vorbei — `nextStep()` überspringt sie, der Stepper
-zählt sie nicht als Station, die Abbruchstatistik auch nicht.
+A new node `mail` that **hangs on an output and is never entered**. One rule: the mail goes out
+when the visit takes the output it hangs on — `default` means continued (page) or submitted
+(form), `accepted` means paid (only via webhook), `declined` means declined. The completion has
+no output; “the walk is over” is the output that leads there. The walk passes the mail by —
+`nextStep()` skips it, the stepper does not count it as a station, and neither does the drop-off
+statistic.
 
-Vorlage aus `statamic-email-templates`, Verzögerung als Queue-Delay (kein zweiter Scheduler,
-kein Zwang zu `statamic-automations`; die Begründung steht in der README), Empfänger der Besuch
-oder eine feste Adresse. Einmal je Besuch und Knoten, durch einen Unique-Index. Jede Mail
-hinterlässt eine Zeile in `funnel_mail_deliveries` (ausgelöst / zugestellt / fehlgeschlagen mit
-Grund), der Editor zeigt die drei Zahlen am Knoten. Vorschau: der Stepper führt die Mail direkt
-hinter ihrem Schritt, das Iframe zeigt die gerenderte Mail mit Beispieldaten
+The template comes from `statamic-email-templates`, the delay is a queue delay (no second
+scheduler, no forced dependency on `statamic-automations`; the reasoning is in the README), and
+the recipient is the visit or a fixed address. Once per visit and node, enforced by a unique
+index. Every mail leaves a row in `funnel_mail_deliveries` (triggered / delivered / failed with a
+reason), and the editor shows the three figures on the node. Preview: the stepper puts the mail
+directly behind its step, and the iframe shows the rendered mail with sample data
 (`GET /f/{funnel}/_preview-mail/{node}?token=…`).
 
-Neues Ereignis `FunnelOfferDeclined`. Der Inspector zeigt je Ausgang „Mail anhängen" und, wo
-noch nichts weitergeht, „Schritt anhängen" — das „+" der Leinwand gibt es nur an Ausgängen ohne
-Kante. Ein Knoten, der über das „+" einer bestehenden Kante gewählt wird, wird jetzt dazwischen
-eingefügt (vorher blieb er unverbunden); eine Mail dort hängt sich als Abzweig an denselben Ausgang.
+New event `FunnelOfferDeclined`. The inspector shows “attach mail” per output and, where nothing
+continues yet, “attach step” — the canvas's “+” only exists on outputs without an edge. A node
+chosen through the “+” of an existing edge is now inserted between the two (before, it stayed
+unconnected); a mail there attaches itself as a branch on the same output.
 
-### Kauf und Newsletter getrennt
+### Purchase and newsletter kept apart
 
-Der Capture-Schritt bekommt einen Newsletter-Haken unter dem E-Mail-Feld (`newsletter`: kein
-Haken / Haken anbieten, nie vorangekreuzt; `newsletter_label` konfigurierbar). Der Besuch traegt
-`meta['newsletter']` mit Zeitpunkt und dem gezeigten Wortlaut; ein spaeterer Schritt macht aus
-einem „ja" kein „nein". Richtung LeadHub: die Adresse wird ein Kontakt **ohne** Einwilligung, nur
-der Haken setzt sie (ueber `ContactResolver`, weil `ingest()`/`create()`/`update()` keine
-Einwilligung kennen), ein Kauf traegt das Tag `kunde` — neues Listener `TagBuyerInLeadHub` auf
-`FunnelOfferAccepted`. Nebenbei: `LeadHubBridge::capture()` uebergab den Namen unter `name`, den
-`SourceEvent` gar nicht liest; jetzt unter `contact.full_name`.
+The capture step gains a newsletter checkbox under the email field (`newsletter`: no checkbox /
+offer the checkbox, never pre-ticked; `newsletter_label` configurable). The visit carries
+`meta['newsletter']` with the timestamp and the wording that was shown; a later step does not
+turn a “yes” into a “no”. Towards LeadHub: the address becomes a contact **without** consent,
+only the checkbox sets it (through `ContactResolver`, because `ingest()`/`create()`/`update()`
+know nothing about consent), and a purchase carries the tag `kunde` — a new listener
+`TagBuyerInLeadHub` on `FunnelOfferAccepted`. In passing: `LeadHubBridge::capture()` passed the
+name under `name`, which `SourceEvent` does not read at all; now under `contact.full_name`.
 
-### Konto-Schritt nach dem Kauf
+### Account step after the purchase
 
-Neuer Seiten-Knoten `account`: zeigt die E-Mail des Besuchs (nicht aenderbar), fragt Name und
-Passwort (min. 8, wiederholt), legt den Statamic-User an oder aktualisiert den mit dieser
-Adresse — nie ein Duplikat —, meldet ihn an (`login_after`) und geht weiter. „Spaeter" geht ohne
-Konto weiter, wenn `optional` es zulaesst (Vorgabe: ja). Ohne Adresse am Besuch gibt es kein
-Konto, ein fremder Browser bekommt 403 wie an jedem Schritt. Kein eigenes Mailing.
+A new page node `account`: shows the visit's email address (not editable), asks for a name and a
+password (min. 8, repeated), creates the Statamic user or updates the one with that address —
+never a duplicate — logs them in (`login_after`) and moves on. “Later” continues without an
+account if `optional` allows it (default: yes). Without an address on the visit there is no
+account, and a foreign browser gets a 403 as at every step. No mailing of its own.
 
-Nebenbefund: `FunnelWalk` las den Request aus dem Konstruktor. Laravel haelt die
-Controller-Instanz am Route-Objekt fest; bedient dasselbe Route-Objekt einen zweiten Request
-(Testsuite, Octane), trug der gefangene Request den Cookie des ersten Besuchers in den Weg des
-zweiten. Jetzt wird der aktuelle Request gelesen.
+Side finding: `FunnelWalk` read the request from the constructor. Laravel holds the controller
+instance on the route object; if the same route object serves a second request (test suite,
+Octane), the captured request carried the first visitor's cookie into the second visitor's walk.
+The current request is now read instead.
 
-### Der Capture-Schritt liest die Feld-Bibliothek
+### The capture step reads the field library
 
-`billing` hat eine vierte Stufe `offer`: die Felder ergeben sich aus `Offer::checkoutFields()`
-des naechsten Angebots hinter dem Schritt (Graph vorwaerts, an Seiten und Mails vorbei), Labels,
-Typen, Optionen und Pflicht aus `Offers::fieldLibrary()`. Validierung dynamisch aus der
-Bibliothek, Ablage 1:1 in `visit.meta['billing']`. Fehlt die Bibliothek oder das Angebot,
-verhaelt sich der Schritt wie `minimal` und schreibt es ins Log. Beide Methoden nur hinter
-`method_exists`; Tests laufen ueber Resolver-Fakes, bis das installierte offers sie hat.
+`billing` has a fourth level, `offer`: the fields follow from `Offer::checkoutFields()` of the
+next offer behind the step (forwards through the graph, past pages and mails), with labels,
+types, options and required flags from `Offers::fieldLibrary()`. Validation comes dynamically
+from the library, storage is 1:1 in `visit.meta['billing']`. If the library or the offer is
+missing, the step behaves like `minimal` and writes that to the log. Both methods only behind
+`method_exists`; tests run through resolver fakes until the installed offers has them.
 
-### Einwilligung, Widerruf und Zugangsfenster an der Zahlung
+### Consent, withdrawal and access window on the payment
 
-`confirmed` wurde geprüft und verworfen. Jetzt gehen Zeitpunkt und Wortlaut der Einwilligung in
-die Zahlung (§ 356 Abs. 5 BGB): als `consent_at`/`consent_text`, wenn das installierte payments
-die Schlüssel kennt, sonst unter `meta['consent']`. Der Wortlaut kommt aus
-`Offer::withdrawalTerms()` mit Fassung in eckigen Klammern (Fallback: die Sprachdatei), bei einer
-USt-IdNr in den Rechnungsangaben der B2B-Text. Die Kassenseite zeigt die Kurzbelehrung über dem
-Knopf, schickt den gezeigten Wortlaut als `consent_text` zurück, und der Server lehnt eine
-abweichende Fassung ab („Bitte Seite neu laden"). Die Konditionen werden unter `meta['withdrawal']`
-eingefroren, das Zugangsfenster (`Offer::accessWindow()`) unter `meta['access']`. Beide Kaufwege,
-Kasse und gespeicherte Karte. Ältere Nachbarn ohne diese Methoden: nichts geworfen, weggelassen.
+`confirmed` was examined and discarded. The time and wording of the consent now go onto the
+payment (§ 356 Abs. 5 BGB): as `consent_at`/`consent_text` if the installed payments knows those
+keys, otherwise under `meta['consent']`. The wording comes from `Offer::withdrawalTerms()` with
+the version in square brackets (fallback: the language file), and with a VAT ID in the billing
+details the B2B text. The checkout page shows the short withdrawal notice above the button,
+sends the wording it showed back as `consent_text`, and the server rejects a differing version
+(“please reload the page”). The terms are frozen under `meta['withdrawal']`, the access window
+(`Offer::accessWindow()`) under `meta['access']`. Both purchase paths, checkout and saved card.
+Older neighbours without these methods: nothing thrown, left out.
 
 ## 1.7.0 — 2026-09-01
 
-Nachgetragen: die Fassung 1.7.0 ging ohne Eintrag raus. Sie brachte am Capture-Schritt die
-**Rechnungsangaben** (`billing` minimal / name / full, Anschrift landet als `meta.address` an der
-Zahlung, damit über 250 € eine Rechnung entsteht) und auf der Danke-Seite die
-**Bestellzusammenfassung** (`order` mit Positionen, Summe, Referenz).
+Added after the fact: version 1.7.0 shipped without an entry. It brought the **billing details**
+to the capture step (`billing` minimal / name / full, the address lands on the payment as
+`meta.address` so that an invoice is created above 250 €) and the **order summary** to the
+thank-you page (`order` with line items, total, reference).
 
 ## 1.6.1 — 2026-09-01
 
-Formulierung des Kartenhinweises. „von deiner Mastercard auf 9996" las sich auf der Seite wie eine
-Betragsangabe; jetzt steht dort „von deiner Mastercard •••• 9996". Nur Text, kein Verhalten.
+Wording of the card notice. “from your Mastercard ending 9996” read on the page like an amount of
+money; it now says “from your Mastercard •••• 9996”. Text only, no behaviour.
 
 ## 1.6.0 — 2026-09-01
 
-### Der zweite Mensch am selben Rechner zahlte auf die Karte des ersten
+### The second person at the same computer paid on the first one's card
 
-Ein Funnel-Besuch hängt an einem Cookie mit dreißig Tagen Laufzeit. Wer ein zweites Mal durch
-denselben Funnel ging — dieselbe Maschine, andere Person, andere Adresse —, bekam kein
-Kartenformular mehr: `AdvanceController` fand die Zahlung des ersten Laufs am Besuch, hielt das für
-„derselbe Käufer nimmt noch etwas" und ließ per gespeichertem Mandat abbuchen. Die frisch
-eingegebene Adresse überschrieb `FollowUp` dabei mit der alten. Zugang, Rechnung und
-Bestätigungsmail liefen auf den ersten Käufer, die zweite Person hatte gezahlt und bekam nichts.
-Reproduziert auf einer Staging-Installation am 31.08.2026, mit echter Zahlung.
+A funnel visit hangs on a cookie with a thirty-day lifetime. Anyone who walked the same funnel a
+second time — same machine, different person, different address — got no card form any more:
+`AdvanceController` found the first walk's payment on the visit, took that for “the same buyer is
+taking something else” and let the stored mandate be charged. In the process `FollowUp`
+overwrote the freshly entered address with the old one. Access, invoice and confirmation mail ran
+to the first buyer; the second person had paid and received nothing. Reproduced on a staging
+installation on 31.08.2026, with a real payment.
 
-Zwei Stellen, dieselbe falsche Annahme, dass ein Gerät ein Mensch ist:
+Two places, the same wrong assumption that a device is a person:
 
-- **Die gespeicherte Karte.** Neu in `Support\SavedCard`, und zwar an *einer* Stelle, weil zwei sie
-  brauchen: die Seite, die es vorher sagen muss, und die Aktion, die es danach tut. Sie fragt
-  `FollowUp::eligible($payment, $visit->email)` — das braucht `goldnead/statamic-payments ^1.16`,
-  daher die angehobene Anforderung.
-- **Die Erinnerung an den Kauf.** Trägt der Capture-Schritt eine andere Adresse ein als eben, fängt
-  der Lauf neu an: `payment_id` und `meta['payments']` fallen weg. Ohne das wäre der Fehler nur
-  gewandert — statt auf fremde Karte zu buchen, hätte `pendingPaymentFor()` den längst bezahlten
-  Kauf des Ersten für diesen gehalten und die zweite Person **ohne jede Zahlung** durchgewinkt.
+- **The saved card.** New in `Support\SavedCard`, and in *one* place because two need it: the
+  page that has to say so beforehand, and the action that does it afterwards. It asks
+  `FollowUp::eligible($payment, $visit->email)` — that needs `goldnead/statamic-payments ^1.16`,
+  hence the raised requirement.
+- **The memory of the purchase.** If the capture step enters a different address than a moment
+  ago, the walk starts over: `payment_id` and `meta['payments']` are dropped. Without that the
+  error would merely have moved — instead of charging a stranger's card, `pendingPaymentFor()`
+  would have taken the first buyer's long-paid purchase for this one and waved the second person
+  through **without any payment at all**.
 
-Für den echten Wiederkäufer ändert sich nichts: gleiche Adresse, gleicher Ein-Klick-Upsell.
+Nothing changes for the genuine repeat buyer: same address, same one-click upsell.
 
-### Die Seite sagt jetzt, womit sie abbucht
+### The page now says what it charges
 
-Der Offer-Schritt bekommt `funnel:saved_card` mit `last4` und `label`, gefüllt aus
-`payments.card_last4` / `card_label` (neu in payments 1.16). Die mitgelieferte Ansicht schreibt den
-Satz unmittelbar über den Bestellknopf — § 312j Abs. 3 BGB will die wesentlichen Angaben genau
-dort, und die Zahlungsart gehört dazu. Neue Sprachschlüssel `saved_card_named` und
-`saved_card_unnamed`; ohne Kartenangaben (Überweisung, Altbestand) steht der Satz ohne die vier
-Ziffern da, statt zu fehlen. Wer eine eigene Ansicht schreibt, muss `saved_card` selbst ausgeben.
+The offer step gains `funnel:saved_card` with `last4` and `label`, filled from
+`payments.card_last4` / `card_label` (new in payments 1.16). The shipped view writes the sentence
+immediately above the order button — § 312j Abs. 3 BGB wants the essential details exactly there,
+and the payment method is one of them. New language keys `saved_card_named` and
+`saved_card_unnamed`; without card details (bank transfer, older records) the sentence stands
+without the four digits rather than being missing. Anyone writing their own view has to output
+`saved_card` themselves.
 
-### Getestet
+### Tested
 
-`tests/Feature/SavedCardTest.php`, und das Test-Double `FakeGateway` kann jetzt nachfassen — bis
-hierhin war der ganze Zweig aus den Tests dieses Pakets heraus unerreichbar, was der Grund war,
-dass der Fehler bis in eine echte Zahlung durchkam.
+`tests/Feature/SavedCardTest.php`, and the test double `FakeGateway` can now follow up — until
+this point the whole branch was unreachable from this package's tests, which is the reason the
+error got as far as a real payment.
 
 ## 1.5.1 — 2026-08-30
 
-### Fixed — die Vorschau im Control Panel lief immer in einen CSRF-Fehler
+### Fixed — the preview in the Control Panel always ran into a CSRF error
 
-`PreviewPanel` holte den CSRF-Token aus `<meta name="csrf-token">`. **Das Control Panel von
-Statamic 6 rendert dieses Tag nicht** — der Token steht in der JS-Konfiguration, die das Layout
-ausschreibt (`Statamic.$config`, `StatamicConfig.csrfToken`). Gelesen wurde also ein leerer String,
-und jeder Vorschau-Aufruf kam als *CSRF token mismatch* zurück. Die Vorschau war damit auf keiner
-Installation je benutzbar.
+`PreviewPanel` took the CSRF token from `<meta name="csrf-token">`. **Statamic 6's Control Panel
+does not render that tag** — the token sits in the JS configuration the layout writes out
+(`Statamic.$config`, `StatamicConfig.csrfToken`). So an empty string was read, and every preview
+call came back as *CSRF token mismatch*. The preview was therefore never usable on any
+installation.
 
-Nicht aufgefallen, weil die Feature-Tests der Vorschau in Laravels Testumgebung laufen, wo die
-CSRF-Prüfung ausgeschaltet ist: der Endpunkt war die ganze Zeit in Ordnung, nur der Aufruf aus dem
-Browser kam nie an. `statamic-marketing` liest denselben Token seit jeher über `Statamic.$config`;
-das ist jetzt auch hier der erste Weg, mit dem Meta-Tag als letztem Rückfall.
+It went unnoticed because the preview's feature tests run in Laravel's test environment, where
+the CSRF check is switched off: the endpoint was fine the whole time, only the call from the
+browser never arrived. `statamic-marketing` has always read the same token through
+`Statamic.$config`; that is now the first route here as well, with the meta tag as the last
+fallback.
 
 ## 1.5.0 — 2026-08-29
 
-### Neu: die Zahlen dieses Addons erscheinen in Insights
+### Added: this addon's figures appear in Insights
 
-`statamic-insights` ist ab 1.1.0 keine Umsatzauswertung mehr, sondern die Auswertungs-Schicht der
-Familie: jedes Addon meldet an, was es zählen kann, und bekommt dafür Zeitraum, Vergleich mit dem
-Vorzeitraum, Diagramm, Aufteilungen und zwei fertige Schirme.
+From 1.1.0 `statamic-insights` is no longer a revenue report but the family's reporting layer: an
+addon registers what it can count and gets the period, the comparison against the period before,
+the chart, the breakdowns and two finished screens in return.
 
-Die Kopplung ist in **beide** Richtungen freiwillig. Ohne Insights fehlt hier nichts; ohne dieses
-Addon fehlt dort nur seine Gruppe. `suggest`, nie `require`.
+The coupling is optional in **both** directions. Without Insights nothing here is missing;
+without this addon only its own group is missing over there. `suggest`, never `require`.
 
-Jede Zahl hält sich an die Hausregeln des Vertrags: **null ist nicht null** (eine Quote ohne Nenner
-hat keine Antwort und zeigt keine 0 %), `available()` entscheidet über die Existenz und nie über die
-Daten, Lücken im Verlauf füllt Insights und nicht die Kennzahl, und ein Filter, den eine Zahl nicht
-versteht, wird ignoriert statt zum Fehler.
+Every figure follows the contract's house rules: **null is not zero** (a rate with no denominator
+has no answer and does not print 0 %), `available()` decides existence and never the data, gaps
+in a series are filled by Insights rather than by the metric, and a filter a metric does not
+understand is ignored rather than fatal.
 
-Vier Zahlen: Eintritte, Abschlüsse, Abschlussquote, Dauer bis zum Abschluss.
+Four figures: entries, completions, completion rate, and time to completion.
 
-Keine der fünf Tabellen trägt eine Markenspalte — gegen die Migrationen geprüft, nicht angenommen —,
-hier ist also nichts zu verengen.
+None of the five tables carries a brand column — checked against the migrations rather than
+assumed — so there is nothing to narrow here.
 
 ## 1.4.0 — 2026-08-26
 
-### Fixed — ein leerer Split-Anteil startete heimlich einen Test
+### Fixed — an empty split share secretly started a test
 
-`Split::share()` gab bei einem leeren Anteilsfeld **50** zurück. README und Feldhilfe sagen beide,
-ein leeres Feld heiße kein Test.
+`Split::share()` returned **50** for an empty share field. The README and the field help both say
+that an empty field means no test.
 
-Wer also eine B-Variante schrieb und den Anteil für später ließ — die naheliegendste Bedienung —
-schickte ab dem Speichern **die Hälfte aller Besucher** auf eine Fassung, die er für unveröffentlicht
-hielt. Nichts auf dem Bildschirm widersprach, und die Zahlen kamen zurück wie ein gewollter Versuch.
+So anyone who wrote a B variant and left the share for later — the most obvious way to use it —
+sent **half of all visitors** onto a version they believed to be unpublished, from the moment
+they saved. Nothing on the screen contradicted them, and the numbers came back looking like an
+intended experiment.
 
-Leer heißt jetzt aus. Die Alternative wäre gewesen, das Feld pflichtig zu machen, sobald eine
-Variante Inhalt hat; „aus" ist die weniger überraschende Antwort. Eine halbfertige Konfiguration soll
-nichts tun, nicht etwas.
+Empty now means off. The alternative would have been to make the field required as soon as a
+variant has content; “off” is the less surprising answer. A half-finished configuration should do
+nothing, not something.
 
-Was sich nicht ändert: ein Anteil, den jemand getippt hat, läuft weiter — festgehalten in einem
-eigenen Test, weil ein Fix, der auch konfigurierte Tests abschaltet, wertlos wäre.
+What does not change: a share someone typed keeps running — pinned in a test of its own, because
+a fix that switched off configured tests as well would be worthless.
 
 ## 1.3.1
 
