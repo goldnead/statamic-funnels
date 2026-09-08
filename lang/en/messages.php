@@ -4,6 +4,8 @@ return [
     'utility_title' => 'Funnels',
     'utility_nav' => 'Funnels',
     'utility_description' => 'Paths visitors walk: pages, forms, offers, payments.',
+    'setup_required_heading' => 'This page needs its database tables, and they are not there yet.',
+    'setup_required_description' => 'Run `php artisan migrate` and the page loads as usual. The reason is in the log as well.',
     'empty_heading' => 'No funnels yet',
     'empty_title' => 'Nothing here yet',
     'empty_description' => 'A funnel is a path with pages on it. Make one and draw it.',

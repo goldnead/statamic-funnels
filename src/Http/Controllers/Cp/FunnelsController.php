@@ -7,6 +7,7 @@ use Goldnead\StatamicFunnels\Registries\StepRegistry;
 use Goldnead\StatamicFunnels\Support\GraphWriter;
 use Goldnead\StatamicFunnels\Support\MailStats;
 use Goldnead\StatamicFunnels\Support\PreviewToken;
+use Goldnead\StatamicFunnels\Support\Setup;
 use Goldnead\StatamicFunnels\Support\StepOrder;
 use Goldnead\StatamicFunnels\Support\StepStats;
 use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
@@ -40,6 +41,13 @@ class FunnelsController extends CpController
     public function index(Request $request)
     {
         $this->authorizeAccess();
+
+        // Three tables, because the two counts below join onto the funnels.
+        // Offers and payments are not among them: the listing shows title,
+        // status and the two numbers, and nothing from a sibling addon.
+        if ($setup = Setup::guard(__('statamic-funnels::messages.utility_nav'), 'funnels', 'funnel_steps', 'funnel_visits')) {
+            return $setup;
+        }
 
         return Inertia::render('statamic-funnels::Funnels/Index', [
             'funnels' => Funnel::query()
