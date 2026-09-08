@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.15.1 — 2026-09-08
+
+### Fixed: the pricing options and the error box are drawn
+
+Both blocks shipped with class names and no rules, so on a page that loads the shipped stylesheet
+they rendered as raw browser chrome — a default fieldset border around the one decision on the page
+that is not optional, with its legend sitting on that line — while every block around them was
+styled. The choice of price now reads as what it is: a quiet label, one row per option, the name in
+bold and the amount beside it in the muted voice the rest of the card uses.
+
+Deliberately lighter than the tick-boxes below it, which is the other way round from how the two sit
+in the markup. A bump is a small extra and gets a frame so it is told apart from the order; picking a
+price *is* the order, and framing it puts a second box inside the card.
+
+### Added: a test that the checkout actually prints the trial
+
+The template referenced `plan:trial_days` and nothing proved the key ever arrived — the same shape as
+the bug above it, where a template referenced errors that were never passed in. A trial is part of
+the price statement (§ 312j Abs. 2 BGB), so it gets an assertion on the rendered page rather than on
+the catalogue alone.
+
 ## 1.15.0 — 2026-09-08
 
 ### Added: the buyer picks how to pay, at the checkout

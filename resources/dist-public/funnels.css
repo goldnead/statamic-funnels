@@ -157,6 +157,85 @@
     font-weight: 600;
 }
 
+/* How the buyer pays. The primary decision on the page, so it carries no
+   chrome of its own: a browser's default fieldset border draws a box around
+   the one thing that is not optional, and a legend sitting on that line reads
+   as a section heading rather than as the label it is.
+
+   Deliberately lighter than the bumps below, which is the other way round from
+   how the two are ranked in the markup. A bump is a small extra and gets a
+   frame because it has to be told apart from the order itself; picking a price
+   IS the order, and framing it would put a second box inside the card. */
+.funnel-offer__pricing {
+    border: 0;
+    padding: 0;
+    /* Same rhythm as the paragraphs around it. A fieldset carries browser
+       margins that do not match anything else on the page. */
+    margin: 0 0 1.1rem;
+    display: grid;
+    gap: 0.55rem;
+}
+
+.funnel-offer__pricing legend {
+    /* A label, in the voice the other labels use — not a heading. `float` so
+       it leaves the fieldset's own line box, which is the one reliable way to
+       stop a legend from being positioned on the border that is no longer
+       there. */
+    float: left;
+    width: 100%;
+    padding: 0;
+    margin: 0 0 0.35rem;
+    font-size: 0.88rem;
+    color: var(--funnel-muted);
+}
+
+/* Two classes deep, for the same specificity reason as the bumps below:
+   `.funnel-step label` is one class plus one type and would otherwise win. */
+.funnel-offer__pricing .funnel-pricing-option {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.2rem 0.7rem;
+    align-items: baseline;
+    font-size: 0.92rem;
+    cursor: pointer;
+}
+
+.funnel-offer__pricing .funnel-pricing-option input[type="radio"] {
+    flex-shrink: 0;
+}
+
+.funnel-offer__pricing .funnel-pricing-option__text {
+    min-width: 0;
+}
+
+/* The name of the option is what somebody chooses between; the amount and the
+   rhythm are the reading underneath it. Bold on the label alone, so three rows
+   scan as three choices and not as three prices. */
+.funnel-offer__pricing .funnel-pricing-option__text strong {
+    font-weight: 600;
+}
+
+.funnel-offer__pricing .funnel-pricing-option__plan,
+.funnel-offer__pricing .funnel-pricing-option__price {
+    color: var(--funnel-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Why the last attempt bought nothing. Loud enough to be seen on a page the
+   buyer has already read once, quiet enough not to look like a crash. */
+.funnel-offer__errors {
+    margin: 0 0 1.1rem;
+    padding: 0.7rem 1rem 0.7rem 1.6rem;
+    border-left: 3px solid #b91c1c;
+    color: #b91c1c;
+    font-size: 0.9rem;
+    list-style: disc;
+}
+
+.funnel-offer__errors li + li {
+    margin-top: 0.3rem;
+}
+
 /* The tick-boxes beside the order button. A bump is a small decision made in
    passing, so it reads as one line with a price on the right, not as a second
    product page. */

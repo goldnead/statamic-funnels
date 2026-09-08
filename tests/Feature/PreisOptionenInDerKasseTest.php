@@ -126,6 +126,26 @@ class PreisOptionenInDerKasseTest extends TestCase
     }
 
     #[Test]
+    public function die_kasse_nennt_die_testphase_einer_option(): void
+    {
+        // Dieselbe Fehlerklasse wie die schweigende Verweigerung: eine Vorlage
+        // verweist auf einen Schluessel, der nie ankommt, und faellt still aus.
+        // Katalog und Modell sind anderswo belegt; hier geht es darum, dass es
+        // auch auf der Seite steht — die Testphase ist Teil der Preisangabe,
+        // § 312j Abs. 2 BGB.
+        $this->funnel([
+            ['key' => 'voll', 'label' => 'Einmalig', 'amount_cent' => 9900],
+            ['key' => 'abo', 'label' => 'Monatlich', 'amount_cent' => 1900, 'interval' => '1 month', 'trial_days' => 14],
+        ]);
+        $this->bisZurKasse();
+
+        $this->asVisitor()
+            ->get('/f/kurs/kasse')
+            ->assertOk()
+            ->assertSee(__('statamic-funnels::messages.trial_days_label').' 14', false);
+    }
+
+    #[Test]
     public function einmalig_bucht_einmal_ab_und_laesst_keine_vereinbarung(): void
     {
         $this->funnel();
