@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.14.0 — 2026-09-08
+
+### The funnels utility no longer answers HTTP 500 when its tables are missing
+
+The utility registers itself with the addon, so its nav entry stands there before anybody has run
+`php artisan migrate`. The click then ran `Funnel::query()->withCount(...)` against tables that were
+never created and answered HTTP 500. Missing migrations are an unfinished setup, not a defect, and
+they owe the reader a sentence.
+
+The page now checks `funnels`, `funnel_steps` and `funnel_visits` before the first query and renders
+an empty state that names the missing tables and says to run `php artisan migrate`. Offers and
+payments are not counted in: the list shows title, status and its two numbers, nothing out of a
+sibling addon. The reason is written to the log as well, so an installation cannot look finished
+while it never works.
+
 ## 1.13.0 — 2026-09-07
 
 **The checkout page is now told in which rhythm the buyer pays.** 1.12.0 booked instalment
