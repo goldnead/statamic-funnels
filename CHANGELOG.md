@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.15.2 — 2026-09-09
+
+### Fixed: a purchase belongs to the brand that sells it, not to whoever reads the page
+
+On a multi-brand install every funnel purchase was stamped with the **default** brand — no matter
+which brand's offer was bought. Measured in the demo on 09.09.2026: three purchases from three
+brands, three payments, all three on brand 1. The invoice series, the sender address and the
+withdrawal wording on each of them belonged to a brand that had sold nothing.
+
+The cause is not in the stamping but in the URL. A funnel walks under `/f/<handle>`, which carries
+neither the path segment nor the host that `statamic-brand-context` reads a request's brand from, so
+the request fell back to the default brand and said so in the log, once per checkout. Everything
+downstream then did exactly what it was told.
+
+The offer step now makes the offer's brand the current one before it builds the basket, so the
+payment, its lines, an agreement and later the invoice are all created under it — rather than
+created wrong and repaired afterwards.
+
+Two edges, both of which now say something. An offer whose brand has been deleted — there is no
+foreign key on `offers.brand_id`, so this is reachable — is not sold at all, because a payment on
+the default brand is the very thing this change exists to prevent, only unnoticed. And an offer that
+belongs to no brand may still be sold, but the log says so, because a zero is not an answer and the
+old behaviour should not return in silence.
+
+A test per entry — checkout, webhook, follow-up — sets a *foreign* brand as the current one and
+still reads the selling brand off the payment.
+
+`goldnead/statamic-offers` rises from `^1.10.1` to `^1.11.1`, and not merely because it is newer:
+`offers.brand_id` does not exist before 1.11.0, and only 1.11.1 stamps it on the model rather than in
+the Control Panel alone. Under the old constraint this fix would resolve, install and do nothing —
+the same silence it was written against.
+
 ## 1.15.1 — 2026-09-08
 
 ### Fixed: the pricing options and the error box are drawn

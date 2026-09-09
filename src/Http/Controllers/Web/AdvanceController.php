@@ -2,6 +2,7 @@
 
 namespace Goldnead\StatamicFunnels\Http\Controllers\Web;
 
+use Goldnead\BrandContext\Facades\BrandContext;
 use Goldnead\StatamicFunnels\Events\FunnelFormSubmitted;
 use Goldnead\StatamicFunnels\Events\FunnelOfferAccepted;
 use Goldnead\StatamicFunnels\Events\FunnelOfferDeclined;
@@ -28,6 +29,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Statamic\Facades\User;
+use Throwable;
 
 /**
  * Moving on from a step.
@@ -350,6 +352,63 @@ class AdvanceController
             ]);
 
             return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
+        }
+
+        // **Ab hier gilt die Marke des Angebots, nicht die des Lesers.**
+        //
+        // Ein Funnel laeuft unter `/f/<handle>`, also ohne das Pfadsegment und
+        // ohne den Host, aus dem `SetBrandForSite` die Marke einer Anfrage
+        // liest. Die Anfrage faellt deshalb auf die Standardmarke zurueck, und
+        // ohne diese Zeilen stempelt `Brands::stampId()` jeden Kauf jeder Marke
+        // auf sie — mit Rechnungsserie, Absender und Widerrufstext der falschen
+        // Marke daran (am 09.09.2026 im Playground gemessen: drei Kaeufe aus
+        // drei Marken, alle drei Zahlungen auf Marke 1).
+        //
+        // Gesetzt wird hier, vor dem Einwilligungstext und vor dem Korb, damit
+        // alles, was dieser Schritt anlegt — Zahlung, Posten, Vereinbarung,
+        // spaeter die Rechnung — dieselbe Marke traegt, statt sie hinterher zu
+        // reparieren.
+        //
+        // Zwei Sonderfaelle, und beide sagen etwas, statt still zu sein.
+        // `offers.brand_id` hat keinen Fremdschluessel auf `brands.id`: wird
+        // eine Marke geloescht, zeigt das Angebot ins Leere und
+        // `setCurrent()` wirft. Dann wird hier nicht verkauft — eine Zahlung
+        // unter der Standardmarke waere genau der Fehler, gegen den diese
+        // Stelle geschrieben ist, nur unbemerkt. Und Marke 0 heisst „das
+        // Angebot gehoert niemandem": ein Angebot aus einem Kommando, einem
+        // Seeder, einem Import. Verkauft werden darf es, aber die Zahlung
+        // landet dann auf der Standardmarke der Anfrage, und das gehoert ins
+        // Log statt in die stille Wiederholung des alten Fehlers.
+        if (BrandContext::multiBrandEnabled()) {
+            if ((int) $offer->brand_id > 0) {
+                try {
+                    BrandContext::setCurrent((int) $offer->brand_id);
+                } catch (Throwable $e) {
+                    // Die Meldung des Werfenden gehoert dazu: an dieser Stelle
+                    // haengen ausser der geloeschten Marke auch die
+                    // `onBrandChanged`-Zuhoerer der Einstellungs-Schicht, und
+                    // deren Ausfall sieht in einem Log ohne Grund genauso aus
+                    // wie ein verwaistes Angebot.
+                    Log::warning('statamic-funnels: the brand of this offer could not be made current.', [
+                        'funnel' => $funnel->handle,
+                        'step' => $step->node_key,
+                        'offer' => $offer->handle,
+                        'brand' => (int) $offer->brand_id,
+                        'error' => $e->getMessage(),
+                    ]);
+
+                    return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
+                }
+            } else {
+                // `notice`, nicht `warning`: Altbestaende aus der Zeit vor
+                // offers 1.11.0 stehen absichtlich auf 0, und eine Warnung je
+                // Bestellung macht aus einem bekannten Zustand Laerm.
+                Log::notice('statamic-funnels: an offer without a brand is being sold, so the payment lands on the default brand.', [
+                    'funnel' => $funnel->handle,
+                    'step' => $step->node_key,
+                    'offer' => $offer->handle,
+                ]);
+            }
         }
 
         // Der Wortlaut, dem hier zugestimmt wird — vom Angebot, mit Fassung,
