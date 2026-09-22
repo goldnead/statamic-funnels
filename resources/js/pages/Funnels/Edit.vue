@@ -502,7 +502,13 @@ function entryFieldsFor(handle) {
 </script>
 
 <template>
-    <div class="flex h-[calc(100vh-4rem)] flex-col" data-funnel-editor>
+    <!-- `data-flow-full-bleed` lifts the CP's 85rem page-width cap for this
+         screen (see cp.css, where the rule sits unlayered on purpose). The
+         builder is a canvas tool: it needs the whole content area at every
+         viewport width, not 1360px of it. The attribute has to sit on the
+         single root, because the rule keys off `:has(> …)` on the wrapper
+         Statamic puts around the page. -->
+    <div class="flex h-[calc(100vh-4rem)] flex-col" data-funnel-editor data-flow-full-bleed>
         <Head :title="[funnel.title, __('statamic-funnels::messages.utility_title')]" />
 
         <Header :title="funnel.title" icon="hierarchy">

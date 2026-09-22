@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Fixed: the funnel editor uses the whole window width
+
+Statamic wraps every CP page in `[data-max-width-wrapper]` with `max-width: 85rem` (1360px).
+That is right for reading matter and wrong for a canvas: on a 1920px window the funnel graph sat
+in a 1360px column with more than 500px of empty gutter on either side. This editor never opted
+out of the cap — neither the marker attribute nor the rule existed here.
+
+Both now do. The editor's root carries `data-flow-full-bleed`, and `resources/css/cp.css` lifts
+the cap for exactly the page that carries it. Measured in the running CP at viewport 1920:
+before `max-width: 1360px`, width 1360px; after `max-width: none`, width 1622px. Nothing below
+1360px changes, because there the cap never applied.
+
+The rule sits **unlayered** on purpose, and it has to. Measured on 22.09.2026, the CP's
+cascade-layer order (first mention wins) is `properties > base > addon-theme > addon-utilities >
+components > utilities > ui > ui-states > theme`: `addon-utilities` comes *before* `utilities`,
+so a rule in that layer loses to Statamic's `max-w-page` no matter how specific it is. That is
+also why the rule cannot live once in the shared `@goldnead/flow-canvas/canvas.css` — this addon
+imports that file from inside its own `addon-utilities` block, which would re-layer it. The
+identical block in `statamic-automations` is a deliberate duplicate, not an oversight.
+
 ## 1.15.2 — 2026-09-09
 
 ### Fixed: a purchase belongs to the brand that sells it, not to whoever reads the page

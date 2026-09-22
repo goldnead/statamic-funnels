@@ -4,6 +4,67 @@
 @import "@statamic/cms/tailwind.css";
 @source "../js";
 
+/* -------------------------------------------------------------------
+ * Full-bleed builder page. UNLAYERED ON PURPOSE.
+ *
+ * Do not wrap this in `@layer addon-utilities`, and do not move it into the
+ * shared `@goldnead/flow-canvas/canvas.css`. Both would put it back into a
+ * layer that loses. Read the next paragraph before touching it.
+ *
+ * The CP layout wraps every page in `<div class="max-w-page"
+ * data-max-width-wrapper>` (85rem = 1360px), and core only lifts that cap
+ * through a user preference it writes to
+ * `#main-content[data-max-width-enabled]` — an element no page component can
+ * reach. So the cap is lifted from the inside: the builder marks its own root,
+ * and the wrapper that *contains* that root stops constraining.
+ *
+ * Why unlayered. Measured in the running CP on 22.09.2026, the document's
+ * layer order (first mention wins) is
+ *
+ *     properties > base > addon-theme > addon-utilities > components >
+ *     utilities > ui > ui-states > theme
+ *
+ * `addon-utilities` comes BEFORE `utilities`, and with cascade layers the
+ * later layer wins regardless of specificity. Statamic's `max-w-page` lives in
+ * `utilities`. The same rule, measured at viewport 1920:
+ *
+ *     @layer addon-utilities  → max-width 1360px, loses
+ *     @layer utilities        → max-width none, 1622px, wins
+ *     unlayered               → max-width none, 1622px, wins
+ *
+ * This rule shipped from inside `@layer addon-utilities` on 14.08.2026
+ * (v2.10.0) and never once worked: the selector matched, the rule was loaded,
+ * the editor stayed 1360px wide for thirteen months. Unlayered is chosen over
+ * `@layer utilities` because unlayered beats *every* layer and keeps working if
+ * Statamic re-orders its layers again.
+ * `memory/feedback-addon-layer-verliert-gegen-statamic-utilities.md`.
+ *
+ * It also cannot live once in the shared `canvas.css`: every host imports that
+ * file from *inside* its own `addon-utilities` block (see below), so the rule
+ * would be re-layered on arrival. Hence the deliberate duplicate in
+ * `statamic-automations/resources/css/cp.css` — the declaration below is
+ * byte-identical to the one there by design, keep it that way.
+ *
+ * A canvas is not reading matter. On a wide screen the 85rem cap left the node
+ * graph in a column with empty gutters either side, and every viewport below it
+ * was unaffected anyway — so this only ever gives width back where there is
+ * width to give.
+ *
+ * `:has()` rather than a negative margin: pulling the page out with `-mx-12`
+ * dragged the header along, and the title then sat flush against the window
+ * edge instead of on the CP's gutter.
+ *
+ * Two attribute names, both supported. `data-sa-full-bleed` is the original
+ * (sa = statamic-automations) and stays so nothing shipped with it breaks;
+ * `data-flow-full-bleed` is the neutral name every other flow-canvas host uses,
+ * this one included.
+ * ------------------------------------------------------------------- */
+[data-max-width-wrapper]:has(> [data-sa-full-bleed]),
+[data-max-width-wrapper]:has(> [data-flow-full-bleed]) {
+    width: 100%;
+    max-width: none;
+}
+
 /* Vue Flow's shipped stylesheets are deliberately **not** imported.
  *
  * They are unlayered, and unlayered CSS beats anything in a layer — including
