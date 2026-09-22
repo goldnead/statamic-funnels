@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.16.0 — 2026-09-22
 
 ### Fixed: the node library's tab bar scrolls, and now shows that it does
 
