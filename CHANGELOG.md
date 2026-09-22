@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Fixed: the node library's tab bar scrolls, and now shows that it does
+
+Comes through `goldnead/statamic-flow-canvas`, which both flow editors share. Statamic's
+`TabList` is a flex row with neither `overflow-x` nor `flex-wrap`, so in a 272px column the
+last group sat past the edge with no way to reach it. The bar now scrolls horizontally and
+carries a soft edge that appears on the side there is more to see and disappears at either end.
+
+The rebuilt bundle is part of this release. It has to be: the shared component's styles are
+compiled by *this* package's Vite, not by flow-canvas, and until 2026-09-22 they were written
+as Tailwind utilities that this build never generated, because its `@source` only scans
+`resources/js` of this repo. They are plain CSS in a scoped block now. See
+`goldnead/statamic-flow-canvas` 1.5.0 for the full account.
+
 ### Fixed: the funnel editor uses the whole window width
 
 Statamic wraps every CP page in `[data-max-width-wrapper]` with `max-width: 85rem` (1360px).
