@@ -110,7 +110,10 @@ class BillingFields
             $fields[] = [
                 'key' => $key,
                 'label' => (string) ($def['label'] ?? $key),
-                'type' => (string) ($def['type'] ?? 'text'),
+                // `country` landet in `payments.country` und muss dort ein
+                // ISO-Code sein. statamic-offers fuehrt es als `text` mit nur
+                // `size:2`, dann kam „12" durch und die Kasse starb spaeter.
+                'type' => $key === 'country' ? 'country' : (string) ($def['type'] ?? 'text'),
                 'required' => (bool) ($def['required'] ?? false),
                 'options' => self::options($def['options'] ?? null),
                 'rules' => array_values(array_filter((array) ($def['rules'] ?? []), 'is_string')),

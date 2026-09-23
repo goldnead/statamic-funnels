@@ -106,6 +106,35 @@ class BillingLibraryTest extends TestCase
         $this->assertStringNotContainsString('name="street"', $html);
     }
 
+    /**
+     * Die Bibliothek aus `statamic-offers` fuehrt das Land als `type: text`
+     * mit nur `size:2`. Damit kam „12" durch den Schritt und die Kasse starb
+     * spaeter an `PaymentDetails::country()` (auf staging reproduziert,
+     * 18.09.2026). Der Schluessel `country` landet in `payments.country`, also
+     * gilt fuer ihn die Laenderregel, egal welchen Typ die Bibliothek nennt.
+     */
+    #[Test]
+    public function the_country_key_is_a_country_even_when_the_library_calls_it_text(): void
+    {
+        BillingFields::resolveLibraryUsing(fn () => array_merge(self::LIBRARY, [
+            'country' => ['label' => 'Land', 'type' => 'text', 'required' => true, 'rules' => ['size:2']],
+        ]));
+        BillingFields::resolveFieldsUsing(fn (Offer $offer) => ['name', 'country']);
+        $this->funnel();
+
+        $this->asVisitor()->get('/f/kurs/angaben')->assertOk();
+
+        $this->asVisitor()->post('/f/kurs/capture_1/advance', [
+            'email' => 'maria@example.com', 'name' => 'Maria Beispiel', 'country' => '12',
+        ])->assertSessionHasErrors(['country']);
+
+        $this->asVisitor()->post('/f/kurs/capture_1/advance', [
+            'email' => 'maria@example.com', 'name' => 'Maria Beispiel', 'country' => 'at',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame('AT', FunnelVisit::query()->sole()->meta['billing']['country']);
+    }
+
     #[Test]
     public function required_comes_from_the_library_and_the_keys_land_one_to_one(): void
     {

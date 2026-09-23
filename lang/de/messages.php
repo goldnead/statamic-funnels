@@ -47,7 +47,7 @@ return [
     // zu, von der der Kaeufer erst im Kontoauszug erfaehrt.
     'saved_card_named' => 'Wird ohne erneute Karteneingabe von Ihrer :label •••• :last4 abgebucht.',
     'saved_card_digits' => 'Wird ohne erneute Karteneingabe von Ihrer Karte •••• :last4 abgebucht.',
-    'saved_card_unnamed' => 'Wird ohne erneute Karteneingabe von dem Zahlungsmittel abgebucht, mit dem Sie eben bezahlt haben.',
+    'saved_card_unnamed' => 'Wird ohne erneute Karteneingabe von dem Zahlungsmittel abgebucht, das Sie eben angegeben haben.',
     'offer_unavailable' => 'Dieses Angebot ist gerade nicht verfügbar.',
 
     // Der Takt einer Ratenzahlung oder eines Abos, in Worten. Steht auf der

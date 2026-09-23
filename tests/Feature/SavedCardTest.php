@@ -230,6 +230,15 @@ class SavedCardTest extends TestCase
             ->assertOk()
             ->assertSee('without entering card details again', false)
             ->assertDontSee('••••', false);
+
+        // Und der Satz behauptet dabei keine Zahlung, die noch offen ist.
+        // Nicht die Ankuendigung faellt weg (siehe oben), sondern das Wort.
+        app()->setLocale('de');
+
+        $this->asVisitor()->get('/f/fruehlingskurs/noch-etwas')
+            ->assertOk()
+            ->assertSee('ohne erneute Karteneingabe', false)
+            ->assertDontSee('bezahlt', false);
     }
 
     #[Test]
