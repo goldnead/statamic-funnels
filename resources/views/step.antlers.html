@@ -6,7 +6,7 @@
     can name its own template instead, and most sites will.
 #}}
 <!doctype html>
-<html lang="{{ funnel:locale }}">
+<html lang="{{ funnel:locale | sanitize }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -26,7 +26,7 @@
 </head>
 <body>
 
-<div class="funnel-step" data-funnel="{{ funnel:handle }}" data-step="{{ step:key }}" data-step-type="{{ step:type }}"{{ if funnel:embed }} data-funnel-embedded{{ /if }}>
+<div class="funnel-step" data-funnel="{{ funnel:handle | sanitize }}" data-step="{{ step:key | sanitize }}" data-step-type="{{ step:type | sanitize }}"{{ if funnel:embed }} data-funnel-embedded{{ /if }}>
     {{# Im Browser einer App (Instagram, Facebook, TikTok, LinkedIn) fehlen
         gespeicherte Karten, Apple Pay und die Banking-App. Der Hinweis steht
         vor allem anderen, weil er vor dem Kauf gelesen werden muss. #}}
@@ -34,8 +34,8 @@
         <div class="funnel-inapp" role="note">
             <p>{{ funnel:in_app_browser:text | sanitize }}</p>
             <p class="funnel-inapp__actions">
-                {{ if funnel:in_app_browser:android_url }}<a class="funnel-inapp__open" href="{{ funnel:in_app_browser:android_url | sanitize }}">{{ funnel:in_app_browser:open_label }}</a>{{ /if }}
-                <button type="button" class="funnel-inapp__copy" data-funnel-copy-link="{{ funnel:in_app_browser:url | sanitize }}" data-funnel-copied="{{ funnel:in_app_browser:copied_label }}">{{ funnel:in_app_browser:copy_label }}</button>
+                {{ if funnel:in_app_browser:android_url }}<a class="funnel-inapp__open" href="{{ funnel:in_app_browser:android_url | sanitize }}">{{ funnel:in_app_browser:open_label | sanitize }}</a>{{ /if }}
+                <button type="button" class="funnel-inapp__copy" data-funnel-copy-link="{{ funnel:in_app_browser:url | sanitize }}" data-funnel-copied="{{ funnel:in_app_browser:copied_label | sanitize }}">{{ funnel:in_app_browser:copy_label | sanitize }}</button>
             </p>
         </div>
     {{ /if }}
@@ -43,7 +43,7 @@
         oder Skript. Skripte gehoeren in den Tracking-Code, und den darf nur
         bearbeiten, wer das Recht dazu hat. #}}
     {{ if headline }}<h1>{{ headline | sanitize }}</h1>{{ /if }}
-    {{ if body }}<div class="funnel-step__body">{{ body | sanitize | markdown }}</div>{{ /if }}
+    {{ if body }}<div class="funnel-step__body">{{ body | funnels_markdown }}</div>{{ /if }}
 
     {{# Warum das Formular nicht weiterging, auf jedem Schritt ausser der Kasse
         (die sagt es unter dem Preis). Vorher schwieg die Anmeldung bei einer
@@ -59,12 +59,12 @@
         <form method="POST" action="{{ action }}" class="funnel-form">
             {{ csrf_field }}
             <label>
-                <span>{{ if billing:name_from_library }}{{ billing:name_from_library:label }}{{ else }}{{ trans key="statamic-funnels::messages.field_name" }}{{ /if }}</span>
-                <input type="text" name="name" value="{{ visit:name }}"{{ if billing:name_required || billing:name_from_library:required }} required{{ /if }}>
+                <span>{{ if billing:name_from_library }}{{ billing:name_from_library:label | sanitize }}{{ else }}{{ trans key="statamic-funnels::messages.field_name" }}{{ /if }}</span>
+                <input type="text" name="name" value="{{ visit:name | sanitize }}"{{ if billing:name_required || billing:name_from_library:required }} required{{ /if }}>
             </label>
             <label>
                 <span>{{ trans key="statamic-funnels::messages.field_email" }}</span>
-                <input type="email" name="email" value="{{ visit:email }}" required>
+                <input type="email" name="email" value="{{ visit:email | sanitize }}" required>
             </label>
 
             {{# Der Newsletter, direkt unter der Adresse und getrennt vom Rest:
@@ -87,26 +87,26 @@
             {{ billing:fields }}
                 {{ if type == "checkbox" }}
                     <label class="funnel-form__field funnel-form__field--checkbox">
-                        <input type="checkbox" name="{{ key }}" value="1"{{ if value }} checked{{ /if }}{{ if required }} required{{ /if }}>
-                        <span>{{ label }}</span>
+                        <input type="checkbox" name="{{ key | sanitize }}" value="1"{{ if value }} checked{{ /if }}{{ if required }} required{{ /if }}>
+                        <span>{{ label | sanitize }}</span>
                     </label>
                 {{ elseif type == "select" }}
                     <label class="funnel-form__field">
-                        <span>{{ label }}</span>
-                        <select name="{{ key }}"{{ if required }} required{{ /if }}>
+                        <span>{{ label | sanitize }}</span>
+                        <select name="{{ key | sanitize }}"{{ if required }} required{{ /if }}>
                             <option value=""></option>
-                            {{ options }}<option value="{{ value }}"{{ if selected }} selected{{ /if }}>{{ label }}</option>{{ /options }}
+                            {{ options }}<option value="{{ value | sanitize }}"{{ if selected }} selected{{ /if }}>{{ label | sanitize }}</option>{{ /options }}
                         </select>
                     </label>
                 {{ elseif type == "textarea" }}
                     <label class="funnel-form__field">
-                        <span>{{ label }}</span>
-                        <textarea name="{{ key }}" rows="3"{{ if required }} required{{ /if }}>{{ value }}</textarea>
+                        <span>{{ label | sanitize }}</span>
+                        <textarea name="{{ key | sanitize }}" rows="3"{{ if required }} required{{ /if }}>{{ value | sanitize }}</textarea>
                     </label>
                 {{ else }}
                     <label class="funnel-form__field">
-                        <span>{{ label }}</span>
-                        <input type="{{ if type == "email" || type == "tel" || type == "number" }}{{ type }}{{ else }}text{{ /if }}" name="{{ key }}" value="{{ value }}"{{ if type == "country" }} maxlength="2" size="2"{{ /if }}{{ if required }} required{{ /if }}>
+                        <span>{{ label | sanitize }}</span>
+                        <input type="{{ if type == "email" || type == "tel" || type == "number" }}{{ type | sanitize }}{{ else }}text{{ /if }}" name="{{ key | sanitize }}" value="{{ value | sanitize }}"{{ if type == "country" }} maxlength="2" size="2"{{ /if }}{{ if required }} required{{ /if }}>
                     </label>
                 {{ /if }}
             {{ /billing:fields }}
@@ -114,19 +114,19 @@
             {{ if billing:address }}
                 <label>
                     <span>{{ trans key="statamic-funnels::messages.field_street" }}</span>
-                    <input type="text" name="street" value="{{ billing:street }}" autocomplete="street-address" required>
+                    <input type="text" name="street" value="{{ billing:street | sanitize }}" autocomplete="street-address" required>
                 </label>
                 <label>
                     <span>{{ trans key="statamic-funnels::messages.field_postal_code" }}</span>
-                    <input type="text" name="postal_code" value="{{ billing:postal_code }}" autocomplete="postal-code" required>
+                    <input type="text" name="postal_code" value="{{ billing:postal_code | sanitize }}" autocomplete="postal-code" required>
                 </label>
                 <label>
                     <span>{{ trans key="statamic-funnels::messages.field_city" }}</span>
-                    <input type="text" name="city" value="{{ billing:city }}" autocomplete="address-level2" required>
+                    <input type="text" name="city" value="{{ billing:city | sanitize }}" autocomplete="address-level2" required>
                 </label>
                 <label>
                     <span>{{ trans key="statamic-funnels::messages.field_country" }}</span>
-                    <input type="text" name="country" value="{{ billing:country }}" maxlength="2" size="2" autocomplete="country" required>
+                    <input type="text" name="country" value="{{ billing:country | sanitize }}" maxlength="2" size="2" autocomplete="country" required>
                 </label>
             {{ /if }}
             <button type="submit">{{ trans key="statamic-funnels::messages.continue" }}</button>
@@ -142,25 +142,25 @@
                     right at render time; the script ticks it from `ends_at`,
                     because a tab left open for an hour has a stale one. #}}
                 {{ if countdown }}
-                    <p class="funnel-countdown" data-funnel-countdown="{{ countdown:ends_at }}"{{ if countdown:expired }} data-funnel-countdown-over{{ /if }}>
+                    <p class="funnel-countdown" data-funnel-countdown="{{ countdown:ends_at | sanitize }}"{{ if countdown:expired }} data-funnel-countdown-over{{ /if }}>
                         {{ if countdown:expired }}
                             {{ trans key="statamic-funnels::messages.countdown_over" }}
                         {{ else }}
                             <span class="funnel-countdown__label">{{ trans key="statamic-funnels::messages.countdown_remaining" }}</span>
-                            <time class="funnel-countdown__clock" datetime="{{ countdown:ends_at }}" data-funnel-clock>{{ countdown:seconds }}</time>
+                            <time class="funnel-countdown__clock" datetime="{{ countdown:ends_at | sanitize }}" data-funnel-clock>{{ countdown:seconds | sanitize }}</time>
                         {{ /if }}
                     </p>
                 {{ /if }}
                 <h2>{{ offer:headline | sanitize }}</h2>
-                {{ if offer:body }}<div>{{ offer:body | sanitize | markdown }}</div>{{ /if }}
+                {{ if offer:body }}<div>{{ offer:body | funnels_markdown }}</div>{{ /if }}
                 {{# Bei „Zahl, was du willst" gibt es keinen einen Preis, nur
                     eine Untergrenze. Die steht am Betragsfeld. #}}
                 {{ unless offer:pwyw }}
                 <p class="funnel-offer__price">
                     {{# Folgt der gewaehlten Zahlweise (funnels.js), damit oben nicht
                         ein anderer Preis steht als der, der gleich abgebucht wird. #}}
-                    <strong data-funnel-price-target>{{ offer:price_local }}</strong>
-                    {{ if offer:compare_at }}<s>{{ offer:compare_at }} {{ offer:currency }}</s>{{ /if }}
+                    <strong data-funnel-price-target>{{ offer:price_local | sanitize }}</strong>
+                    {{ if offer:compare_at }}<s>{{ offer:compare_at | sanitize }} {{ offer:currency | sanitize }}</s>{{ /if }}
                 </p>
                 {{ /unless }}
 
@@ -203,7 +203,7 @@
                             <legend>{{ trans key="statamic-funnels::messages.pricing_option_legend" }}</legend>
                             {{ offer:pricing_options }}
                                 <label class="funnel-pricing-option">
-                                    <input type="radio" name="pricing_option" value="{{ key }}"{{ if checked }} checked{{ /if }} data-funnel-price="{{ amount_local }} {{ currency }}" required>
+                                    <input type="radio" name="pricing_option" value="{{ key | sanitize }}"{{ if checked }} checked{{ /if }} data-funnel-price="{{ amount_local | sanitize }} {{ currency | sanitize }}" required>
                                     <span class="funnel-pricing-option__text">
                                         <strong>{{ label | sanitize }}</strong>
                                         {{# Der Betrag steht genau einmal je Zeile. Bei einem
@@ -211,9 +211,9 @@
                                             noch einmal „520,00 EUR" liest sich wie ein zweiter
                                             Preis und nicht wie derselbe. #}}
                                         {{ if plan }}
-                                            <span class="funnel-pricing-option__plan">{{ if plan:times }}{{ plan:times }} × {{ amount_local }} {{ currency }}, {{ plan:interval_label }}{{ if plan:total_local }} · {{ trans key="statamic-funnels::messages.total_label" }} {{ plan:total_local }} {{ currency }}{{ /if }}{{ else }}{{ amount_local }} {{ currency }}, {{ plan:interval_label }}{{ /if }}{{# Die Testphase gehoert zur Preisangabe, nicht daneben: § 312j Abs. 2 BGB will sie dort, wo bestellt wird. #}}{{ if plan:trial_days }} · {{ trans key="statamic-funnels::messages.trial_days_label" }} {{ plan:trial_days }}{{ /if }}</span>
+                                            <span class="funnel-pricing-option__plan">{{ if plan:times }}{{ plan:times | sanitize }} × {{ amount_local | sanitize }} {{ currency | sanitize }}, {{ plan:interval_label | sanitize }}{{ if plan:total_local }} · {{ trans key="statamic-funnels::messages.total_label" }} {{ plan:total_local | sanitize }} {{ currency | sanitize }}{{ /if }}{{ else }}{{ amount_local | sanitize }} {{ currency | sanitize }}, {{ plan:interval_label | sanitize }}{{ /if }}{{# Die Testphase gehoert zur Preisangabe, nicht daneben: § 312j Abs. 2 BGB will sie dort, wo bestellt wird. #}}{{ if plan:trial_days }} · {{ trans key="statamic-funnels::messages.trial_days_label" }} {{ plan:trial_days | sanitize }}{{ /if }}</span>
                                         {{ else }}
-                                            <span class="funnel-pricing-option__price">{{ amount_local }} {{ currency }}</span>
+                                            <span class="funnel-pricing-option__price">{{ amount_local | sanitize }} {{ currency | sanitize }}</span>
                                         {{ /if }}
                                     </span>
                                 </label>
@@ -232,15 +232,15 @@
                                 haengt. Das Skript blendet danach ein und aus; der
                                 Server setzt dieselben Regeln beim Bestellen durch. #}}
                             {{ offer:bumps }}
-                                <label class="funnel-bump" data-funnel-bump="{{ handle }}"{{ if options }} data-funnel-bump-options="{{ options }}"{{ /if }}{{ if requires }} data-funnel-bump-requires="{{ requires }}"{{ /if }}{{ if preselected_rule }} data-funnel-bump-preselected{{ /if }}{{ if hidden }} hidden{{ /if }}>
-                                    <input type="checkbox" name="bumps[]" value="{{ handle }}"{{ if preselected }} checked{{ /if }}>
+                                <label class="funnel-bump" data-funnel-bump="{{ handle | sanitize }}"{{ if options }} data-funnel-bump-options="{{ options | sanitize }}"{{ /if }}{{ if requires }} data-funnel-bump-requires="{{ requires | sanitize }}"{{ /if }}{{ if preselected_rule }} data-funnel-bump-preselected{{ /if }}{{ if hidden }} hidden{{ /if }}>
+                                    <input type="checkbox" name="bumps[]" value="{{ handle | sanitize }}"{{ if preselected }} checked{{ /if }}>
                                     <span class="funnel-bump__text">
                                         <strong>{{ headline | sanitize }}</strong>
-                                        {{ if body }}<span class="funnel-bump__body">{{ body | sanitize | markdown }}</span>{{ /if }}
+                                        {{ if body }}<span class="funnel-bump__body">{{ body | funnels_markdown }}</span>{{ /if }}
                                     </span>
                                     <span class="funnel-bump__price">
-                                        +{{ amount_local }} {{ currency }}
-                                        {{ if compare_at }}<s>{{ compare_at }} {{ currency }}</s>{{ /if }}
+                                        +{{ amount_local | sanitize }} {{ currency | sanitize }}
+                                        {{ if compare_at }}<s>{{ compare_at | sanitize }} {{ currency | sanitize }}</s>{{ /if }}
                                     </span>
                                 </label>
                             {{ /offer:bumps }}
@@ -253,8 +253,8 @@
                         <label class="funnel-offer__amount">
                             <span>{{ trans key="statamic-funnels::messages.amount_label" }}</span>
                             <span class="funnel-offer__amount-input">
-                                <input type="number" name="amount" value="{{ offer:pwyw:value | sanitize }}" min="{{ offer:pwyw:min }}" max="{{ offer:pwyw:max }}" step="0.01" inputmode="decimal" required>
-                                <span>{{ offer:pwyw:currency }}</span>
+                                <input type="number" name="amount" value="{{ offer:pwyw:value | sanitize }}" min="{{ offer:pwyw:min | sanitize }}" max="{{ offer:pwyw:max | sanitize }}" step="0.01" inputmode="decimal" required>
+                                <span>{{ offer:pwyw:currency | sanitize }}</span>
                             </span>
                             <small>{{ trans key="statamic-funnels::messages.amount_hint" min="{offer:pwyw:min_local} {offer:pwyw:currency}" }}</small>
                             {{ if field_errors:amount }}<small class="funnel-offer__field-error" role="alert">{{ field_errors:amount | sanitize }}</small>{{ /if }}
@@ -271,7 +271,7 @@
                             {{ else }}
                                 <select name="country" autocomplete="country" required>
                                     <option value="">{{ trans key="statamic-funnels::messages.country_choose" }}</option>
-                                    {{ offer:country:options }}<option value="{{ value }}"{{ if selected }} selected{{ /if }}>{{ label }}</option>{{ /offer:country:options }}
+                                    {{ offer:country:options }}<option value="{{ value | sanitize }}"{{ if selected }} selected{{ /if }}>{{ label | sanitize }}</option>{{ /offer:country:options }}
                                 </select>
                             {{ /if }}
                         </label>
@@ -341,7 +341,7 @@
                     {{ if funnel:reminder }}
                         <label class="funnel-offer__reminder">
                             <input type="checkbox" name="reminder_consent" value="1">
-                            <span>{{ funnel:reminder:label }}</span>
+                            <span>{{ funnel:reminder:label | sanitize }}</span>
                         </label>
                     {{ /if }}
 
@@ -349,7 +349,7 @@
                         ist. Ohne es lehnt die Kasse ab. #}}
                     {{ funnel:captcha }}
 
-                    <button type="submit">{{ if offer:button_label }}{{ offer:button_label }}{{ else }}{{ trans key="statamic-funnels::messages.order_button" }}{{ /if }}</button>
+                    <button type="submit">{{ if offer:button_label }}{{ offer:button_label | sanitize }}{{ else }}{{ trans key="statamic-funnels::messages.order_button" }}{{ /if }}</button>
                 </form>
 
                 <form method="POST" action="{{ action }}" class="funnel-offer__decline">
@@ -376,20 +376,20 @@
                 {{ order:lines }}
                     <li>
                         <span class="funnel-order__name">{{ name | sanitize }}</span>
-                        <span class="funnel-order__amount">{{ amount }}</span>
+                        <span class="funnel-order__amount">{{ amount | sanitize }}</span>
                     </li>
                 {{ /order:lines }}
             </ul>
             <p class="funnel-order__total">
                 <span>{{ trans key="statamic-funnels::messages.order_total" }}</span>
-                <strong>{{ order:total }}</strong>
+                <strong>{{ order:total | sanitize }}</strong>
             </p>
             <p class="funnel-order__reference">
-                {{ trans key="statamic-funnels::messages.order_reference" }} {{ order:reference }}
+                {{ trans key="statamic-funnels::messages.order_reference" }} {{ order:reference | sanitize }}
             </p>
             {{ if order:email }}
                 <p class="funnel-order__email">
-                    {{ trans key="statamic-funnels::messages.order_mail_to" }} {{ order:email }}
+                    {{ trans key="statamic-funnels::messages.order_mail_to" }} {{ order:email | sanitize }}
                 </p>
             {{ /if }}
         </div>
@@ -405,17 +405,17 @@
                 mit dem Weg zum Passwort-Zuruecksetzen. #}}
             {{ get_error:account }}
                 <p class="funnel-form__error" role="alert">
-                    {{ value }}
-                    {{ if account:reset_url }}<a href="{{ account:reset_url }}">{{ trans key="statamic-funnels::messages.account_reset_link" }}</a>{{ /if }}
+                    {{ value | sanitize }}
+                    {{ if account:reset_url }}<a href="{{ account:reset_url | sanitize }}">{{ trans key="statamic-funnels::messages.account_reset_link" }}</a>{{ /if }}
                 </p>
             {{ /get_error:account }}
             <label>
                 <span>{{ trans key="statamic-funnels::messages.field_email" }}</span>
-                <input type="email" value="{{ visit:email }}" readonly>
+                <input type="email" value="{{ visit:email | sanitize }}" readonly>
             </label>
             <label>
                 <span>{{ trans key="statamic-funnels::messages.field_name" }}</span>
-                <input type="text" name="name" value="{{ visit:name }}" autocomplete="name" required>
+                <input type="text" name="name" value="{{ visit:name | sanitize }}" autocomplete="name" required>
             </label>
             <label>
                 <span>{{ trans key="statamic-funnels::messages.field_password" }}</span>

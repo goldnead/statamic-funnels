@@ -451,6 +451,11 @@ Button, image or text link: any element with `data-funnel-popup` opens the popup
   targets `_top`. The way back from the provider carries a one-time token bound to the payment, not
   the walk. The page redeems it and reloads without it; a browser without the funnel's cookie gets
   it, an existing cookie is never overwritten (the next page shows the returned purchase once).
+- **Known limits.** Browsers that do not send `Sec-Fetch-Dest` (Safari before 16.4) get no walk
+  inside the frame, so the frame does not carry the visit from page to page (fail closed: nobody's
+  visit is taken over). Link to the funnel instead of embedding it if these browsers matter. A payment that switches to a banking app and
+  comes back in another browser loses the visit (the return is bound to the browser that ordered);
+  the payment itself arrives and is recorded, only the next funnel page is not shown.
 - **Your own frame headers win.** A CSP middleware of the site, or a server setting
   `X-Frame-Options: SAMEORIGIN` / `DENY` (nginx `add_header`, Apache `Header set`), is applied
   after this addon and blocks the embed. Exempt the funnel routes (`/f/*` by default) there, or let

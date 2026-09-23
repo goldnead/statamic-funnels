@@ -47,6 +47,10 @@ class ServiceProvider extends AddonServiceProvider
 
     protected $config = false;
 
+    protected $modifiers = [
+        Modifiers\FunnelsMarkdown::class,
+    ];
+
     public function register()
     {
         parent::register();

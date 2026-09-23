@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Fixed (review round 4)
+
+- **Escaped output, completed.** The offer's button label, the field library's labels, the reminder
+  label, the in-app notice's labels, prices, and every visitor input put back into a form field
+  (name, address, library fields) are escaped as well. Markdown from the CP is rendered by a new
+  modifier `funnels_markdown` (CommonMark with `html_input: escape`, `allow_unsafe_links: false`):
+  `[x](javascript:…)` is no longer a link, while quotes (`>`) and autolinks (`<https://…>`) work
+  again. Together with round 3 this closes a way around the permission *Edit tracking code*; only
+  the tracking slots output code unescaped.
+- After a refused coupon the bumps are shown for the chosen pricing option, not the first one.
+- README: known embedding limits (Safari before 16.4, switching to a banking app).
+
 ### Fixed (review round 3)
 
 - **Embedding: the way back from the provider is bound to the browser that ordered.** The order
@@ -11,8 +23,7 @@
   pixel cannot send it along. No fixed consent banner inside a frame.
 - **Escaped output (behaviour change):** headline, text, offer and bump texts, labels and the
   withdrawal wording are escaped in the shipped template; Markdown still works, HTML inside it is
-  shown as text. A funnel that put HTML into a headline or text field now shows it literally. This
-  closes a way around the permission *Edit tracking code*.
+  shown as text. A funnel that put HTML into a headline or text field now shows it literally.
 - The editor warns when a consent service is missing from the consent config.
 - After a refused coupon the chosen pricing option, bumps, country and code stay, and the message
   stands at the field. The price at the top follows the chosen pricing option. The coupon field is

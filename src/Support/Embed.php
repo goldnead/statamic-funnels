@@ -115,7 +115,8 @@ class Embed
      * Besuch (Adresse, Name, Mandat fuer den Ein-Klick-Upsell). Im Rahmen
      * zaehlt er nur, wenn der Browser die Anfrage als Rahmen meldet
      * (`Sec-Fetch-Dest: iframe`) oder es die eingebettete Route ist, die ihre
-     * Herkunft selbst prueft. Ohne den Kopf (alte Browser) wird geglaubt.
+     * Herkunft selbst prueft. Ohne den Kopf (alte Browser, Safari vor 16.4)
+     * gilt der Weg nicht: fail closed, jede Seite im Rahmen beginnt dort neu.
      */
     public static function tokenFromRequest(Request $request): ?string
     {

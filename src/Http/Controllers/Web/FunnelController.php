@@ -942,7 +942,8 @@ class FunnelController
      * Die Bumps neben dem Bestellknopf, mit ihren Regeln.
      *
      * `hidden` ist der Zustand beim ersten Zeichnen: zur vorbelegten
-     * (ersten) Zahlweise und zu den vorausgewaehlten Bumps. Ohne Skript bleibt
+     * (ersten) Zahlweise und zu den vorausgewaehlten Bumps, nach einer
+     * Ablehnung zu dem, was gewaehlt war. Ohne Skript bleibt
      * es dabei; mit Skript folgt es der Auswahl.
      *
      * @return list<array<string, mixed>>
@@ -950,7 +951,11 @@ class FunnelController
     protected function bumpsFor(FunnelStep $step, Offer $offer, ?FunnelVisit $visit): array
     {
         $returning = BumpRules::isReturning($visit);
-        $ersteOption = $offer->pricingOptions()[0]['key'] ?? null;
+        // Nach einer Ablehnung die gewaehlte Zahlweise, sonst die erste.
+        $keys = array_column($offer->pricingOptions(), 'key');
+        $gewaehlt = old('pricing_option');
+        $option = in_array($gewaehlt, $keys, true) ? $gewaehlt : ($keys[0] ?? null);
+        $angekreuzt = is_array(old('bumps')) ? array_values(array_filter(old('bumps'), 'is_string')) : null;
 
         $bumps = array_values(array_filter(
             $offer->bumpOffers(),
@@ -963,17 +968,17 @@ class FunnelController
             $regeln[$bump->handle] = BumpRules::for($step, $bump->handle);
         }
 
-        $vorbelegt = array_keys(array_filter($regeln, fn (array $r) => $r['preselected']));
+        $vorbelegt = $angekreuzt ?? array_keys(array_filter($regeln, fn (array $r) => $r['preselected']));
 
-        return array_map(function (Offer $bump) use ($regeln, $vorbelegt, $ersteOption, $step, $returning) {
+        return array_map(function (Offer $bump) use ($regeln, $vorbelegt, $option, $angekreuzt, $step, $returning) {
             $regel = $regeln[$bump->handle];
 
             // Sichtbar, wenn die Zahlweise passt und der Bump, an dem er
-            // haengt, vorausgewaehlt ist — so, wie die Seite aufgeht. Dieselbe
+            // haengt, angekreuzt ist, so wie die Seite aufgeht. Dieselbe
             // Pruefung wie beim Bestellen, nur mit der Auswahl beim Laden.
             $zeigen = in_array(
                 $bump->handle,
-                BumpRules::filter($step, array_values(array_unique(array_merge($vorbelegt, [$bump->handle]))), $ersteOption, $returning),
+                BumpRules::filter($step, array_values(array_unique(array_merge($vorbelegt, [$bump->handle]))), $option, $returning),
                 true,
             );
 
@@ -988,8 +993,8 @@ class FunnelController
                 'compare_at_local' => $bump->compareAtLocal(),
                 'currency' => $bump->currency(),
                 // Nach einer Ablehnung, was angekreuzt war; sonst die Vorauswahl.
-                'preselected' => is_array(old('bumps'))
-                    ? in_array($bump->handle, old('bumps'), true) && $zeigen
+                'preselected' => $angekreuzt !== null
+                    ? in_array($bump->handle, $angekreuzt, true) && $zeigen
                     : $regel['preselected'] && $zeigen,
                 // Fuer das Skript: beim Einblenden wieder ankreuzen.
                 'preselected_rule' => $regel['preselected'],
