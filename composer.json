@@ -13,8 +13,8 @@
     "statamic/cms": "^6.0",
     "goldnead/statamic-brand-context": "^1.13",
     "goldnead/statamic-flow-canvas": "^1.3",
-    "goldnead/statamic-offers": "^1.11.1",
-    "goldnead/statamic-payments": "^1.22"
+    "goldnead/statamic-offers": "^1.12",
+    "goldnead/statamic-payments": "^1.25"
   },
   "require-dev": {
     "larastan/larastan": "^3.0",

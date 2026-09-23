@@ -4,6 +4,8 @@
 
 ### Upgrading
 
+- **Requires statamic-offers 1.12 and statamic-payments 1.25.** Composer pulls them in with this
+  version.
 - **Funnel pages now send `Content-Security-Policy: frame-ancestors 'self'`** plus the funnel's
   allowed embedding domains, and remove `X-Frame-Options`. A site that frames a funnel page from
   another domain today has to list that domain on the funnel (*Settings* in the editor). If your
