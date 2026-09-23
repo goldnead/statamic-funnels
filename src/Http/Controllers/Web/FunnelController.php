@@ -25,6 +25,7 @@ use Goldnead\StatamicFunnels\Support\SavedCard;
 use Goldnead\StatamicFunnels\Support\Split;
 use Goldnead\StatamicFunnels\Support\SplitResults;
 use Goldnead\StatamicFunnels\Support\Tracking;
+use Goldnead\StatamicFunnels\Support\TrackingConsent;
 use Goldnead\StatamicOffers\Models\Offer;
 use Goldnead\StatamicPayments\Support\Catalogue;
 use Goldnead\StatamicPayments\Support\Subscriptions;
@@ -72,6 +73,10 @@ class FunnelController
         // that takes money in the middle is worse than a missing page.
         abort_unless($step !== null, 404);
 
+        if ($request->query->has(Embed::RETURN)) {
+            return $this->returned($request, $model);
+        }
+
         return $this->framed($request, $model, $this->render($model, $step));
     }
 
@@ -82,7 +87,35 @@ class FunnelController
 
         abort_unless($step !== null && ! $step->disabled, 404);
 
+        if ($request->query->has(Embed::RETURN)) {
+            return $this->returned($request, $model);
+        }
+
         return $this->framed($request, $model, $this->render($model, $step));
+    }
+
+    /**
+     * Zurueck vom Anbieter nach einem Kauf aus dem Rahmen (F4).
+     *
+     * Das Einmal-Token wird eingeloest und die Seite ohne es neu geladen, damit
+     * es weder im Verlauf noch in einem Tracking-Aufruf steht. Ohne eigenes
+     * Cookie bekommt der Browser das des Besuchs; mit einem vorhandenen bleibt
+     * es stehen, und die naechste Seite zeigt einmal den zurueckgekehrten Kauf.
+     */
+    protected function returned(Request $request, Funnel $funnel): SymfonyResponse
+    {
+        $token = Embed::consumeReturn($funnel, $request);
+        $weiter = redirect()->to(Embed::withoutReturn($request->fullUrl()));
+
+        if ($token !== null) {
+            if (! $this->walk->hasCookie()) {
+                $this->walk->queueCookie($token);
+            } elseif ($request->hasSession()) {
+                $request->session()->flash(FunnelWalk::RETURNED, $token);
+            }
+        }
+
+        return Embed::protect($weiter, $funnel, false);
     }
 
     /**
@@ -251,6 +284,15 @@ class FunnelController
             'scripts' => config('statamic-funnels.styles', true)
                 ? asset('vendor/statamic-funnels/funnels.js')
                 : null,
+            // Die Sprache der Seite, fuer `<html lang>`.
+            'locale' => str_replace('_', '-', (string) app()->getLocale()),
+            // Ob statamic-consent da ist: dann bindet die mitgelieferte
+            // Vorlage dessen Skript und Banner ein, und geparkter
+            // Tracking-Code startet nach der Einwilligung.
+            //
+            // Nicht `consent`: der Schluessel stuende in der Vorlage flach neben
+            // dem Tag `{{ consent:head }}` und verdeckte ihn.
+            'consent_addon' => TrackingConsent::addonPresent(),
             'step' => [
                 'key' => $step->node_key,
                 'type' => $step->type,
@@ -810,8 +852,9 @@ class FunnelController
             // Was im Code-Feld steht: der Code aus dem Gutschein-Link, oder
             // einer, der seit einem frueheren Kauf fuer den ganzen Lauf gilt.
             // Vorbelegt, nicht eingeloest — das macht erst der Korb.
+            // Nach einem Fehler steht das Getippte wieder da.
             'coupon_code' => config('statamic-funnels.coupons', true)
-                ? CheckoutInputs::prefilledCoupon(request(), $visit, $offer)
+                ? (is_string(old('coupon')) ? old('coupon') : CheckoutInputs::prefilledCoupon(request(), $visit, $offer))
                 : null,
             // „Zahl, was du willst": Grenzen und Vorschlag fuer das Betragsfeld.
             // Null bei einem festen Preis.

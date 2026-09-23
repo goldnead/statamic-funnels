@@ -15,7 +15,7 @@ use Goldnead\StatamicFunnels\Models\Funnel;
 class FunnelSettings
 {
     /**
-     * @return array{in_app_enabled: bool, in_app_text: string|null, embed_domains: list<string>, tracking_head: string|null, tracking_thanks: string|null, meta_pixel_id: string|null}
+     * @return array{in_app_enabled: bool, in_app_text: string|null, embed_domains: list<string>, tracking_head: string|null, tracking_thanks: string|null, meta_pixel_id: string|null, tracking_head_service: string|null, tracking_thanks_service: string|null, meta_pixel_service: string|null}
      */
     public static function of(?Funnel $funnel): array
     {
@@ -32,7 +32,26 @@ class FunnelSettings
             'meta_pixel_id' => is_scalar($raw['meta_pixel_id'] ?? null) && preg_match('/^\d{5,32}$/', trim((string) $raw['meta_pixel_id'])) === 1
                 ? trim((string) $raw['meta_pixel_id'])
                 : null,
+            // Der Dienst in statamic-consent je Code. Null heisst: der aus der
+            // Config (`tracking.consent_service`).
+            'tracking_head_service' => self::service($raw['tracking_head_service'] ?? null),
+            'tracking_thanks_service' => self::service($raw['tracking_thanks_service'] ?? null),
+            'meta_pixel_service' => self::service($raw['meta_pixel_service'] ?? null),
         ];
+    }
+
+    /** Die Schluessel, die nur mit dem Recht „Tracking-Code bearbeiten" geaendert werden duerfen. */
+    public const TRACKING_KEYS = [
+        'tracking_head', 'tracking_thanks', 'meta_pixel_id',
+        'tracking_head_service', 'tracking_thanks_service', 'meta_pixel_service',
+    ];
+
+    /** Ein Dienst-Handle, wie statamic-consent sie schreibt, oder null. */
+    public static function service(mixed $value): ?string
+    {
+        $value = is_string($value) ? trim($value) : '';
+
+        return preg_match('/^[a-z0-9_-]{1,64}$/i', $value) === 1 ? $value : null;
     }
 
     /**

@@ -11,6 +11,8 @@ return [
 
     'permission_group' => 'Funnels',
     'permission_manage' => 'Manage funnel settings',
+    'permission_tracking' => 'Edit tracking code',
+    'permission_tracking_description' => 'Head and purchase code, Meta pixel ID and their consent services. This is JavaScript that runs on the funnel pages.',
 
     'groups' => [
 
@@ -80,7 +82,7 @@ return [
 
         'in_app_browser_enabled' => [
             'label' => 'In-app browser notice',
-            'description' => 'Visitors from Instagram, Facebook, TikTok or LinkedIn see a note to open the page in their usual browser. Off means in no funnel, whatever the funnel says.',
+            'description' => 'Visitors from Instagram, Facebook, Threads, TikTok, LinkedIn, Pinterest or Snapchat see a note to open the page in their usual browser. Off means in no funnel, whatever the funnel says.',
         ],
 
         'embed_link_minutes' => [

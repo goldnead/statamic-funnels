@@ -35,8 +35,13 @@ class InAppBrowser
             return null;
         }
 
+        // Threads meldet sich als „Barcelona" (der Projektname bei Meta) und
+        // steht vor Instagram, weil es denselben Unterbau hat.
         return match (true) {
+            (bool) preg_match('/\bBarcelona \d/', $agent) => 'Threads',
             str_contains($agent, 'Instagram') => 'Instagram',
+            (bool) preg_match('/\[?Pinterest\/|Pinterest for /', $agent) => 'Pinterest',
+            str_contains($agent, 'Snapchat') => 'Snapchat',
             (bool) preg_match('/\bFBAN\/|\bFBAV\/|\bFB_IAB\/|\bFBIOS\b|\[FB/', $agent) => 'Facebook',
             (bool) preg_match('/musical_ly|BytedanceWebview|\bTikTok\b|trill_/i', $agent) => 'TikTok',
             str_contains($agent, 'LinkedInApp') => 'LinkedIn',
@@ -77,9 +82,10 @@ class InAppBrowser
         // als ganze Seite sehen und nicht als Rahmen ohne Rahmen.
         $url = $request->fullUrlWithoutQuery(['embed', 'w', 'e']);
 
+        // Auf Android gibt es Chrome statt Apple Pay; der Text sagt es so.
         $text = $settings['in_app_text'] !== null
             ? str_replace(':app', $app, $settings['in_app_text'])
-            : (string) __('statamic-funnels::messages.in_app_default', ['app' => $app]);
+            : (string) __(self::isAndroid($agent) ? 'statamic-funnels::messages.in_app_default_android' : 'statamic-funnels::messages.in_app_default', ['app' => $app]);
 
         return [
             'app' => $app,

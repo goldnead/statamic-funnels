@@ -73,7 +73,7 @@ class PaymentsGuardAndReminderTest extends TestCase
 
         // Kein Token: payments lehnt ab, bevor eine Zahlung entsteht.
         $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1'])
-            ->assertSessionHasErrors(['offer' => __('statamic-funnels::messages.checkout_blocked_captcha')]);
+            ->assertSessionHasErrors(['offer' => $this->satz('captcha')]);
 
         $this->assertSame(0, Payment::count());
     }
@@ -81,18 +81,30 @@ class PaymentsGuardAndReminderTest extends TestCase
     #[Test]
     public function zu_viele_versuche_sagen_das(): void
     {
-        config(['statamic-payments.protection.rate_limit' => ['enabled' => true, 'per_ip' => 1, 'per_email' => 50, 'decay_minutes' => 10]]);
+        // Pro Adresse gezaehlt: 127.0.0.1 ist privat, und payments zaehlt
+        // private IPs nicht (Proxy ohne TrustProxies).
+        config(['statamic-payments.protection.rate_limit' => ['enabled' => true, 'per_ip' => 100, 'per_email' => 1, 'decay_minutes' => 10]]);
         $this->kasse();
         $this->bisZurKasse();
 
         $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1'])->assertRedirect();
 
-        // Zweiter Kauf von derselben Adresse (neuer Besuch, gleiche IP).
+        // Zweiter Kauf mit derselben Adresse, neuer Besuch.
         $this->token = 'zweiterbesuchzweiterbesuchzweite';
-        $this->bisZurKasse('zwei@example.com');
+        $this->bisZurKasse();
 
         $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1'])
-            ->assertSessionHasErrors(['offer' => __('statamic-funnels::messages.checkout_blocked_rate_limited')]);
+            ->assertSessionHasErrors(['offer' => $this->satz('rate_limited')]);
+    }
+
+    /** Der Satz, den payments fuer den Grund liefert, sonst der eigene. */
+    protected function satz(string $grund): string
+    {
+        $guard = 'Goldnead\StatamicPayments\Support\CheckoutGuard';
+
+        return method_exists($guard, 'message')
+            ? $guard::message($grund)
+            : __('statamic-funnels::messages.checkout_blocked_'.$grund);
     }
 
     #[Test]

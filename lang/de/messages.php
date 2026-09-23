@@ -26,10 +26,10 @@ return [
     'account_create' => 'Konto anlegen',
     'account_later' => 'Später',
     'account_required' => 'Für diesen Schritt ist ein Konto nötig.',
-    'account_exists' => 'Zu dieser Adresse gibt es schon ein Konto. Melde dich an oder setze dein Passwort zurück.',
+    'account_exists' => 'Zu dieser Adresse gibt es schon ein Konto. Bitte melden Sie sich an oder setzen Sie Ihr Passwort zurück.',
     'account_reset_link' => 'Passwort vergessen?',
     'account_no_email' => 'Ohne E-Mail-Adresse lässt sich kein Konto anlegen. Bitte zuerst das Formular ausfüllen.',
-    'order_summary' => 'Deine Bestellung',
+    'order_summary' => 'Ihre Bestellung',
     'order_total' => 'Gesamt',
     'order_reference' => 'Bestellnummer:',
     'order_mail_to' => 'Die Bestätigung geht an',
@@ -45,9 +45,9 @@ return [
     // Steht unmittelbar ueber dem Bestellknopf, wenn ohne erneute
     // Karteneingabe abgebucht wird. Wer das weglaesst, laesst eine Abbuchung
     // zu, von der der Kaeufer erst im Kontoauszug erfaehrt.
-    'saved_card_named' => 'Wird ohne erneute Karteneingabe von deiner :label •••• :last4 abgebucht.',
-    'saved_card_digits' => 'Wird ohne erneute Karteneingabe von deiner Karte •••• :last4 abgebucht.',
-    'saved_card_unnamed' => 'Wird ohne erneute Karteneingabe von dem Zahlungsmittel abgebucht, mit dem du eben bezahlt hast.',
+    'saved_card_named' => 'Wird ohne erneute Karteneingabe von Ihrer :label •••• :last4 abgebucht.',
+    'saved_card_digits' => 'Wird ohne erneute Karteneingabe von Ihrer Karte •••• :last4 abgebucht.',
+    'saved_card_unnamed' => 'Wird ohne erneute Karteneingabe von dem Zahlungsmittel abgebucht, mit dem Sie eben bezahlt haben.',
     'offer_unavailable' => 'Dieses Angebot ist gerade nicht verfügbar.',
 
     // Der Takt einer Ratenzahlung oder eines Abos, in Worten. Steht auf der
@@ -63,7 +63,7 @@ return [
     // Der zurueckgeschickte Wortlaut passt nicht zum geltenden: die Seite ist
     // aelter als der Text, oder jemand hat am Formular gedreht.
     'consent_version' => 'Fassung :version',
-    'consent_stale' => 'Die Bedingungen haben sich geändert. Bitte lade die Seite neu und bestätige erneut.',
+    'consent_stale' => 'Die Bedingungen haben sich geändert. Bitte laden Sie die Seite neu und bestätigen Sie erneut.',
     // Die Spaltenkoepfe der Funnel-Tabelle.
     'column_title' => 'Titel',
     'column_status' => 'Status',
@@ -139,15 +139,19 @@ return [
     'metric_no_event' => 'Ohne Art',
 
     // Kasse: Betrag, Land (statamic-offers 1.12).
-    'amount_label' => 'Dein Betrag',
+    'amount_label' => 'Ihr Betrag',
     'amount_hint' => 'Ab :min.',
-    'amount_out_of_range' => 'Bitte wähle einen Betrag zwischen :min und :max.',
+    'amount_out_of_range' => 'Bitte wählen Sie einen Betrag zwischen :min und :max.',
     'country_label' => 'Land',
     'country_choose' => 'Bitte wählen',
-    'country_invalid' => 'Bitte wähle ein Land aus der Liste.',
+    'country_invalid' => 'Bitte wählen Sie ein Land aus der Liste.',
+    'coupon_unknown' => 'Diesen Gutscheincode gibt es nicht. Bitte prüfen Sie die Schreibweise oder lassen Sie das Feld leer.',
+    'coupon_not_live' => 'Dieser Gutscheincode gilt nicht mehr. Bitte lassen Sie das Feld leer, um zum regulären Preis zu bestellen.',
+    'coupon_not_for_offer' => 'Dieser Gutscheincode gilt nicht für dieses Angebot.',
 
     // In-App-Browser (F3).
-    'in_app_default' => 'Du bist im Browser von :app. Zum Bezahlen öffne die Seite besser in deinem normalen Browser, dort stehen gespeicherte Karten, Apple Pay und die App deiner Bank bereit. In :app geht das über das Menü oben rechts und „Im Browser öffnen“.',
+    'in_app_default' => 'Sie sind im Browser von :app. Zum Bezahlen öffnen Sie die Seite besser in Ihrem normalen Browser, dort stehen gespeicherte Karten, Apple Pay und die App Ihrer Bank bereit. In :app geht das über das Menü oben rechts und „Im Browser öffnen“.',
+    'in_app_default_android' => 'Sie sind im Browser von :app. Zum Bezahlen öffnen Sie die Seite besser in Chrome, dort stehen gespeicherte Karten, Google Pay und die App Ihrer Bank bereit.',
     'in_app_copy' => 'Link kopieren',
     'in_app_copied' => 'Link kopiert',
     'in_app_open' => 'In Chrome öffnen',
@@ -161,13 +165,16 @@ return [
     'split_winner' => 'Gewinner',
     'split_leading' => 'Vorn',
     'split_open' => 'Noch offen',
-    'split_waiting' => 'Gewinner steht fest, sobald jede Fassung :min Besuche hat und eine mit 95 % Sicherheit vorn liegt.',
+    'split_waiting' => 'Entschieden wird einmal, wenn jede Fassung :min Besuche hat und diese einen Tag Zeit zum Kaufen hatten. Liegt dann eine mit 95 % Sicherheit vorn, sehen neue Besucher nur noch sie; sonst läuft der Test ohne Gewinner weiter. Zwischenstände sind kein Ergebnis.',
+    'split_no_winner' => 'Kein Unterschied',
+    'split_interim' => 'Zwischenstand, kein Ergebnis',
+    'split_no_winner_help' => 'Nach :min Besuchen je Fassung lag keine mit 95 % Sicherheit vorn. Beide Fassungen laufen weiter.',
 
     // Einstellungen des Funnels (F3, F4, F6, F7).
     'settings_open' => 'Einstellungen',
     'settings_title' => 'Funnel-Einstellungen',
     'settings_in_app' => 'In-App-Browser',
-    'settings_in_app_help' => 'Wer aus Instagram, Facebook, TikTok oder LinkedIn kommt, sieht einen Hinweis, die Seite im normalen Browser zu öffnen. Dort stehen gespeicherte Karten und Apple Pay bereit.',
+    'settings_in_app_help' => 'Wer aus Instagram, Facebook, Threads, TikTok, LinkedIn, Pinterest oder Snapchat kommt, sieht einen Hinweis, die Seite im normalen Browser zu öffnen. Dort stehen gespeicherte Karten und Apple Pay bereit.',
     'settings_in_app_enabled' => 'Hinweis zeigen',
     'settings_in_app_text' => 'Eigener Text',
     'settings_in_app_text_help' => 'Leer heißt: der mitgelieferte Text. :app steht für den Namen der App.',
@@ -190,10 +197,16 @@ return [
     'settings_capi_off' => 'Conversions API aus. Mit FUNNELS_META_CAPI_TOKEN in der .env gehen die Ereignisse auch vom Server an Meta.',
 
     // Kasse: Schutz und Erinnerung aus statamic-payments (P7, P8).
-    'checkout_blocked_captcha' => 'Bitte bestätige unten, dass du kein Bot bist, und bestelle noch einmal.',
-    'checkout_blocked_rate_limited' => 'Von hier kamen gerade viele Bestellversuche. Bitte warte ein paar Minuten und versuche es dann noch einmal.',
-    'checkout_blocked' => 'Diese Bestellung können wir so nicht annehmen. Bitte schreib uns, dann klären wir es.',
-    'reminder_consent_label' => 'Erinnere mich per E-Mail, falls ich die Bestellung nicht abschließe.',
+    'checkout_blocked_captcha' => 'Bitte bestätigen Sie unten, dass Sie kein Bot sind, und bestellen Sie noch einmal.',
+    'checkout_blocked_rate_limited' => 'Von hier kamen gerade viele Bestellversuche. Bitte warten Sie ein paar Minuten und versuchen Sie es dann noch einmal.',
+    'checkout_blocked' => 'Diese Bestellung können wir so nicht annehmen. Bitte schreiben Sie uns, dann klären wir es.',
+    'reminder_consent_label' => 'Erinnern Sie mich per E-Mail, falls ich die Bestellung nicht abschließe.',
+
+    // Tracking: Dienst je Code, eigenes Recht (F6, F7).
+    'settings_tracking_service' => 'Einwilligung',
+    'settings_tracking_service_help' => 'Der Dienst in statamic-consent, dessen Einwilligung diesen Code freigibt. Leer heißt: :service.',
+    'settings_tracking_locked' => 'Tracking-Code dürfen nur Benutzer mit dem Recht „Tracking-Code bearbeiten“ ändern.',
+    'tracking_forbidden' => 'Sie dürfen Tracking-Code nicht bearbeiten.',
 
     'embed_domains_invalid' => 'Das ist keine Domain: :domains',
     'meta_pixel_id_invalid' => 'Die Pixel-ID besteht nur aus Ziffern.',

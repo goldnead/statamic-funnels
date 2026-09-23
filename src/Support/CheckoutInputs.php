@@ -127,6 +127,27 @@ class CheckoutInputs
         return is_string($code) && $code !== '' ? $code : null;
     }
 
+    /**
+     * Warum ein getippter Code hier nicht gilt, als Satz fuer die Kaeuferin, oder null.
+     */
+    public static function couponRefusal(?string $code, Offer $offer): ?string
+    {
+        if ($code === null || trim($code) === '') {
+            return null;
+        }
+
+        $coupon = Coupon::findByCode($code);
+
+        $key = match (true) {
+            $coupon === null => 'coupon_unknown',
+            ! $coupon->isLive() => 'coupon_not_live',
+            ! $coupon->appliesTo($offer) => 'coupon_not_for_offer',
+            default => null,
+        };
+
+        return $key === null ? null : (string) __('statamic-funnels::messages.'.$key);
+    }
+
     /** Den eingeloesten Code fuer die weiteren Angebote des Laufs merken, wenn er das darf. */
     public static function carry(FunnelVisit $visit, ?Coupon $coupon): void
     {
@@ -168,6 +189,10 @@ class CheckoutInputs
             'min' => self::plain($min),
             'max' => self::plain($max),
             'suggested' => number_format($vorschlag / 100, 2, '.', ''),
+            // Was im Feld steht: nach einem Fehler das Getippte, sonst der Vorschlag.
+            'value' => is_scalar(old('amount')) && (string) old('amount') !== ''
+                ? (string) old('amount')
+                : number_format($vorschlag / 100, 2, '.', ''),
             'min_local' => Offer::localise($min),
             'max_local' => Offer::localise($max),
             'suggested_local' => Offer::localise($vorschlag),

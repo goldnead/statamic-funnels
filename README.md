@@ -309,8 +309,11 @@ the form says.
 
 - **Coupon link.** `?coupon=CODE` (the name is `statamic-offers.coupon_link.parameter`) fills the
   code field. The link usually points at the funnel's entry, so the code is remembered on the walk
-  until the checkout. Filled in is not redeemed; an unknown or expired code fills nothing and breaks
-  nothing. A code marked *funnel-wide* in offers is carried to the later checkouts of the walk.
+  until the checkout. Filled in is not redeemed; an unknown or expired code in a link fills nothing and
+  breaks nothing. A code the buyer **types** that does not apply (unknown, expired, used up, not for
+  this offer) refuses the order with the reason at the code field, rather than charging the full price
+  silently; an empty field orders at the regular price. A code marked *funnel-wide* in offers is
+  carried to the later checkouts of the walk.
 - **Pay what you want.** The checkout shows an amount field with the offer's floor, suggestion and
   ceiling; the amount is checked on the server. Without the field (a template of your own) the
   suggestion applies, never zero. The thank-you page shows the offer's thank-you line for the amount
@@ -400,15 +403,20 @@ headline must not silently blank the body.
 | `upsell` | an offer accepted on a **later** step |
 | `revenue` | revenue per visit, from the paid payments of those purchases, minus refunds |
 
-With `split_auto` on, the winner is picked once each version has `split_min_visits` visits (default
-100) and one leads with 95 % confidence: a two-proportion z-test for the rates, a Welch test on the
-means for revenue. From then on new visitors only see the winner; a visitor who already had a
-version keeps it. The winner is stored per goal in `funnels.meta.split_winners`, so changing the goal
-starts over. The editor shows goal, both figures, the confidence and the winner.
+With `split_auto` on, the test is **decided once, on a fixed sample**: when each version has
+`split_min_visits` visits (at least 100, default 100) and the last of them entered a day ago (an
+hour for `continue`), the first `split_min_visits` visits of each version are compared, a
+two-proportion z-test for the rates, a Welch test on the means for revenue. If one leads with 95 %
+confidence it wins, and new visitors only see it; a visitor who already had a version keeps it.
+Otherwise "no difference" is recorded and both keep running. It is never re-decided: checking after
+every visit and stopping at the first 95 % finds a "winner" between two identical versions about a
+third of the time; the fixed sample keeps that at the promised 5 % (a test simulates 2000 A/A runs).
+The decision is stored per goal in `funnels.meta.split_winners`, so changing the goal starts over. The
+editor shows goal, both figures, the interim confidence (marked as not a result) and the decision.
 
 ### The in-app browser notice
 
-Instagram, Facebook, TikTok and LinkedIn open links in their own browser, where saved cards, Apple
+Instagram, Facebook, Threads, TikTok, LinkedIn, Pinterest and Snapchat open links in their own browser, where saved cards, Apple
 Pay and the bank's app are missing. A funnel page opened there starts with a notice (recognised on
 the server from the user agent, no flicker), a *Copy link* button and, on Android, a link that opens
 Chrome. iOS offers no such link; the text points to the app's menu. On by default, off and worded
@@ -433,12 +441,20 @@ Button, image or text link: any element with `data-funnel-popup` opens the popup
   plus the domains listed on the funnel. A site not on the list shows an empty frame.
 - **No cookies needed.** Inside a frame on another site the browser holds back this site's cookies,
   so the walk travels signed in the page's links and forms (`w`, `_walk`, valid for
-  `embed.link_minutes`). The embedded forms post to a route without a CSRF token and are accepted
+  `embed.link_minutes`). A signed walk counts **only inside a frame** (`embed=1`, and the browser
+  reports `Sec-Fetch-Dest: iframe`); a link with somebody else's walk opened normally is ignored.
+  Inside a frame no cookie is ever written. The embedded forms post to a route without a CSRF token
+  (both `ValidateCsrfToken` and Laravel 13's `PreventRequestForgery` are excluded) and are accepted
   only from this site's own origin with a valid signed walk. A template of your own keeps working as
   long as it posts to `funnel:action`.
 - **Payment happens outside the frame.** Stripe and Mollie refuse to be framed, so the order button
-  targets `_top`; the way back from the provider carries the signed walk, and the thank-you page
-  finds the purchase without a cookie.
+  targets `_top`. The way back from the provider carries a one-time token bound to the payment, not
+  the walk. The page redeems it and reloads without it; a browser without the funnel's cookie gets
+  it, an existing cookie is never overwritten (the next page shows the returned purchase once).
+- **Your own frame headers win.** A CSP middleware of the site, or a server setting
+  `X-Frame-Options: SAMEORIGIN` / `DENY` (nginx `add_header`, Apache `Header set`), is applied
+  after this addon and blocks the embed. Exempt the funnel routes (`/f/*` by default) there, or let
+  them keep the `frame-ancestors` this addon sends.
 
 ### Tracking code and the Meta pixel
 
@@ -448,8 +464,16 @@ pixel ID. A checkout step can carry its own purchase code (`tracking_purchase`).
 the finished response before `</head>` and `</body>`, so it also works on steps that show an entry.
 
 **Only with consent.** With goldnead/statamic-consent every script is parked as
-`type="text/plain" data-consent-service="<tracking.consent_service>"` and starts once that service is
-allowed; `<noscript>` and other elements are dropped, because they would load without consent.
+`type="text/plain" data-consent-service="<service>"` and starts once that service is allowed;
+`<noscript>` and other elements are dropped, because they would load without consent. Each code
+(head, after purchase, pixel, a step's purchase code) names its own service; empty means
+`tracking.consent_service`. The shipped step template is a whole document (`<head>`, viewport) and
+includes `{{ consent:head }}` and `{{ consent:banner }}` when the consent addon is installed, so parked
+scripts actually start. A template of your own has to include both itself.
+
+**Who may edit it.** Tracking code is raw JavaScript on the site's pages. Changing it (and the pixel
+ID and the services) needs the permission *Edit tracking code*; without it the fields are read-only
+and the server refuses changes.
 Without the consent addon `tracking.without_consent_addon` decides: `block` (default) prints nothing,
 `render` prints the code as it is for a site whose own banner controls it.
 

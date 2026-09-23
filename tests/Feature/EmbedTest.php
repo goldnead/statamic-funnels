@@ -142,7 +142,176 @@ class EmbedTest extends TestCase
     }
 
     #[Test]
-    public function der_bestellknopf_verlaesst_den_rahmen_und_der_rueckweg_traegt_den_weg(): void
+    public function der_bestellknopf_verlaesst_den_rahmen_und_der_rueckweg_findet_den_kauf(): void
+    {
+        [$visit, $pfad] = $this->imRahmenBestellt();
+
+        $this->bezahlen(Payment::query()->firstOrFail());
+
+        // Zurueck vom Anbieter, oben, ohne Cookie: einmal umgeleitet auf die
+        // Adresse ohne Rueckweg-Token, dabei das Cookie des Besuchs gesetzt.
+        $antwort = $this->get($pfad);
+        $antwort->assertRedirect()->assertCookie(FunnelWalk::COOKIE, $visit->token, false);
+
+        $ziel = $antwort->headers->get('Location');
+        $this->assertStringNotContainsString('fr=', $ziel);
+        $this->assertStringNotContainsString('w=', $ziel);
+
+        $this->withUnencryptedCookie(FunnelWalk::COOKIE, $visit->token)->get($ziel)
+            ->assertOk()
+            ->assertSee(__('statamic-funnels::messages.order_summary'));
+    }
+
+    #[Test]
+    public function der_rueckweg_traegt_keinen_weg_sondern_ein_einmal_token(): void
+    {
+        [, $pfad] = $this->imRahmenBestellt();
+
+        $this->assertStringContainsString('fr=', $pfad);
+        $this->assertStringNotContainsString('w=', $pfad);
+    }
+
+    #[Test]
+    public function ein_rueckweg_token_gilt_nur_einmal(): void
+    {
+        [$visit, $pfad] = $this->imRahmenBestellt();
+
+        $this->get($pfad)->assertCookie(FunnelWalk::COOKIE, $visit->token, false);
+
+        // Ein zweiter Browser mit demselben Link bekommt den Besuch nicht.
+        // (Die Cookie-Warteschlange lebt im Test ueber die Anfrage hinaus.)
+        $this->flushSession();
+        $this->app['cookie']->flushQueuedCookies();
+        $zweite = $this->get($pfad);
+        $zweite->assertRedirect();
+        $this->assertNotSame($visit->token, $this->cookieWert($zweite));
+    }
+
+    #[Test]
+    public function der_rueckweg_ueberschreibt_kein_vorhandenes_cookie_zeigt_aber_den_kauf(): void
+    {
+        [$visit, $pfad] = $this->imRahmenBestellt();
+        $this->bezahlen(Payment::query()->firstOrFail());
+
+        $fremd = 'vorhandenvorhandenvorhandenvorha';
+        $antwort = $this->withUnencryptedCookie(FunnelWalk::COOKIE, $fremd)->get($pfad);
+
+        $antwort->assertRedirect();
+        $this->assertNull($this->cookieWert($antwort));
+
+        // Die naechste Seite zeigt einmal den zurueckgekehrten Kauf.
+        $this->withUnencryptedCookie(FunnelWalk::COOKIE, $fremd)->get($antwort->headers->get('Location'))
+            ->assertOk()
+            ->assertSee(__('statamic-funnels::messages.order_summary'));
+    }
+
+    // ----------------------------------------------- Besuch nicht uebernehmbar
+
+    #[Test]
+    public function ein_w_ausserhalb_des_rahmens_uebernimmt_nichts_und_setzt_kein_cookie(): void
+    {
+        $this->kasse();
+        $this->get('/f/kurs?embed=1');
+        $angreifer = FunnelVisit::query()->latest('id')->firstOrFail();
+
+        $antwort = $this->get('/f/kurs?w='.urlencode(Embed::walkLink($angreifer->token)));
+
+        $antwort->assertOk();
+        $this->assertNotSame($angreifer->token, $this->cookieWert($antwort));
+        $this->assertSame(2, FunnelVisit::count());
+    }
+
+    #[Test]
+    public function im_rahmen_wird_kein_cookie_geschrieben(): void
+    {
+        $this->kasse();
+
+        $antwort = $this->get('/f/kurs?embed=1');
+
+        $antwort->assertOk();
+        $this->assertNull($this->cookieWert($antwort));
+    }
+
+    #[Test]
+    public function ein_w_oben_im_browser_gilt_auch_mit_embed_nicht(): void
+    {
+        // Wer dem Opfer `?embed=1&w=<eigener>` als Link schickt, landet oben,
+        // nicht im Rahmen. Der Browser sagt es mit `Sec-Fetch-Dest: document`.
+        $this->kasse();
+        $this->get('/f/kurs?embed=1');
+        $angreifer = FunnelVisit::query()->latest('id')->firstOrFail();
+
+        $this->withHeaders(['Sec-Fetch-Dest' => 'document'])
+            ->get('/f/kurs?embed=1&w='.urlencode(Embed::walkLink($angreifer->token)))
+            ->assertOk();
+
+        $this->assertSame(2, FunnelVisit::count());
+    }
+
+    #[Test]
+    public function ein_vorhandenes_cookie_wird_im_rahmen_nicht_ueberschrieben(): void
+    {
+        $this->kasse();
+        $this->get('/f/kurs?embed=1');
+        $angreifer = FunnelVisit::query()->latest('id')->firstOrFail();
+
+        $antwort = $this->withUnencryptedCookie(FunnelWalk::COOKIE, 'opferopferopferopferopferopferop')
+            ->withHeaders(['Sec-Fetch-Dest' => 'iframe'])
+            ->get('/f/kurs?embed=1&w='.urlencode(Embed::walkLink($angreifer->token)));
+
+        $antwort->assertOk();
+        $this->assertNull($this->cookieWert($antwort));
+    }
+
+    // ------------------------------------------------ CSRF mit echter Middleware
+
+    #[Test]
+    public function mit_echter_csrf_middleware_geht_nur_die_eingebettete_route_ohne_token(): void
+    {
+        $this->kasse();
+        $this->strengeCsrfMiddleware();
+
+        $this->get('/f/kurs?embed=1');
+        $visit = FunnelVisit::query()->latest('id')->firstOrFail();
+
+        // Ohne `Sec-Fetch-Site`, damit Laravel 13 nicht ueber die Herkunft
+        // durchwinkt: dann zaehlt nur, ob die Middleware laeuft.
+        $this->withHeaders(['Origin' => 'http://localhost'])
+            ->post('/f/kurs/entry_1/advance-embed?_walk='.urlencode(Embed::walkLink($visit->token)))
+            ->assertRedirect();
+
+        $this->withUnencryptedCookie(FunnelWalk::COOKIE, $visit->token)
+            ->post('/f/kurs/anmeldung/advance')
+            ->assertStatus(419);
+    }
+
+    /**
+     * Die CSRF-Middleware ohne ihre Ausnahme fuer Tests: `runningUnitTests()`
+     * ist hier falsch, also prueft sie wie im Betrieb.
+     */
+    protected function strengeCsrfMiddleware(): void
+    {
+        foreach (['Illuminate\Foundation\Http\Middleware\PreventRequestForgery', ValidateCsrfToken::class] as $klasse) {
+            if (! class_exists($klasse)) {
+                continue;
+            }
+
+            $this->app->bind($klasse, fn ($app) => new class($app, $app['encrypter']) extends ValidateCsrfToken
+            {
+                protected function runningUnitTests()
+                {
+                    return false;
+                }
+            });
+        }
+    }
+
+    /**
+     * Im Rahmen bis zur Kasse und bestellt; gibt Besuch und Rueckweg (Pfad) zurueck.
+     *
+     * @return array{0: FunnelVisit, 1: string}
+     */
+    protected function imRahmenBestellt(): array
     {
         $this->kasse();
 
@@ -162,18 +331,21 @@ class EmbedTest extends TestCase
             ->post('/f/kurs/kasse/advance-embed?_walk='.$w, ['accept' => '1', 'confirmed' => '1'])
             ->assertRedirect();
 
-        $rueckweg = $this->gateway->lastPayload['redirectUrl'] ?? $this->gateway->lastPayload['redirect_url'] ?? null;
-        $this->assertIsString($rueckweg, 'kein Rueckweg an den Anbieter uebergeben: '.json_encode(array_keys($this->gateway->lastPayload)));
-        $this->assertStringContainsString('w=', $rueckweg);
+        $rueckweg = $this->gateway->lastPayload['redirectUrl'] ?? null;
+        $this->assertIsString($rueckweg, 'kein Rueckweg an den Anbieter uebergeben');
 
-        // Zurueck vom Anbieter, oben, ohne Cookie: der Weg ist wieder da.
-        $zahlung = $this->bezahlen(Payment::query()->firstOrFail());
-        $pfad = parse_url($rueckweg, PHP_URL_PATH).'?'.parse_url($rueckweg, PHP_URL_QUERY);
+        return [$visit, parse_url($rueckweg, PHP_URL_PATH).'?'.parse_url($rueckweg, PHP_URL_QUERY)];
+    }
 
-        $this->get($pfad)
-            ->assertOk()
-            ->assertSee(__('statamic-funnels::messages.order_summary'))
-            ->assertCookie(FunnelWalk::COOKIE, $visit->token, false);
+    protected function cookieWert($antwort): ?string
+    {
+        foreach ($antwort->headers->getCookies() as $cookie) {
+            if ($cookie->getName() === FunnelWalk::COOKIE) {
+                return $cookie->getValue();
+            }
+        }
+
+        return null;
     }
 
     #[Test]

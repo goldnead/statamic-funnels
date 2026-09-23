@@ -23,7 +23,11 @@ class SendPurchaseToMeta
     public function handle(PaymentPaid $event): void
     {
         try {
-            $visit = FunnelVisit::query()->where('payment_id', $event->payment->getKey())->first();
+            // Der Lauf, den die Zahlung selbst nennt; sonst der, dessen
+            // juengste Zahlung sie ist (Zahlungen von vor dieser Fassung).
+            $id = data_get($event->payment->meta, 'funnel_visit_id');
+            $visit = (is_int($id) || ctype_digit((string) $id) ? FunnelVisit::query()->find((int) $id) : null)
+                ?? FunnelVisit::query()->where('payment_id', $event->payment->getKey())->first();
 
             if (! $visit) {
                 return;

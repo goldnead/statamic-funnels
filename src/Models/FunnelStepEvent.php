@@ -4,12 +4,14 @@ namespace Goldnead\StatamicFunnels\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $visit_id
  * @property string $node_key
  * @property string $event
  * @property array<string, mixed>|null $payload
+ * @property Carbon|null $created_at
  */
 class FunnelStepEvent extends Model
 {

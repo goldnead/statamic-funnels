@@ -143,9 +143,13 @@ return [
     'country_label' => 'Country',
     'country_choose' => 'Please choose',
     'country_invalid' => 'Please pick a country from the list.',
+    'coupon_unknown' => 'This coupon code does not exist. Please check the spelling or leave the field empty.',
+    'coupon_not_live' => 'This coupon code is no longer valid. Leave the field empty to order at the regular price.',
+    'coupon_not_for_offer' => 'This coupon code does not apply to this offer.',
 
     // In-app browser (F3).
     'in_app_default' => 'You are in the :app browser. To pay, better open this page in your usual browser, where your saved cards, Apple Pay and your banking app are at hand. In :app, use the menu in the top right and “Open in browser”.',
+    'in_app_default_android' => 'You are in the :app browser. To pay, better open this page in Chrome, where your saved cards, Google Pay and your banking app are at hand.',
     'in_app_copy' => 'Copy link',
     'in_app_copied' => 'Link copied',
     'in_app_open' => 'Open in Chrome',
@@ -159,13 +163,16 @@ return [
     'split_winner' => 'Winner',
     'split_leading' => 'Leading',
     'split_open' => 'Still open',
-    'split_waiting' => 'A winner is picked once each version has :min visits and one leads with 95 % confidence.',
+    'split_waiting' => 'Decided once, when each version has :min visits and those visitors have had a day to buy. If one then leads with 95 % confidence, new visitors only see it; otherwise the test runs on without a winner. Interim figures are not a result.',
+    'split_no_winner' => 'No difference',
+    'split_interim' => 'interim, not a result',
+    'split_no_winner_help' => 'After :min visits per version neither led with 95 % confidence. Both versions keep running.',
 
     // Funnel settings (F3, F4, F6, F7).
     'settings_open' => 'Settings',
     'settings_title' => 'Funnel settings',
     'settings_in_app' => 'In-app browser',
-    'settings_in_app_help' => 'Visitors coming from Instagram, Facebook, TikTok or LinkedIn see a note to open the page in their usual browser, where saved cards and Apple Pay are at hand.',
+    'settings_in_app_help' => 'Visitors coming from Instagram, Facebook, Threads, TikTok, LinkedIn, Pinterest or Snapchat see a note to open the page in their usual browser, where saved cards and Apple Pay are at hand.',
     'settings_in_app_enabled' => 'Show the note',
     'settings_in_app_text' => 'Own wording',
     'settings_in_app_text_help' => 'Empty means the shipped text. :app stands for the name of the app.',
@@ -192,6 +199,12 @@ return [
     'checkout_blocked_rate_limited' => 'There were many order attempts from here just now. Please wait a few minutes and try again.',
     'checkout_blocked' => 'We cannot accept this order like this. Please write to us and we will sort it out.',
     'reminder_consent_label' => 'Remind me by email if I do not finish the order.',
+
+    // Tracking: service per code, own permission (F6, F7).
+    'settings_tracking_service' => 'Consent',
+    'settings_tracking_service_help' => 'The statamic-consent service whose consent releases this code. Empty means :service.',
+    'settings_tracking_locked' => 'Only users with the “Edit tracking code” permission may change tracking code.',
+    'tracking_forbidden' => 'You may not edit tracking code.',
 
     'embed_domains_invalid' => 'Not a domain: :domains',
     'meta_pixel_id_invalid' => 'A pixel ID is digits only.',

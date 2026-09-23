@@ -11,6 +11,8 @@ return [
 
     'permission_group' => 'Funnels',
     'permission_manage' => 'Funnel-Einstellungen verwalten',
+    'permission_tracking' => 'Tracking-Code bearbeiten',
+    'permission_tracking_description' => 'Kopf- und Kauf-Code, Meta-Pixel-ID und die Einwilligungs-Dienste dazu. Das ist JavaScript, das auf den Funnel-Seiten ausgeführt wird.',
 
     'groups' => [
 
@@ -80,7 +82,7 @@ return [
 
         'in_app_browser_enabled' => [
             'label' => 'Hinweis im In-App-Browser',
-            'description' => 'Wer aus Instagram, Facebook, TikTok oder LinkedIn kommt, sieht den Hinweis, die Seite im normalen Browser zu öffnen. Aus heißt: in keinem Funnel, egal was dort eingestellt ist.',
+            'description' => 'Wer aus Instagram, Facebook, Threads, TikTok, LinkedIn, Pinterest oder Snapchat kommt, sieht den Hinweis, die Seite im normalen Browser zu öffnen. Aus heißt: in keinem Funnel, egal was dort eingestellt ist.',
         ],
 
         'embed_link_minutes' => [

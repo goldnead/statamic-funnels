@@ -3,8 +3,11 @@
 namespace Goldnead\StatamicFunnels\Support;
 
 use Goldnead\StatamicFunnels\Models\Funnel;
+use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicPayments\Models\Payment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Support\ViewErrorBag;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -28,8 +31,13 @@ use Symfony\Component\HttpFoundation\Response;
  *    Fehlermeldungen, die sonst in der Sitzung liegen, reisen signiert im
  *    Parameter `e`.
  * 3. **Bezahlt wird oben.** Stripe und Mollie verweigern sich jedem Rahmen.
- *    Der Bestellknopf zielt deshalb auf `_top`, und die Rueckkehr vom Anbieter
- *    traegt den signierten Weg, damit die Danke-Seite den Kauf findet.
+ *    Der Bestellknopf zielt deshalb auf `_top`. Die Rueckkehr vom Anbieter
+ *    traegt nicht den Weg, sondern ein Einmal-Token, an die Zahlung gebunden
+ *    ({@see returnLink()}); die Seite loest es ein und laedt ohne es neu.
+ *
+ * **Der signierte Weg gilt nur im Rahmen** ({@see tokenFromRequest()}):
+ * ausserhalb wuerde ein Link mit fremdem Weg den Besuch eines anderen
+ * uebernehmen (Kritik 23.09.2026). Im Rahmen wird nie ein Cookie geschrieben.
  */
 class Embed
 {
@@ -99,12 +107,123 @@ class Embed
         return $token;
     }
 
-    /** Der Weg aus dieser Anfrage: `_walk` im Formular oder in der Adresse, sonst `w`. */
+    /**
+     * Der Weg aus dieser Anfrage: `_walk` im Formular oder in der Adresse, sonst `w`.
+     *
+     * **Nur im Rahmen.** Ausserhalb eines Rahmens gilt ein signierter Weg nie:
+     * wer einem anderen `?w=<eigener Weg>` schickt, uebernimmt sonst dessen
+     * Besuch (Adresse, Name, Mandat fuer den Ein-Klick-Upsell). Im Rahmen
+     * zaehlt er nur, wenn der Browser die Anfrage als Rahmen meldet
+     * (`Sec-Fetch-Dest: iframe`) oder es die eingebettete Route ist, die ihre
+     * Herkunft selbst prueft. Ohne den Kopf (alte Browser) wird geglaubt.
+     */
     public static function tokenFromRequest(Request $request): ?string
     {
+        if (! self::requested($request) || ! self::fetchedAsFrame($request)) {
+            return null;
+        }
+
         $wert = $request->query(self::WALK_INPUT) ?? $request->input(self::WALK_INPUT) ?? $request->query(self::WALK);
 
         return self::tokenFrom(is_string($wert) ? $wert : null);
+    }
+
+    /** Kommt die Anfrage aus einem Rahmen, soweit der Browser es sagt? */
+    public static function fetchedAsFrame(Request $request): bool
+    {
+        if ($request->route()?->getName() === 'statamic-funnels.advance-embed') {
+            return true;
+        }
+
+        $dest = $request->headers->get('Sec-Fetch-Dest');
+
+        return $dest === null || $dest === '' || in_array($dest, ['iframe', 'frame', 'embed'], true);
+    }
+
+    // --------------------------------------------------- Rueckweg vom Anbieter
+
+    public const RETURN = 'fr';
+
+    /**
+     * Der Rueckweg vom Anbieter nach einem Kauf aus dem Rahmen.
+     *
+     * Kein Weg in der Adresse, sondern ein Einmal-Token am Besuch: gueltig fuer
+     * `embed.link_minutes`, gebunden an die Zahlung, die gleich angelegt wird
+     * ({@see bindReturn()}), und nach dem ersten Aufruf verbraucht. Die Seite
+     * leitet danach auf die Adresse ohne Token um, damit es weder im Verlauf
+     * noch in einem Tracking-Aufruf steht.
+     */
+    public static function returnLink(string $url, FunnelVisit $visit): string
+    {
+        $nonce = Str::random(40);
+        $meta = $visit->meta ?? [];
+        $links = array_filter((array) ($meta['return_links'] ?? []), fn ($l) => is_array($l) && ($l['until'] ?? 0) >= now()->getTimestamp());
+        $links[$nonce] = [
+            'until' => now()->addMinutes(max(1, (int) config('statamic-funnels.embed.link_minutes', 180)))->getTimestamp(),
+            'payment_id' => null,
+        ];
+        $meta['return_links'] = array_slice($links, -5, null, true);
+        $visit->forceFill(['meta' => $meta])->save();
+
+        return self::withQuery($url, [self::RETURN => $visit->getKey().'.'.$nonce]);
+    }
+
+    /** Das Token an die Zahlung binden, die fuer diesen Rueckweg angelegt wurde. */
+    public static function bindReturn(string $url, FunnelVisit $visit, int $paymentId): void
+    {
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $nonce = explode('.', (string) ($query[self::RETURN] ?? ''), 2)[1] ?? null;
+        $meta = $visit->meta ?? [];
+
+        if ($nonce === null || ! isset($meta['return_links'][$nonce])) {
+            return;
+        }
+
+        $meta['return_links'][$nonce]['payment_id'] = $paymentId;
+        $visit->forceFill(['meta' => $meta])->save();
+    }
+
+    /**
+     * Das Einmal-Token aus der Adresse einloesen: das Token des Besuchs, oder null.
+     *
+     * Verbraucht wird es in jedem Fall, auch wenn es nicht passt.
+     */
+    public static function consumeReturn(Funnel $funnel, Request $request): ?string
+    {
+        $wert = $request->query(self::RETURN);
+
+        if (! is_string($wert) || ! str_contains($wert, '.')) {
+            return null;
+        }
+
+        [$id, $nonce] = explode('.', $wert, 2);
+        $visit = ctype_digit($id) ? FunnelVisit::query()->where('funnel_id', $funnel->id)->find((int) $id) : null;
+
+        if (! $visit) {
+            return null;
+        }
+
+        $meta = $visit->meta ?? [];
+        $link = $meta['return_links'][$nonce] ?? null;
+
+        if (! is_array($link)) {
+            return null;
+        }
+
+        unset($meta['return_links'][$nonce]);
+        $visit->forceFill(['meta' => $meta])->save();
+
+        $gueltig = ($link['until'] ?? 0) >= now()->getTimestamp()
+            && is_int($link['payment_id'] ?? null)
+            && Payment::query()->whereKey($link['payment_id'])->exists();
+
+        return $gueltig ? (string) $visit->token : null;
+    }
+
+    /** Die Adresse ohne Rueckweg-Token. */
+    public static function withoutReturn(string $url): string
+    {
+        return self::withoutQuery($url, [self::RETURN]);
     }
 
     /** Eine Adresse mit dem Weg und, fuer Seiten im Rahmen, mit `embed=1`. */

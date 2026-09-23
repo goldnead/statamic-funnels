@@ -64,15 +64,24 @@ class PaymentsDoor
         return (string) __('statamic-funnels::messages.reminder_consent_label');
     }
 
+    /** Der Satz, den das Ereignis mitbrachte (payments ab 1.25). */
+    public ?string $said = null;
+
     public function remember(mixed $event): void
     {
         $reason = data_get($event, 'reason');
+        $message = data_get($event, 'message');
         $this->reason = is_string($reason) ? $reason : null;
+        $this->said = is_string($message) && $message !== '' ? $message : null;
     }
 
     /** Der Satz fuer die Kaeuferin zum gemerkten Grund, oder null. */
     public function message(): ?string
     {
+        if ($this->said !== null) {
+            return $this->said;
+        }
+
         if ($this->reason === null) {
             return null;
         }

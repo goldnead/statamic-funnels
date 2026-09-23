@@ -173,6 +173,26 @@ class MetaConversionsTest extends TestCase
     }
 
     #[Test]
+    public function auch_ein_frueherer_kauf_des_laufs_wird_gemeldet(): void
+    {
+        // Der Webhook des ersten Kaufs kommt, nachdem der Lauf schon den
+        // naechsten angelegt hat: `payment_id` am Besuch zeigt dann auf den.
+        $this->einwilligung(true);
+        $this->funnelMitPixel();
+        $this->bisZurKasse();
+        $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1']);
+
+        $erste = Payment::query()->firstOrFail();
+        $this->besuch()->forceFill(['payment_id' => $erste->id + 1000])->save();
+
+        $this->bezahlen($erste);
+
+        $server = $this->gesendet('Purchase');
+        $this->assertCount(1, $server);
+        $this->assertSame('purchase-'.$erste->id, $server[0]['event_id']);
+    }
+
+    #[Test]
     public function ohne_einwilligung_beim_besuch_meldet_der_webhook_keinen_kauf(): void
     {
         $this->einwilligung(false);

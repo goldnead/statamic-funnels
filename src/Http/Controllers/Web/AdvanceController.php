@@ -560,6 +560,15 @@ class AdvanceController
             $code = $request->has('coupon')
                 ? (string) $request->input('coupon', '')
                 : CheckoutInputs::carriedCoupon($visit);
+
+            // Ein getippter Code, der nicht gilt, kauft nicht still zum vollen
+            // Preis: wer einen Rabatt erwartet und ihn nicht bekommt, soll es
+            // vor der Zahlung erfahren. Ein leeres Feld ist kein Code.
+            $abgelehnt = $request->filled('coupon') ? CheckoutInputs::couponRefusal($code, $offer) : null;
+
+            if ($abgelehnt !== null) {
+                return back()->withInput()->withErrors(['coupon' => $abgelehnt]);
+            }
         }
 
         try {
@@ -663,6 +672,11 @@ class AdvanceController
         // eine Zahlung anlegen — ein Upsell ohne Beleg waere derselbe Fehler
         // wie ein Upsell ohne Anschrift.
         $angaben = self::mitEinwilligung($angaben, Consent::details($offer, $visit, $consentText));
+
+        // Aus welchem Lauf die Zahlung kommt. `payment_id` am Besuch zeigt nur
+        // auf die juengste; der Webhook eines frueheren Kaufs im selben Lauf
+        // findet seinen Besuch hierueber (Meta Purchase, F7).
+        $angaben = self::mitEinwilligung($angaben, ['meta' => ['funnel_visit_id' => (int) $visit->getKey()]]);
 
         // Die Gutschein-Bedingungen fuer die Folgezahlungen eines Abos
         // (statamic-offers 1.12, `Basket::paymentMeta()`). An die **erste**
@@ -799,10 +813,13 @@ class AdvanceController
             : route('statamic-funnels.entry', $funnel->handle);
 
         // Kam der Kauf aus dem Rahmen einer fremden Seite, kommt die Kaeuferin
-        // oben zurueck, ohne Cookie dieser Site. Der signierte Weg in der
-        // Adresse fuehrt sie zu ihrem Besuch und damit zu ihrer Bestellung.
-        if (Embed::tokenFromRequest($request) !== null) {
-            $zurueck = Embed::carry($zurueck, (string) $visit->token, false);
+        // oben zurueck, ohne Cookie dieser Site. Ein Einmal-Token, an die
+        // Zahlung gebunden, fuehrt sie zu ihrem Besuch; der Weg selbst steht
+        // nie in dieser Adresse.
+        $ausDemRahmen = Embed::tokenFromRequest($request) !== null;
+
+        if ($ausDemRahmen) {
+            $zurueck = Embed::returnLink($zurueck, $visit);
         }
 
         // Zwei Wege, ein Ziel: beide legen dieselbe Zahlung an und schicken zum
@@ -842,14 +859,20 @@ class AdvanceController
         if (! $result) {
             Sibling::call($basket, 'releaseCoupon');
 
-            // An der Tuer abgelehnt (Captcha, zu viele Versuche, Sperre)? Dann
-            // mit diesem Grund, sonst mit dem allgemeinen Satz.
-            $grund = app(PaymentsDoor::class)->message();
+            // An der Tuer abgelehnt (Captcha, zu viele Versuche, Sperre, Land)?
+            // Dann mit dem Satz von payments (`refusal()`, ab 1.25), sonst mit
+            // dem, den das Ereignis mitbrachte, sonst mit dem allgemeinen.
+            $satz = Sibling::call($plan ? $this->subscriptions : $this->checkout, 'refusal');
+            $grund = is_string($satz) && $satz !== '' ? $satz : app(PaymentsDoor::class)->message();
 
             return back()->withErrors(['offer' => $grund ?? __('statamic-funnels::messages.offer_unavailable')]);
         }
 
         $this->rememberPending($visit, $step, $result->payment);
+
+        if ($ausDemRahmen) {
+            Embed::bindReturn($zurueck, $visit, (int) $result->payment->getKey());
+        }
 
         // Off to the provider. Nothing is accepted yet — only the webhook
         // decides that, exactly as everywhere else in this family.

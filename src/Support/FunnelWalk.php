@@ -31,7 +31,9 @@ class FunnelWalk
      */
     public function existingVisit(Funnel $funnel): ?FunnelVisit
     {
-        $token = Embed::tokenFromRequest($this->request()) ?? $this->request()->cookie(self::COOKIE);
+        $token = Embed::tokenFromRequest($this->request())
+            ?? ($this->request()->hasSession() ? $this->request()->session()->get(self::RETURNED) : null)
+            ?? $this->request()->cookie(self::COOKIE);
 
         if (! is_string($token) || ! $this->looksLikeToken($token)) {
             return null;
@@ -66,20 +68,52 @@ class FunnelWalk
     {
         $request = $this->request();
 
-        // **Der signierte Weg zuerst** (F4). Im Rahmen auf einer fremden Seite
-        // kommt kein Cookie an, und zurueck vom Anbieter steht der Besuch nur
-        // in der Adresse. Er gewinnt auch gegen ein Cookie, das noch von einem
-        // frueheren Besuch in diesem Browser stammt: die Adresse sagt, welcher
-        // Weg gerade gegangen wird. Danach steht er auch im Cookie, damit die
-        // naechste Seite ohne Adresse auskommt.
-        $signed = Embed::tokenFromRequest($request);
+        // Einmal je Anfrage entschieden: der Besuch und die Kasse fragen beide.
+        $gemerkt = $request->attributes->get('statamic-funnels.token');
 
-        if ($signed !== null) {
-            if ($request->cookie(self::COOKIE) !== $signed) {
-                $this->queueCookie($signed, Embed::requested($request));
+        if (is_string($gemerkt)) {
+            return $gemerkt;
+        }
+
+        $token = $this->resolveToken($request);
+        $request->attributes->set('statamic-funnels.token', $token);
+
+        return $token;
+    }
+
+    /**
+     * Woher der Weg dieser Anfrage kommt.
+     *
+     * 1. **Im Rahmen** (F4) der signierte Weg aus Adresse oder Formular, sonst
+     *    ein vorhandenes Cookie, sonst ein neuer. **Im Rahmen wird nie ein
+     *    Cookie geschrieben**: ein Rahmen darf den Weg des Browsers oben nicht
+     *    ersetzen, und ein Link mit fremdem Weg darf ihn nicht ueberschreiben.
+     * 2. **Einmal nach der Rueckkehr vom Anbieter** der Besuch, den das
+     *    Einmal-Token eingeloest hat ({@see Embed::consumeReturn()}), aus der
+     *    Sitzung. So sieht die Kaeuferin ihren Kauf, ohne dass ihr vorhandenes
+     *    Cookie ueberschrieben wird.
+     * 3. Das Cookie, sonst ein neuer Weg mit Cookie.
+     *
+     * Ein signierter Weg ausserhalb eines Rahmens gilt nie.
+     */
+    protected function resolveToken(Request $request): string
+    {
+        if (Embed::requested($request)) {
+            $signed = Embed::tokenFromRequest($request);
+
+            if ($signed !== null) {
+                return $signed;
             }
 
-            return $signed;
+            $existing = $request->cookie(self::COOKIE);
+
+            return is_string($existing) && $this->looksLikeToken($existing) ? $existing : Str::random(32);
+        }
+
+        $zurueck = $request->hasSession() ? $request->session()->get(self::RETURNED) : null;
+
+        if (is_string($zurueck) && $this->looksLikeToken($zurueck)) {
+            return $zurueck;
         }
 
         $existing = $request->cookie(self::COOKIE);
@@ -89,24 +123,28 @@ class FunnelWalk
         }
 
         $token = Str::random(32);
-        $this->queueCookie($token, Embed::requested($request));
+        $this->queueCookie($token);
 
         return $token;
     }
 
-    /**
-     * Im Rahmen `SameSite=None; Secure`, sonst `Lax`.
-     *
-     * Ein Browser, der Cookies im fremden Rahmen noch zulaesst, behaelt den
-     * Weg dann auch ohne Adresse. `None` geht nur mit `Secure`, also nur ueber
-     * https; ueber http bleibt es bei `Lax` und der Weg reist in der Adresse.
-     */
-    protected function queueCookie(string $token, bool $framed): void
+    /** Der Sitzungsschluessel fuer den Besuch nach der Rueckkehr vom Anbieter. */
+    public const RETURNED = 'statamic-funnels.returned-walk';
+
+    /** Ob diese Anfrage schon ein gueltiges Besuchs-Cookie mitbringt. */
+    public function hasCookie(): bool
+    {
+        $existing = $this->request()->cookie(self::COOKIE);
+
+        return is_string($existing) && $this->looksLikeToken($existing);
+    }
+
+    /** Das Cookie des Besuchs setzen, `Lax`, einen Monat. */
+    public function queueCookie(string $token): void
     {
         $sicher = $this->request()->isSecure();
-        $sameSite = $framed && $sicher ? 'None' : 'Lax';
 
-        cookie()->queue(cookie(self::COOKIE, $token, 60 * 24 * 30, null, null, $sicher ?: null, true, false, $sameSite));
+        cookie()->queue(cookie(self::COOKIE, $token, 60 * 24 * 30, null, null, $sicher ?: null, true, false, 'Lax'));
     }
 
     /**

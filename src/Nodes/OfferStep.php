@@ -67,7 +67,8 @@ class OfferStep extends StepType
             // Wofuer der Kauf gezaehlt wird, wenn dieser Schritt ein Tracking
             // hat (F6): Code, der einmal je bezahltem Kauf dieses Schritts
             // ausgegeben wird.
-            ['handle' => 'tracking_purchase', 'type' => 'code', 'label' => __('statamic-funnels::nodes.field_tracking_purchase'), 'instructions' => __('statamic-funnels::nodes.field_tracking_purchase_help')],
+            ['handle' => 'tracking_purchase', 'type' => 'code', 'tracking' => true, 'label' => __('statamic-funnels::nodes.field_tracking_purchase'), 'instructions' => __('statamic-funnels::nodes.field_tracking_purchase_help')],
+            ['handle' => 'tracking_purchase_service', 'type' => 'text', 'tracking' => true, 'label' => __('statamic-funnels::nodes.field_tracking_purchase_service'), 'instructions' => __('statamic-funnels::nodes.field_tracking_purchase_service_help'), 'visible_when' => ['tracking_purchase' => 'filled']],
         ], self::pageSchema());
     }
 }

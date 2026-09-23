@@ -118,9 +118,9 @@ return [
     'split_goal_upsell' => 'Upsell accepted afterwards',
     'split_goal_revenue' => 'Revenue per visit',
     'field_split_auto' => 'Split test: pick the winner automatically',
-    'field_split_auto_help' => 'Once each version has the minimum number of visits and one leads with 95 % confidence, new visitors only see that one.',
-    'field_split_min_visits' => 'Split test: minimum visits per version',
-    'field_split_min_visits_help' => 'Empty means 100.',
+    'field_split_auto_help' => 'Decided once, on the first visits per version up to the sample size, a day after the last of them. If one leads with 95 % confidence, new visitors only see that one.',
+    'field_split_min_visits' => 'Split test: visits per version for the decision',
+    'field_split_min_visits_help' => 'At least 100, empty means 100. More visits detect smaller differences.',
 
     // Bump rules (F1).
     'field_bump_rules' => 'Bump rules',
@@ -139,5 +139,7 @@ return [
 
     // Tracking per checkout step (F6).
     'field_tracking_purchase' => 'Tracking code after the purchase',
+    'field_tracking_purchase_service' => 'Tracking code: consent',
+    'field_tracking_purchase_service_help' => 'The statamic-consent service whose consent releases this code. Empty means the one from the config.',
     'field_tracking_purchase_help' => 'Printed once per paid purchase of this step, on the next page, and only with consent. Placeholders: {amount}, {currency}, {order_id}.',
 ];

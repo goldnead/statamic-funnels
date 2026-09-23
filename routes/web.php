@@ -60,7 +60,16 @@ Route::post($prefix.'/{funnel}/{nodeKey}/advance', AdvanceController::class)
  * signierten Weg (`_walk`). Eine fremde Seite kann den Rahmen zeigen, aber
  * nicht in ihm absenden. Siehe `Support\Embed`.
  */
+//
+// Ab Laravel 13 steht `PreventRequestForgery` selbst in der `web`-Gruppe, die
+// beiden alten Namen sind nur noch Unterklassen. Wer nur sie ausnimmt, laesst
+// die eigentliche Pruefung stehen; sie ginge dann nur durch, weil der Browser
+// `Sec-Fetch-Site: same-origin` schickt, und das tun nicht alle.
 Route::post($prefix.'/{funnel}/{nodeKey}/advance-embed', AdvanceController::class)
-    ->withoutMiddleware([ValidateCsrfToken::class, VerifyCsrfToken::class])
+    ->withoutMiddleware(array_values(array_filter([
+        ValidateCsrfToken::class,
+        VerifyCsrfToken::class,
+        'Illuminate\Foundation\Http\Middleware\PreventRequestForgery',
+    ], 'class_exists')))
     ->middleware('throttle:30,1')
     ->name('statamic-funnels.advance-embed');

@@ -105,6 +105,66 @@ class CouponLinkAndBasketTest extends TestCase
     }
 
     #[Test]
+    public function ein_getippter_unbekannter_code_kauft_nicht_zum_vollen_preis(): void
+    {
+        $this->kasse();
+        $this->bisZurKasse();
+
+        $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1', 'coupon' => 'VERTIPPT'])
+            ->assertSessionHasErrors(['coupon' => __('statamic-funnels::messages.coupon_unknown')]);
+
+        $this->assertSame(0, Payment::count());
+    }
+
+    #[Test]
+    public function ein_abgelaufener_code_sagt_es(): void
+    {
+        $this->kasse();
+        $this->coupon(['ends_at' => now()->subDay()]);
+        $this->bisZurKasse();
+
+        $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1', 'coupon' => 'CHOR20'])
+            ->assertSessionHasErrors(['coupon' => __('statamic-funnels::messages.coupon_not_live')]);
+
+        $this->assertSame(0, Payment::count());
+    }
+
+    #[Test]
+    public function ein_code_fuer_ein_anderes_angebot_sagt_es(): void
+    {
+        $this->kasse();
+        $this->coupon(['offers' => ['etwas-anderes']]);
+        $this->bisZurKasse();
+
+        $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1', 'coupon' => 'CHOR20'])
+            ->assertSessionHasErrors(['coupon' => __('statamic-funnels::messages.coupon_not_for_offer')]);
+    }
+
+    #[Test]
+    public function ein_leeres_feld_bestellt_zum_vollen_preis(): void
+    {
+        $this->kasse();
+        $this->bisZurKasse();
+
+        $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1', 'coupon' => ''])->assertRedirect();
+
+        $this->assertSame(9900, Payment::query()->firstOrFail()->amount_cent);
+    }
+
+    #[Test]
+    public function nach_einem_fehler_steht_der_getippte_betrag_wieder_im_feld(): void
+    {
+        $this->kasse(['price_mode' => 'pwyw', 'amount_cent' => null, 'pwyw_min_cent' => 1000, 'pwyw_suggested_cent' => 2500, 'pwyw_max_cent' => 20000]);
+        $this->bisZurKasse();
+
+        $this->asVisitor()->from('/f/kurs/kasse')->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1', 'amount' => '7.50', 'coupon' => 'VERTIPPT']);
+
+        $this->asVisitor()->get('/f/kurs/kasse')
+            ->assertSee('value="7.50"', false)
+            ->assertSee('name="coupon" value="VERTIPPT"', false);
+    }
+
+    #[Test]
     public function lehnt_die_kasse_ab_wird_der_code_nicht_verbraucht(): void
     {
         if (! method_exists(Basket::class, 'releaseCoupon')) {

@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Statamic\Facades\Action;
 use Statamic\Facades\Blueprint;
@@ -161,6 +162,11 @@ class FunnelsController extends CpController
             // nicht (F6, F7). Der Editor sagt es, statt still nichts zu tun.
             'tracking' => TrackingConsent::describe() + [
                 'capi' => app(ConversionSender::class)->enabled(),
+                // Tracking-Code ist rohes JavaScript; ohne das Recht sind die
+                // Felder gesperrt, und der Server lehnt Aenderungen ab.
+                'can_edit' => Gate::allows('edit funnels tracking code'),
+                // Die Dienste aus der Consent-Config, zur Auswahl je Code.
+                'services' => TrackingConsent::serviceOptions(),
             ],
             // What the config panel offers where a step asks for a form or an
             // offer. Sent with the page so the panel never has to fetch.
@@ -410,9 +416,14 @@ class FunnelsController extends CpController
             'settings.tracking_head' => ['nullable', 'string', 'max:20000'],
             'settings.tracking_thanks' => ['nullable', 'string', 'max:20000'],
             'settings.meta_pixel_id' => ['nullable', 'string', 'regex:/^\s*\d{5,32}\s*$/'],
+            'settings.tracking_head_service' => ['nullable', 'string', 'regex:/^[A-Za-z0-9_-]{1,64}$/'],
+            'settings.tracking_thanks_service' => ['nullable', 'string', 'regex:/^[A-Za-z0-9_-]{1,64}$/'],
+            'settings.meta_pixel_service' => ['nullable', 'string', 'regex:/^[A-Za-z0-9_-]{1,64}$/'],
         ], [
             'settings.meta_pixel_id.regex' => __('statamic-funnels::messages.meta_pixel_id_invalid'),
         ]);
+
+        $this->guardTracking($funnel, $data);
 
         if (array_key_exists('settings', $data)) {
             $this->saveSettings($funnel, (array) $data['settings']);
@@ -423,6 +434,48 @@ class FunnelsController extends CpController
         $this->writer->write($funnel, $data);
 
         return back()->with('message', __('statamic-funnels::messages.saved'));
+    }
+
+    /**
+     * Tracking-Code aendert nur, wer das Recht dazu hat (F6, F7).
+     *
+     * Er ist rohes JavaScript auf den Seiten der Site. Verglichen wird mit dem
+     * Gespeicherten: wer den Funnel ohne das Recht speichert, schickt den
+     * vorhandenen Code unveraendert mit und darf das; nur eine Aenderung wird
+     * abgelehnt.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function guardTracking(Funnel $funnel, array $data): void
+    {
+        if (Gate::allows('edit funnels tracking code')) {
+            return;
+        }
+
+        $fehler = [];
+        $bisher = (array) (($funnel->meta ?? [])['settings'] ?? []);
+        $neu = (array) ($data['settings'] ?? []);
+        $leer = fn ($v) => $v === null || (is_string($v) && trim($v) === '') ? null : (is_string($v) ? trim($v) : $v);
+
+        foreach (FunnelSettings::TRACKING_KEYS as $key) {
+            if (array_key_exists($key, $neu) && $leer($neu[$key]) !== $leer($bisher[$key] ?? null)) {
+                $fehler['settings.'.$key] = __('statamic-funnels::messages.tracking_forbidden');
+            }
+        }
+
+        foreach ((array) ($data['nodes'] ?? []) as $node) {
+            $gespeichert = $funnel->steps->firstWhere('node_key', $node['node_key'] ?? null);
+
+            foreach (['tracking_purchase', 'tracking_purchase_service'] as $key) {
+                if ($leer($node['config'][$key] ?? null) !== $leer($gespeichert?->config($key))) {
+                    $fehler['nodes'] = __('statamic-funnels::messages.tracking_forbidden');
+                }
+            }
+        }
+
+        if ($fehler !== []) {
+            throw ValidationException::withMessages($fehler);
+        }
     }
 
     /**
@@ -447,10 +500,13 @@ class FunnelsController extends CpController
             'tracking_head' => array_key_exists('tracking_head', $settings) ? $text($settings['tracking_head']) : ($bisher['tracking_head'] ?? null),
             'tracking_thanks' => array_key_exists('tracking_thanks', $settings) ? $text($settings['tracking_thanks']) : ($bisher['tracking_thanks'] ?? null),
             'meta_pixel_id' => array_key_exists('meta_pixel_id', $settings) ? ($text(trim((string) $settings['meta_pixel_id'])) ?? null) : ($bisher['meta_pixel_id'] ?? null),
+            'tracking_head_service' => array_key_exists('tracking_head_service', $settings) ? FunnelSettings::service($settings['tracking_head_service']) : ($bisher['tracking_head_service'] ?? null),
+            'tracking_thanks_service' => array_key_exists('tracking_thanks_service', $settings) ? FunnelSettings::service($settings['tracking_thanks_service']) : ($bisher['tracking_thanks_service'] ?? null),
+            'meta_pixel_service' => array_key_exists('meta_pixel_service', $settings) ? FunnelSettings::service($settings['meta_pixel_service']) : ($bisher['meta_pixel_service'] ?? null),
         ], fn ($v) => $v !== null));
 
         // Geleerte Felder sind geleert, nicht „wie vorher".
-        foreach (['in_app_text', 'tracking_head', 'tracking_thanks', 'meta_pixel_id'] as $key) {
+        foreach (['in_app_text', 'tracking_head', 'tracking_thanks', 'meta_pixel_id', 'tracking_head_service', 'tracking_thanks_service', 'meta_pixel_service'] as $key) {
             if (array_key_exists($key, $settings) && $text($settings[$key]) === null) {
                 unset($meta['settings'][$key]);
             }
@@ -562,6 +618,9 @@ class FunnelsController extends CpController
                 'leading' => __('statamic-funnels::messages.split_leading'),
                 'open' => __('statamic-funnels::messages.split_open'),
                 'waiting' => __('statamic-funnels::messages.split_waiting'),
+                'no_winner' => __('statamic-funnels::messages.split_no_winner'),
+                'interim' => __('statamic-funnels::messages.split_interim'),
+                'no_winner_help' => __('statamic-funnels::messages.split_no_winner_help'),
             ],
             // Die Bump-Regeln (F1).
             'bumps' => [
@@ -603,6 +662,9 @@ class FunnelsController extends CpController
                 'meta_pixel_id_help' => __('statamic-funnels::messages.settings_meta_pixel_id_help'),
                 'capi_on' => __('statamic-funnels::messages.settings_capi_on'),
                 'capi_off' => __('statamic-funnels::messages.settings_capi_off'),
+                'tracking_service' => __('statamic-funnels::messages.settings_tracking_service'),
+                'tracking_service_help' => __('statamic-funnels::messages.settings_tracking_service_help'),
+                'tracking_locked' => __('statamic-funnels::messages.settings_tracking_locked'),
                 'save' => __('Save'),
             ],
         ];

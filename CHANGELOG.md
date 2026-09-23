@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Fixed (review round 2)
+
+- **Embedding: a walk could be taken over.** A signed walk in the address (`?w=`) was accepted on
+  every request and overwrote the visitor's cookie for 30 days, so a link with somebody else's walk
+  put the victim into the sender's visit. It now counts only inside a frame (`embed=1` and
+  `Sec-Fetch-Dest: iframe`), a frame never writes a cookie, and the way back from the provider uses a
+  one-time token bound to the payment, removed from the address by a redirect. An existing cookie is
+  never overwritten.
+- **Laravel 13:** the embedded route also excludes `PreventRequestForgery`, not only its subclasses.
+- **Split tests decide once, on a fixed sample**, at least 100 visits per version and a day after the
+  last of them; "no difference" is recorded too. Deciding on every look found false winners in about a
+  third of A/A tests.
+- **A typed coupon that does not apply refuses the order** with the reason at the field instead of
+  charging the full price; the amount and code typed stay in the fields after an error.
+- **Tracking:** the shipped template is a whole document with viewport and, with statamic-consent,
+  its script and banner, so parked code actually starts. A consent service per code. New permission
+  *Edit tracking code*.
+- **Meta Purchase** also for an earlier purchase of the same walk (`meta.funnel_visit_id` on the
+  payment).
+- Embedded frame height counts margins and is re-sent after a bump shows or hides.
+- In-app notice: Threads, Pinterest, Snapchat; on Android a text without Apple Pay.
+- Checkout texts address the buyer formally, like the rest of the suite. A refusal at payments' door
+  shows payments' own sentence (`Checkout::refusal()`, `CheckoutBlocked::$message`).
+
 ### Added: bump rules (F1)
 
 Per checkout step and bump: only with some pricing options, only together with another bump,

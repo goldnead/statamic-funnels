@@ -5,10 +5,12 @@ namespace Goldnead\StatamicFunnels\Tests\Feature;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Support\PreviewToken;
 use Goldnead\StatamicFunnels\Support\TrackingConsent;
+use Goldnead\StatamicFunnels\Tests\Support\ConsentTagProbe;
 use Goldnead\StatamicFunnels\Tests\Support\WalksAFunnel;
 use Goldnead\StatamicFunnels\Tests\TestCase;
 use Goldnead\StatamicPayments\Models\Payment;
 use PHPUnit\Framework\Attributes\Test;
+use Statamic\Facades\Role;
 use Statamic\Facades\User;
 
 /**
@@ -161,6 +163,144 @@ class TrackingSlotsTest extends TestCase
             'edges' => [],
             'settings' => $settings,
         ]);
+    }
+
+    // ------------------------------------------------ Vorlage, Dienst je Code
+
+    #[Test]
+    public function die_mitgelieferte_vorlage_ist_ein_ganzes_dokument_mit_viewport(): void
+    {
+        $this->kasse();
+
+        $seite = $this->asVisitor()->get('/f/kurs')->assertOk()->getContent();
+
+        $this->assertStringStartsWith('<!doctype html>', ltrim($seite));
+        $this->assertStringContainsString('<meta name="viewport" content="width=device-width, initial-scale=1">', $seite);
+        $this->assertMatchesRegularExpression('#<head>.*</head>\s*<body>#s', $seite);
+    }
+
+    #[Test]
+    public function mit_consent_addon_bindet_die_vorlage_dessen_skript_und_banner_ein(): void
+    {
+        // Sonst startet ein geparktes Skript nie: niemand ist da, der es
+        // nach der Einwilligung freischaltet.
+        ConsentTagProbe::register();
+        $this->mitConsentAddon(false);
+        $this->funnelMitCode();
+
+        $seite = $this->asVisitor()->get('/f/kurs')->assertOk()->getContent();
+
+        $this->assertMatchesRegularExpression('#<head>.*<!--consent-head-->.*</head>#s', $seite);
+        $this->assertStringContainsString('<!--consent-banner-->', $seite);
+    }
+
+    #[Test]
+    public function ohne_consent_addon_steht_kein_consent_tag_in_der_seite(): void
+    {
+        $this->ohneConsentAddon('render');
+        $this->funnelMitCode();
+
+        $this->asVisitor()->get('/f/kurs')->assertOk()->assertDontSee('consent-head', false);
+    }
+
+    #[Test]
+    public function jeder_code_parkt_unter_seinem_eigenen_dienst(): void
+    {
+        $this->mitConsentAddon(false);
+        $this->kasse([], [], ['settings' => [
+            'tracking_head' => '<script>window.statistik = 1;</script>',
+            'tracking_head_service' => 'statistik',
+            'meta_pixel_id' => '123456789012345',
+        ]]);
+
+        $this->asVisitor()->get('/f/kurs')->assertOk()
+            ->assertSee('<script type="text/plain" data-consent-service="statistik">window.statistik = 1;</script>', false)
+            // Der Pixel ohne eigenen Dienst unter dem Vorgabedienst.
+            ->assertSee('data-consent-service="meta_pixel">!function(f,b,e,v,n,t,s)', false);
+    }
+
+    // ---------------------------------------------------------- Berechtigung
+
+    protected function redakteur(bool $darfTracking)
+    {
+        $role = Role::make('funnels-redaktion')->addPermission('access cp')->addPermission('access funnels utility');
+
+        if ($darfTracking) {
+            $role->addPermission('edit funnels tracking code');
+        }
+
+        $role->save();
+
+        return tap(User::make()->email(uniqid().'@example.com')->assignRole($role))->save();
+    }
+
+    protected function speichernAls($user, array $settings, array $knoten = [])
+    {
+        $funnel = Funnel::query()->firstOrFail();
+
+        return $this->actingAs($user)->patch('/cp/utilities/funnels/'.$funnel->id, [
+            'title' => 'Kurs', 'handle' => 'kurs', 'published' => true,
+            'nodes' => $knoten ?: [['node_key' => 'entry_1', 'type' => 'entry', 'label' => 'Start', 'config' => []]],
+            'edges' => [],
+            'settings' => $settings,
+        ]);
+    }
+
+    #[Test]
+    public function ohne_das_recht_kein_tracking_code(): void
+    {
+        $this->kasse();
+
+        $this->speichernAls($this->redakteur(false), ['tracking_head' => self::KOPF])
+            ->assertSessionHasErrors(['settings.tracking_head' => __('statamic-funnels::messages.tracking_forbidden')]);
+
+        $this->assertNull(Funnel::query()->firstOrFail()->meta['settings']['tracking_head'] ?? null);
+    }
+
+    #[Test]
+    public function ohne_das_recht_bleibt_vorhandener_code_unangetastet_und_der_rest_speichert(): void
+    {
+        $this->kasse([], [], ['settings' => ['tracking_head' => self::KOPF]]);
+
+        $this->speichernAls($this->redakteur(false), ['tracking_head' => self::KOPF, 'in_app_text' => 'Neu.'])
+            ->assertSessionHasNoErrors();
+
+        $settings = Funnel::query()->firstOrFail()->meta['settings'];
+        $this->assertSame(self::KOPF, $settings['tracking_head']);
+        $this->assertSame('Neu.', $settings['in_app_text']);
+    }
+
+    #[Test]
+    public function ohne_das_recht_kein_kauf_code_am_schritt(): void
+    {
+        $this->kasse();
+
+        $this->speichernAls($this->redakteur(false), [], [
+            ['node_key' => 'entry_1', 'type' => 'entry', 'label' => 'Start', 'config' => []],
+            ['node_key' => 'kasse', 'type' => 'offer', 'label' => 'Kasse', 'config' => ['offer' => 'kurs', 'tracking_purchase' => '<script>x()</script>']],
+        ])->assertSessionHasErrors('nodes');
+    }
+
+    #[Test]
+    public function mit_dem_recht_geht_es(): void
+    {
+        $this->kasse();
+
+        $this->speichernAls($this->redakteur(true), ['tracking_head' => self::KOPF])->assertSessionHasNoErrors();
+
+        $this->assertSame(self::KOPF, Funnel::query()->firstOrFail()->meta['settings']['tracking_head']);
+    }
+
+    #[Test]
+    public function der_editor_weiss_ob_tracking_bearbeitet_werden_darf(): void
+    {
+        $funnel = $this->kasse();
+
+        $response = $this->actingAs($this->redakteur(false))->get('/cp/utilities/funnels/'.$funnel->id.'/edit')->assertOk();
+        preg_match('/data-page="(.*?)"/s', $response->getContent(), $m);
+        $props = json_decode(html_entity_decode($m[1], ENT_QUOTES), true)['props'];
+
+        $this->assertFalse($props['tracking']['can_edit']);
     }
 
     #[Test]

@@ -481,7 +481,8 @@ function splitFigure(row, goal) {
 }
 
 const splitConfidence = computed(() => {
-    const c = selectedSplit.value?.confidence;
+    const s = selectedSplit.value;
+    const c = s?.decided ? s.decided_confidence : s?.confidence;
 
     return c === null || c === undefined ? '–' : `${Math.floor(c * 1000) / 10}%`;
 });
@@ -672,6 +673,7 @@ function entryFieldsFor(handle) {
                             color="green"
                             :text="`${t('split', 'winner', 'Winner')}: ${selectedSplit.winner.toUpperCase()}`"
                         />
+                        <Badge v-else-if="selectedSplit.decided" pill color="default" :text="t('split', 'no_winner', 'No difference')" />
                         <Badge v-else pill color="amber" :text="t('split', 'open', 'Still open')" />
                     </div>
                     <p class="mb-3 text-xs text-gray-600 dark:text-gray-400">
@@ -695,8 +697,12 @@ function entryFieldsFor(handle) {
                     </div>
                     <p class="mt-3 text-2xs text-gray-500">
                         {{ t('split', 'confidence', 'Confidence') }}: <span class="tabular-nums">{{ splitConfidence }}</span>
+                        <span v-if="!selectedSplit.decided"> · {{ t('split', 'interim', 'interim, not a result') }}</span>
                     </p>
-                    <p v-if="selectedSplit.auto && !selectedSplit.winner" class="mt-1 text-2xs text-gray-500">
+                    <p v-if="selectedSplit.decided && !selectedSplit.winner" class="mt-1 text-2xs text-gray-500">
+                        {{ t('split', 'no_winner_help', '').replace(':min', selectedSplit.min_visits) }}
+                    </p>
+                    <p v-else-if="selectedSplit.auto && !selectedSplit.decided" class="mt-1 text-2xs text-gray-500">
                         {{ t('split', 'waiting', '').replace(':min', selectedSplit.min_visits) }}
                     </p>
                 </div>
@@ -772,6 +778,14 @@ function entryFieldsFor(handle) {
                                 v-model="selected.config[field.handle]"
                                 :rows="4"
                                 class="font-mono"
+                                :read-only="field.tracking && tracking?.can_edit === false"
+                            />
+                            <Input
+                                v-else-if="field.tracking"
+                                v-model="selected.config[field.handle]"
+                                class="font-mono"
+                                :placeholder="tracking?.service"
+                                :read-only="tracking?.can_edit === false"
                             />
                             <Textarea
                                 v-else-if="field.type === 'textarea'"

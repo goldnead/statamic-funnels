@@ -34,6 +34,10 @@ class InAppBrowserTest extends TestCase
             'TikTok' => ['Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0 Mobile Safari/537.36 trill_350003 BytedanceWebview/d8a21c6', 'TikTok'],
             'TikTok iOS' => ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 musical_ly_35.0.0 JsSdk/2.0 NetType/WIFI Channel/App Store', 'TikTok'],
             'LinkedIn' => ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [LinkedInApp]/9.30.1', 'LinkedIn'],
+            'Threads' => ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Barcelona 339.0.0.26.107 (iPhone15,3; iOS 17_5; de_DE; de-DE; scale=3.00; 1290x2796; 618153452) NW/3', 'Threads'],
+            'Pinterest' => ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [Pinterest/iOS]', 'Pinterest'],
+            'Pinterest Android' => ['Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0 Mobile Safari/537.36 [Pinterest/Android]', 'Pinterest'],
+            'Snapchat' => ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Snapchat/13.10.0.40 (like Safari/8617.2.4.10.8, panda)', 'Snapchat'],
             'Safari' => [self::SAFARI, null],
             'Chrome Android' => ['Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36', null],
         ];
@@ -96,7 +100,10 @@ class InAppBrowserTest extends TestCase
         $agent = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0 Mobile Safari/537.36 Instagram 339.0.0.12.91 Android';
 
         $this->asVisitor()->withHeaders(['User-Agent' => $agent])->get('/f/kurs')
-            ->assertSee('intent://localhost/f/kurs#Intent;scheme=http;package=com.android.chrome;end', false);
+            ->assertSee('intent://localhost/f/kurs#Intent;scheme=http;package=com.android.chrome;end', false)
+            // Auf Android gibt es kein Apple Pay; dort steht der Text fuer Chrome.
+            ->assertSee(__('statamic-funnels::messages.in_app_default_android', ['app' => 'Instagram']), false)
+            ->assertDontSee('Apple Pay');
     }
 
     #[Test]

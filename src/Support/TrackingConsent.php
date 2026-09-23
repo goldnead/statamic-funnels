@@ -34,13 +34,13 @@ class TrackingConsent
 
     protected const REGISTRY = '\Goldnead\StatamicConsent\Support\Registry';
 
-    /** @var (Closure(Request): array{addon: bool, granted: bool})|null */
+    /** @var (Closure(Request, string=): array{addon: bool, granted: bool})|null */
     protected static ?Closure $resolver = null;
 
     /**
      * Fuer Tests, und fuer eine Site mit einem anderen Einwilligungs-Werkzeug.
      *
-     * @param  (Closure(Request): array{addon: bool, granted: bool})|null  $resolver
+     * @param  (Closure(Request, string=): array{addon: bool, granted: bool})|null  $resolver
      */
     public static function resolveUsing(?Closure $resolver): void
     {
@@ -60,9 +60,9 @@ class TrackingConsent
      *
      * @return array{mode: string, granted: bool}
      */
-    public static function state(Request $request): array
+    public static function state(Request $request, ?string $service = null): array
     {
-        [$addon, $granted] = self::read($request);
+        [$addon, $granted] = self::read($request, $service ?? self::service());
 
         if ($addon) {
             return ['mode' => self::PARK, 'granted' => $granted];
@@ -90,11 +90,45 @@ class TrackingConsent
         ];
     }
 
-    /** @return array{0: bool, 1: bool} */
-    protected static function read(Request $request): array
+    /** Ist statamic-consent da (und damit die Vorlage fuer dessen Skript und Banner zustaendig)? */
+    public static function addonPresent(): bool
     {
         if (static::$resolver) {
-            $r = (static::$resolver)($request);
+            return (bool) ((static::$resolver)(request())['addon'] ?? false);
+        }
+
+        return class_exists(self::REGISTRY);
+    }
+
+    /**
+     * Die Dienste aus der Consent-Config, fuer die Auswahl im Editor.
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    public static function serviceOptions(): array
+    {
+        if (! class_exists(self::REGISTRY)) {
+            return [];
+        }
+
+        try {
+            $services = Sibling::call(app(self::REGISTRY), 'services');
+        } catch (Throwable) {
+            return [];
+        }
+
+        return collect(is_iterable($services) ? $services : [])
+            ->filter(fn ($s) => is_string(data_get($s, 'handle')))
+            ->map(fn ($s) => ['value' => (string) data_get($s, 'handle'), 'label' => (string) (data_get($s, 'name') ?: data_get($s, 'handle'))])
+            ->values()
+            ->all();
+    }
+
+    /** @return array{0: bool, 1: bool} */
+    protected static function read(Request $request, string $service): array
+    {
+        if (static::$resolver) {
+            $r = (static::$resolver)($request, $service);
 
             return [(bool) ($r['addon'] ?? false), (bool) ($r['granted'] ?? false)];
         }
@@ -110,7 +144,7 @@ class TrackingConsent
                 return [false, false];
             }
 
-            return [true, (bool) $registry->granted(self::service(), $request)];
+            return [true, (bool) $registry->granted($service, $request)];
         } catch (Throwable) {
             // Installiert, aber nicht lesbar: dann gilt keine Einwilligung.
             return [true, false];

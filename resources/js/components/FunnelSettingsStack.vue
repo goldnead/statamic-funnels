@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import {
-    Stack, Panel, Card, Field, Input, Textarea, Switch, Description, Button, Alert,
+    Stack, Panel, Card, Field, Input, Textarea, Switch, Description, Button, Alert, Select,
 } from '@statamic/cms/ui';
 
 /**
@@ -37,6 +37,14 @@ const popupSnippet = computed(
 const inlineSnippet = computed(() => `<div data-funnel-embed="${props.embed.url}"></div>`);
 
 const trackingVariant = computed(() => (props.tracking?.mode === 'block' ? 'warning' : 'default'));
+
+// Tracking-Code ist rohes JavaScript; ohne das Recht bleibt alles lesbar,
+// aber gesperrt. Der Server lehnt Aenderungen ohnehin ab.
+const locked = computed(() => props.tracking?.can_edit === false);
+
+const services = computed(() => props.tracking?.services ?? []);
+
+const serviceHelp = computed(() => t('tracking_service_help', '').replace(':service', props.tracking?.service ?? ''));
 
 const error = (key) => props.errors?.[`settings.${key}`] ?? null;
 </script>
@@ -103,44 +111,56 @@ const error = (key) => props.errors?.[`settings.${key}`] ?? null;
             <Panel :heading="t('tracking', 'Tracking')">
                 <Card>
                     <Alert :variant="trackingVariant" :text="tracking.message" class="mb-4" />
-                    <Field
-                        :label="t('tracking_head', 'Code in the head of every page')"
-                        :instructions="t('tracking_head_help')"
-                        :error="error('tracking_head')"
-                        class="mb-4"
-                    >
-                        <Textarea
-                            :model-value="modelValue.tracking_head ?? ''"
-                            :rows="4"
-                            class="font-mono"
-                            @update:model-value="set('tracking_head', $event)"
-                        />
-                    </Field>
-                    <Field
-                        :label="t('tracking_thanks', 'Code after the purchase')"
-                        :instructions="t('tracking_thanks_help')"
-                        :error="error('tracking_thanks')"
-                        class="mb-4"
-                    >
-                        <Textarea
-                            :model-value="modelValue.tracking_thanks ?? ''"
-                            :rows="4"
-                            class="font-mono"
-                            @update:model-value="set('tracking_thanks', $event)"
-                        />
-                    </Field>
-                    <Field
-                        :label="t('meta_pixel_id', 'Meta pixel ID')"
-                        :instructions="t('meta_pixel_id_help')"
-                        :error="error('meta_pixel_id')"
-                    >
-                        <Input
-                            :model-value="modelValue.meta_pixel_id ?? ''"
-                            class="font-mono"
-                            inputmode="numeric"
-                            @update:model-value="set('meta_pixel_id', $event)"
-                        />
-                    </Field>
+                    <Alert v-if="locked" variant="warning" :text="t('tracking_locked')" class="mb-4" />
+
+                    <template v-for="slot in [
+                        { key: 'tracking_head', service: 'tracking_head_service', label: t('tracking_head', 'Code in the head of every page'), help: t('tracking_head_help'), code: true },
+                        { key: 'tracking_thanks', service: 'tracking_thanks_service', label: t('tracking_thanks', 'Code after the purchase'), help: t('tracking_thanks_help'), code: true },
+                        { key: 'meta_pixel_id', service: 'meta_pixel_service', label: t('meta_pixel_id', 'Meta pixel ID'), help: t('meta_pixel_id_help'), code: false },
+                    ]" :key="slot.key">
+                        <Field :label="slot.label" :instructions="slot.help" :error="error(slot.key)" class="mb-2">
+                            <Textarea
+                                v-if="slot.code"
+                                :model-value="modelValue[slot.key] ?? ''"
+                                :rows="4"
+                                class="font-mono"
+                                :read-only="locked"
+                                @update:model-value="set(slot.key, $event)"
+                            />
+                            <Input
+                                v-else
+                                :model-value="modelValue[slot.key] ?? ''"
+                                class="font-mono"
+                                inputmode="numeric"
+                                :read-only="locked"
+                                @update:model-value="set(slot.key, $event)"
+                            />
+                        </Field>
+                        <Field
+                            :label="t('tracking_service', 'Consent')"
+                            :instructions="serviceHelp"
+                            :error="error(slot.service)"
+                            class="mb-5"
+                        >
+                            <Select
+                                v-if="services.length"
+                                clearable
+                                :model-value="modelValue[slot.service] ?? null"
+                                :options="services"
+                                :placeholder="tracking.service"
+                                :read-only="locked"
+                                @update:model-value="set(slot.service, $event || null)"
+                            />
+                            <Input
+                                v-else
+                                :model-value="modelValue[slot.service] ?? ''"
+                                class="font-mono"
+                                :placeholder="tracking.service"
+                                :read-only="locked"
+                                @update:model-value="set(slot.service, $event)"
+                            />
+                        </Field>
+                    </template>
                     <Description
                         class="mt-2"
                         :text="tracking.capi ? t('capi_on') : t('capi_off')"

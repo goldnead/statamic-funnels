@@ -5,6 +5,12 @@
     until somebody has written four templates never gets tried out. Every step
     can name its own template instead, and most sites will.
 #}}
+<!doctype html>
+<html lang="{{ funnel:locale }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ if headline }}{{ headline | strip_tags | sanitize }}{{ else }}{{ funnel:title | sanitize }}{{ /if }}</title>
 {{# The shipped styling. One stylesheet, all values overridable as custom
     properties — a site restyles a funnel by setting six variables rather than
     fighting a stylesheet. #}}
@@ -13,6 +19,12 @@
     in-app notice, an embedded page. `funnel:script` is null otherwise, and a
     plain page loads no script at all. #}}
 {{ if funnel:script }}<script src="{{ funnel:script }}" defer></script>{{ /if }}
+{{# Mit statamic-consent: dessen Skript, das geparkte Tracking-Skripte nach
+    der Einwilligung startet. Ohne es bliebe jedes geparkte Skript fuer immer
+    geparkt. #}}
+{{ if funnel:consent_addon }}{{ consent:head }}{{ /if }}
+</head>
+<body>
 
 <div class="funnel-step" data-funnel="{{ funnel:handle }}" data-step="{{ step:key }}" data-step-type="{{ step:type }}"{{ if funnel:embed }} data-funnel-embedded{{ /if }}>
     {{# Im Browser einer App (Instagram, Facebook, TikTok, LinkedIn) fehlen
@@ -236,7 +248,7 @@
                         <label class="funnel-offer__amount">
                             <span>{{ trans key="statamic-funnels::messages.amount_label" }}</span>
                             <span class="funnel-offer__amount-input">
-                                <input type="number" name="amount" value="{{ offer:pwyw:suggested }}" min="{{ offer:pwyw:min }}" max="{{ offer:pwyw:max }}" step="0.01" inputmode="decimal" required>
+                                <input type="number" name="amount" value="{{ offer:pwyw:value | sanitize }}" min="{{ offer:pwyw:min }}" max="{{ offer:pwyw:max }}" step="0.01" inputmode="decimal" required>
                                 <span>{{ offer:pwyw:currency }}</span>
                             </span>
                             <small>{{ trans key="statamic-funnels::messages.amount_hint" min="{offer:pwyw:min_local} {offer:pwyw:currency}" }}</small>
@@ -262,7 +274,7 @@
                     {{ if offer:coupons }}
                         <label class="funnel-offer__coupon">
                             <span>{{ trans key="statamic-funnels::messages.coupon_label" }}</span>
-                            <input type="text" name="coupon" value="{{ offer:coupon_code }}" autocomplete="off" spellcheck="false">
+                            <input type="text" name="coupon" value="{{ offer:coupon_code | sanitize }}" autocomplete="off" spellcheck="false">
                         </label>
                     {{ /if }}
 
@@ -425,3 +437,6 @@
         </form>
     {{ /if }}
 </div>
+{{ if funnel:consent_addon }}{{ consent:banner }}{{ /if }}
+</body>
+</html>

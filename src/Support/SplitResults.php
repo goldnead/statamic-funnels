@@ -24,13 +24,21 @@ use Illuminate\Support\Facades\Log;
  * - `revenue`: Umsatz je Besuch, aus den bezahlten Zahlungen dieser Kaeufe
  *   (abzueglich Erstattungen).
  *
- * **Ein Gewinner steht fest**, wenn jede Fassung die Mindestzahl an Besuchen
- * hat und der Unterschied mit 95 % Sicherheit kein Zufall ist: fuer die Quoten
- * ein Zwei-Stichproben-z-Test auf Anteile, fuer den Umsatz ein Welch-Test auf
- * die Mittelwerte (bei den Mindestzahlen hier normal angenaehert). Gespeichert
- * in `funnels.meta.split_winners`, nicht am Schritt: den Schritt schreibt der
- * Editor beim Speichern ganz neu, und ein Gewinner, den ein offenes Browserfenster
- * ueberschreibt, waere eine Laune.
+ * **Entschieden wird genau einmal, mit fester Stichprobe.** Sobald jede Fassung
+ * die Mindestzahl an Besuchen hat (mindestens 100) und deren Letzter Zeit zum
+ * Kaufen hatte (einen Tag, beim Ziel `continue` eine Stunde), werden die
+ * **ersten** `min` Besuche je Fassung verglichen: fuer die Quoten ein
+ * Zwei-Stichproben-z-Test auf Anteile, fuer den Umsatz ein Welch-Test auf die
+ * Mittelwerte (normal angenaehert). Liegt eine mit 95 % Sicherheit vorn, ist
+ * sie Gewinner; sonst steht „kein Unterschied" fest, und beide laufen weiter.
+ *
+ * Warum nicht bei jedem Aufruf neu: wer nach jedem Besuch nachsieht und beim
+ * ersten Mal ueber 95 % aufhoert, findet bei zwei gleichen Fassungen in rund
+ * einem Drittel der Faelle einen „Gewinner" (Kritik 23.09.2026, A/A-Simulation).
+ * Mit einer festen Stichprobe bleibt der Fehler bei den zugesagten 5 %.
+ *
+ * Gespeichert in `funnels.meta.split_winners`, nicht am Schritt: den Schritt
+ * schreibt der Editor beim Speichern ganz neu.
  */
 class SplitResults
 {
@@ -46,6 +54,9 @@ class SplitResults
     public const CONFIDENCE = 0.95;
 
     public const DEFAULT_MIN_VISITS = 100;
+
+    /** Darunter ist ein z-Test auf Anteile keine Aussage. */
+    public const FLOOR_MIN_VISITS = 100;
 
     /** @return list<string> */
     public static function goals(): array
@@ -78,7 +89,41 @@ class SplitResults
     {
         $raw = $step->config('split_min_visits');
 
-        return is_numeric($raw) && (int) $raw > 0 ? (int) $raw : self::DEFAULT_MIN_VISITS;
+        $min = is_numeric($raw) && (int) $raw > 0 ? (int) $raw : self::DEFAULT_MIN_VISITS;
+
+        return max(self::FLOOR_MIN_VISITS, $min);
+    }
+
+    /** Wie lange der letzte Besuch der Stichprobe Zeit zum Kaufen hatte, bevor entschieden wird. */
+    public static function settleSeconds(string $goal): int
+    {
+        return $goal === self::GOAL_CONTINUE ? 3600 : 86400;
+    }
+
+    /**
+     * Die Entscheidung mit fester Stichprobe, rein rechnerisch.
+     *
+     * Null, solange eine Fassung weniger als `min` Ergebnisse hat. Sonst die
+     * ersten `min` jeder Fassung verglichen, einmal: `winner` ist die vorn
+     * liegende bei mindestens 95 % Sicherheit, sonst null.
+     *
+     * @param  list<int|float>  $a  Ergebnis je Besuch in Reihenfolge des Eintritts (0/1 oder Cent)
+     * @param  list<int|float>  $b
+     * @return array{winner: string|null, confidence: float|null, leader: string|null}|null
+     */
+    public static function fixedHorizon(string $goal, array $a, array $b, int $min): ?array
+    {
+        if (count($a) < $min || count($b) < $min) {
+            return null;
+        }
+
+        [$confidence, $leader] = self::verdict($goal, array_slice($a, 0, $min), array_slice($b, 0, $min));
+
+        return [
+            'winner' => $confidence !== null && $confidence >= self::CONFIDENCE ? $leader : null,
+            'confidence' => $confidence,
+            'leader' => $leader,
+        ];
     }
 
     /**
@@ -113,37 +158,11 @@ class SplitResults
         $step->setRelation('funnel', $funnel);
 
         $goal = self::goal($step);
-        $visitIds = $funnel->visits()->select('id');
+        $variants = self::variantsFor($funnel, $step);
 
-        $rows = FunnelStepEvent::query()
-            ->whereIn('visit_id', $visitIds)
-            ->where('node_key', $step->node_key)
-            ->where('event', FunnelStepEvent::ENTERED)
-            ->get(['visit_id', 'payload']);
+        [$confidence, $leader] = self::verdict($goal, $variants[Split::A]['outcomes'], $variants[Split::B]['outcomes']);
 
-        /** @var array<string, array<int, true>> $seen */
-        $seen = [Split::A => [], Split::B => []];
-
-        foreach ($rows as $row) {
-            $variant = $row->payload['variant'] ?? Split::A;
-
-            if (isset($seen[$variant])) {
-                $seen[$variant][(int) $row->visit_id] = true;
-            }
-        }
-
-        $downstream = self::downstream($funnel, $step->node_key);
-        $direct = self::targets($funnel)[$step->node_key] ?? [];
-
-        $variants = [];
-
-        foreach ($seen as $variant => $ids) {
-            $variants[$variant] = self::measure($goal, array_keys($ids), $step->node_key, $direct, $downstream);
-        }
-
-        [$confidence, $leader] = self::compare($goal, $variants[Split::A], $variants[Split::B]);
-
-        $stored = Split::winner($step);
+        $decision = self::decision($funnel, $step);
 
         return [
             'goal' => $goal,
@@ -151,22 +170,42 @@ class SplitResults
             'auto' => self::auto($step),
             'min_visits' => self::minVisits($step),
             // Ohne die Werte je Besuch: der Editor braucht die Summen.
-            'variants' => array_map(fn (array $v) => array_diff_key($v, ['values' => true]), $variants),
+            'variants' => array_map(fn (array $v) => array_diff_key($v, ['outcomes' => true, 'entered_at' => true]), $variants),
+            // Der laufende Stand, ausdruecklich kein Ergebnis.
             'confidence' => $confidence,
             'leader' => $leader,
-            'winner' => $stored,
-            'decided_at' => $stored !== null
-                ? (string) (($funnel->meta['split_winners'][$step->node_key]['decided_at'] ?? null) ?: '')
-                : null,
+            'winner' => $decision['variant'] ?? null,
+            'decided' => $decision !== null,
+            'decided_at' => $decision['decided_at'] ?? null,
+            'decided_confidence' => $decision['confidence'] ?? null,
         ];
     }
 
     /**
-     * Den Gewinner festlegen, wenn er feststeht. Gibt ihn zurueck, sonst null.
+     * Die gespeicherte Entscheidung fuer das aktuelle Ziel, oder null.
      *
-     * Nur mit Automatik, nur ueber der Mindestzahl in **beiden** Fassungen,
-     * nur ab 95 % Sicherheit. Einmal festgelegt, bleibt er, solange das Ziel
-     * dasselbe ist; wer das Ziel wechselt, startet die Auswertung neu.
+     * @return array{variant: string|null, goal: string, confidence: float|null, decided_at: string, sample: int}|null
+     */
+    public static function decision(Funnel $funnel, FunnelStep $step): ?array
+    {
+        $stored = ($funnel->meta ?? [])['split_winners'][$step->node_key] ?? null;
+
+        // Ohne `sample` stammt die Entscheidung aus der Zeit vor der festen
+        // Stichprobe (nach jedem Aufruf neu, siehe oben) und zaehlt nicht.
+        if (! is_array($stored) || ($stored['goal'] ?? null) !== self::goal($step)
+            || ! array_key_exists('decided_at', $stored) || ! array_key_exists('sample', $stored)) {
+            return null;
+        }
+
+        return $stored;
+    }
+
+    /**
+     * Einmal entscheiden, wenn die feste Stichprobe voll ist. Gibt den Gewinner
+     * zurueck, sonst null (noch nicht entschieden, oder kein Unterschied).
+     *
+     * Nur mit Automatik. Einmal entschieden, bleibt es dabei, solange das Ziel
+     * dasselbe ist; wer das Ziel wechselt, startet neu.
      */
     public static function decide(Funnel $funnel, FunnelStep $step): ?string
     {
@@ -176,39 +215,92 @@ class SplitResults
 
         $step->setRelation('funnel', $funnel);
 
-        if (($schon = Split::winner($step)) !== null) {
-            return $schon;
+        if (($schon = self::decision($funnel, $step)) !== null) {
+            return $schon['variant'];
         }
 
-        $r = self::forStep($funnel, $step);
+        $goal = self::goal($step);
         $min = self::minVisits($step);
+        $r = self::variantsFor($funnel, $step);
 
-        if ($r['variants'][Split::A]['visits'] < $min || $r['variants'][Split::B]['visits'] < $min) {
-            return null;
+        // Der `min`-te Besuch jeder Fassung muss Zeit zum Kaufen gehabt haben:
+        // sonst waeren die letzten der Stichprobe Nicht-Kaeufer, nur weil der
+        // Webhook noch nicht da war.
+        foreach ([Split::A, Split::B] as $v) {
+            $zeitpunkt = $r[$v]['entered_at'][$min - 1] ?? null;
+
+            if ($zeitpunkt === null || $zeitpunkt->getTimestamp() > now()->getTimestamp() - self::settleSeconds($goal)) {
+                return null;
+            }
         }
 
-        if ($r['confidence'] === null || $r['confidence'] < self::CONFIDENCE || $r['leader'] === null) {
+        $ergebnis = self::fixedHorizon($goal, $r[Split::A]['outcomes'], $r[Split::B]['outcomes'], $min);
+
+        if ($ergebnis === null) {
             return null;
         }
 
         $meta = $funnel->fresh()->meta ?? [];
         $meta['split_winners'][$step->node_key] = [
-            'variant' => $r['leader'],
-            'goal' => $r['goal'],
-            'confidence' => round($r['confidence'], 4),
+            'variant' => $ergebnis['winner'],
+            'goal' => $goal,
+            'confidence' => $ergebnis['confidence'] === null ? null : round($ergebnis['confidence'], 4),
             'decided_at' => now()->toIso8601String(),
+            'sample' => $min,
         ];
 
         $funnel->forceFill(['meta' => $meta])->save();
 
-        Log::info('statamic-funnels: ein A/B-Test hat einen Gewinner.', [
+        Log::info('statamic-funnels: ein A/B-Test ist entschieden.', [
             'funnel' => $funnel->handle,
             'step' => $step->node_key,
-            'winner' => $r['leader'],
-            'goal' => $r['goal'],
+            'winner' => $ergebnis['winner'],
+            'goal' => $goal,
+            'sample' => $min,
         ]);
 
-        return $r['leader'];
+        return $ergebnis['winner'];
+    }
+
+    /**
+     * Beide Fassungen gemessen, mit Ergebnis und Eintrittszeit je Besuch.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    protected static function variantsFor(Funnel $funnel, FunnelStep $step): array
+    {
+        $goal = self::goal($step);
+
+        // In der Reihenfolge des Eintritts: die feste Stichprobe sind die
+        // ersten `min` Besuche je Fassung, nicht irgendwelche.
+        $rows = FunnelStepEvent::query()
+            ->whereIn('visit_id', $funnel->visits()->select('id'))
+            ->where('node_key', $step->node_key)
+            ->where('event', FunnelStepEvent::ENTERED)
+            ->orderBy('id')
+            ->get(['visit_id', 'payload', 'created_at']);
+
+        $seen = [Split::A => [], Split::B => []];
+
+        foreach ($rows as $row) {
+            $variant = $row->payload['variant'] ?? Split::A;
+
+            if (isset($seen[$variant]) && ! array_key_exists((int) $row->visit_id, $seen[$variant])) {
+                $seen[$variant][(int) $row->visit_id] = $row->created_at;
+            }
+        }
+
+        $downstream = self::downstream($funnel, $step->node_key);
+        $direct = self::targets($funnel)[$step->node_key] ?? [];
+
+        $variants = [];
+
+        foreach ($seen as $variant => $ids) {
+            $variants[$variant] = self::measure($goal, array_keys($ids), $step->node_key, $direct, $downstream)
+                + ['entered_at' => array_values($ids)];
+        }
+
+        return $variants;
     }
 
     /**
@@ -217,7 +309,7 @@ class SplitResults
      * @param  list<int>  $ids
      * @param  list<string>  $direct
      * @param  list<string>  $downstream
-     * @return array{visits: int, conversions: int, rate: float|null, revenue_cent: int, revenue_per_visit_cent: int|null, values: list<int>}
+     * @return array{visits: int, conversions: int, rate: float|null, revenue_cent: int|float, revenue_per_visit_cent: int|null, outcomes: list<int|float>}
      */
     protected static function measure(string $goal, array $ids, string $self, array $direct, array $downstream): array
     {
@@ -225,15 +317,19 @@ class SplitResults
         $conversions = 0;
         $revenue = 0;
         $values = [];
+        $converted = [];
 
         if ($visits > 0) {
             if ($goal === self::GOAL_CONTINUE) {
-                $conversions = $direct === [] ? 0 : FunnelStepEvent::query()
+                $converted = $direct === [] ? [] : FunnelStepEvent::query()
                     ->whereIn('visit_id', $ids)
                     ->whereIn('node_key', $direct)
                     ->where('event', FunnelStepEvent::ENTERED)
                     ->distinct()
-                    ->count('visit_id');
+                    ->pluck('visit_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all();
+                $conversions = count($converted);
             } else {
                 $nodes = $goal === self::GOAL_UPSELL ? $downstream : array_merge([$self], $downstream);
 
@@ -243,7 +339,8 @@ class SplitResults
                     ->where('event', FunnelStepEvent::ACCEPTED)
                     ->get(['visit_id', 'payload']);
 
-                $conversions = $accepted->pluck('visit_id')->unique()->count();
+                $converted = $accepted->pluck('visit_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+                $conversions = count($converted);
 
                 if ($goal === self::GOAL_REVENUE) {
                     $paymentIds = $accepted->map(fn ($e) => $e->payload['payment_id'] ?? null)->filter()->unique()->values()->all();
@@ -273,41 +370,51 @@ class SplitResults
             }
         }
 
+        // Ergebnis je Besuch, in der Reihenfolge von `$ids`: Cent beim Umsatz,
+        // sonst 0 oder 1.
+        $flip = array_flip($converted);
+        $outcomes = $goal === self::GOAL_REVENUE
+            ? $values
+            : array_map(fn (int $id) => isset($flip[$id]) ? 1 : 0, $ids);
+
         return [
             'visits' => $visits,
             'conversions' => $conversions,
             'rate' => $visits > 0 && $goal !== self::GOAL_REVENUE ? round($conversions / $visits * 100, 1) : null,
             'revenue_cent' => $revenue,
             'revenue_per_visit_cent' => $goal === self::GOAL_REVENUE && $visits > 0 ? (int) round($revenue / $visits) : null,
-            'values' => $values,
+            'outcomes' => $outcomes,
         ];
     }
 
     /**
-     * Sicherheit des Unterschieds und die vorn liegende Fassung.
+     * Sicherheit des Unterschieds und die vorn liegende Fassung, aus den
+     * Ergebnissen je Besuch.
      *
-     * @param  array<string, mixed>  $a
-     * @param  array<string, mixed>  $b
+     * @param  list<int|float>  $a
+     * @param  list<int|float>  $b
      * @return array{0: float|null, 1: string|null}
      */
-    protected static function compare(string $goal, array $a, array $b): array
+    public static function verdict(string $goal, array $a, array $b): array
     {
-        $na = $a['visits'];
-        $nb = $b['visits'];
+        $na = count($a);
+        $nb = count($b);
 
         if ($na < 2 || $nb < 2) {
             return [null, null];
         }
 
         if ($goal === self::GOAL_REVENUE) {
-            $ma = $a['revenue_cent'] / $na;
-            $mb = $b['revenue_cent'] / $nb;
-            $se = sqrt(self::variance($a['values'], $ma) / $na + self::variance($b['values'], $mb) / $nb);
+            $ma = array_sum($a) / $na;
+            $mb = array_sum($b) / $nb;
+            $se = sqrt(self::variance($a, $ma) / $na + self::variance($b, $mb) / $nb);
             $diff = $mb - $ma;
         } else {
-            $pa = $a['conversions'] / $na;
-            $pb = $b['conversions'] / $nb;
-            $p = ($a['conversions'] + $b['conversions']) / ($na + $nb);
+            $ca = array_sum($a);
+            $cb = array_sum($b);
+            $pa = $ca / $na;
+            $pb = $cb / $nb;
+            $p = ($ca + $cb) / ($na + $nb);
             $se = sqrt($p * (1 - $p) * (1 / $na + 1 / $nb));
             $diff = $pb - $pa;
         }

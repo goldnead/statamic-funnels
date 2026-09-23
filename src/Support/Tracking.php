@@ -47,8 +47,11 @@ class Tracking
     public static function forPage(Funnel $funnel, FunnelStep $step, FunnelVisit $visit, Request $request, ?array $offer): array
     {
         $settings = FunnelSettings::of($funnel);
-        $state = TrackingConsent::state($request);
         $pixel = $settings['meta_pixel_id'];
+        $pixelService = self::pixelService($settings);
+
+        // Die Einwilligung, die fuer den Server zaehlt: die des Pixels.
+        $state = TrackingConsent::state($request, $pixelService);
 
         if ($pixel !== null || $settings['tracking_head'] !== null || $settings['tracking_thanks'] !== null) {
             self::rememberConsent($visit, $request, $state['granted']);
@@ -58,27 +61,28 @@ class Tracking
             return ['head' => '', 'body' => ''];
         }
 
+        // Je Stueck Code der Dienst, unter dem es geparkt wird.
         $head = [];
         $body = [];
 
         if ($settings['tracking_head'] !== null) {
-            $head[] = $settings['tracking_head'];
+            $head[] = [$settings['tracking_head'], $settings['tracking_head_service']];
         }
 
         if ($pixel !== null) {
             $pageView = 'pv-'.$visit->getKey().'-'.$step->node_key.'-'.Str::lower(Str::random(8));
-            $head[] = self::pixelBase($pixel, $pageView);
+            $head[] = [self::pixelBase($pixel, $pageView), $pixelService];
 
             if ($state['granted']) {
                 self::server($pixel, 'PageView', $pageView, $visit, [], self::pageUrl($request));
             }
 
             if ($step->type === 'offer' && $offer !== null) {
-                $body[] = self::initiateCheckoutScript(
+                $body[] = [self::initiateCheckoutScript(
                     self::checkoutEventId($visit, $step),
                     is_string($offer['amount'] ?? null) ? $offer['amount'] : null,
                     (string) ($offer['currency'] ?? 'EUR'),
-                );
+                ), $pixelService];
             }
         }
 
@@ -90,31 +94,37 @@ class Tracking
             ];
 
             if ($settings['tracking_thanks'] !== null) {
-                $body[] = strtr($settings['tracking_thanks'], $vars);
+                $body[] = [strtr($settings['tracking_thanks'], $vars), $settings['tracking_thanks_service']];
             }
 
-            $eigener = $nodeKey !== null ? $funnel->stepByKey($nodeKey)?->config('tracking_purchase') : null;
+            $schritt = $nodeKey !== null ? $funnel->stepByKey($nodeKey) : null;
+            $eigener = $schritt?->config('tracking_purchase');
 
             if (is_string($eigener) && trim($eigener) !== '') {
-                $body[] = strtr($eigener, $vars);
+                $body[] = [strtr($eigener, $vars), FunnelSettings::service($schritt?->config('tracking_purchase_service'))];
             }
 
             if ($pixel !== null) {
-                $body[] = "<script>if (window.fbq) { fbq('track', 'Purchase', {value: ".$vars['{amount}'].", currency: '".$vars['{currency}']."'}, {eventID: 'purchase-".$payment->getKey()."'}); }</script>";
+                $body[] = ["<script>if (window.fbq) { fbq('track', 'Purchase', {value: ".$vars['{amount}'].", currency: '".$vars['{currency}']."'}, {eventID: 'purchase-".$payment->getKey()."'}); }</script>", $pixelService];
             }
 
             self::markTracked($visit, $payment);
         }
 
-        $head = implode("\n", $head);
-        $body = implode("\n", $body);
+        $zusammen = function (array $stuecke) use ($state): string {
+            return implode("\n", array_filter(array_map(
+                fn (array $stueck) => $state['mode'] === TrackingConsent::PARK ? self::park($stueck[0], $stueck[1]) : $stueck[0],
+                $stuecke,
+            ), fn (string $html) => $html !== ''));
+        };
 
-        if ($state['mode'] === TrackingConsent::PARK) {
-            $head = self::park($head);
-            $body = self::park($body);
-        }
+        return ['head' => $zusammen($head), 'body' => $zusammen($body)];
+    }
 
-        return ['head' => $head, 'body' => $body];
+    /** @param  array<string, mixed>  $settings */
+    protected static function pixelService(array $settings): string
+    {
+        return $settings['meta_pixel_service'] ?? TrackingConsent::service();
     }
 
     /** Die ID fuer InitiateCheckout: je Besuch und Kasse, damit Seite und Server dieselbe kennen. */
@@ -126,9 +136,10 @@ class Tracking
     /** InitiateCheckout vom Server, wenn jemand auf „Bestellen" drueckt. */
     public static function initiateCheckout(Funnel $funnel, FunnelStep $step, FunnelVisit $visit, Request $request, ?int $valueCent, string $currency): void
     {
-        $pixel = FunnelSettings::of($funnel)['meta_pixel_id'];
+        $settings = FunnelSettings::of($funnel);
+        $pixel = $settings['meta_pixel_id'];
 
-        if ($pixel === null || ! TrackingConsent::state($request)['granted']) {
+        if ($pixel === null || ! TrackingConsent::state($request, self::pixelService($settings))['granted']) {
             return;
         }
 
@@ -310,13 +321,13 @@ class Tracking
     /**
      * Nur die Skripte, geparkt unter dem Dienst der Einwilligung.
      */
-    public static function park(string $html): string
+    public static function park(string $html, ?string $service = null): string
     {
         if (trim($html) === '') {
             return '';
         }
 
-        $service = e(TrackingConsent::service());
+        $service = e($service ?? TrackingConsent::service());
         $html = (string) preg_replace('#<noscript\b[^>]*>.*?</noscript>#is', '', $html);
 
         preg_match_all('#<script\b([^>]*)>(.*?)</script>#is', $html, $treffer, PREG_SET_ORDER);

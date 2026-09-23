@@ -132,14 +132,7 @@ class Split
             return null;
         }
 
-        $funnel = $step->funnel;
-        $stored = ($funnel->meta ?? [])['split_winners'][$step->node_key] ?? null;
-
-        if (! is_array($stored) || ($stored['goal'] ?? null) !== SplitResults::goal($step)) {
-            return null;
-        }
-
-        $variant = $stored['variant'] ?? null;
+        $variant = SplitResults::decision($step->funnel, $step)['variant'] ?? null;
 
         return $variant === self::A || $variant === self::B ? $variant : null;
     }

@@ -228,6 +228,12 @@ class ServiceProvider extends AddonServiceProvider
             Permission::group('statamic-funnels', __('statamic-funnels::settings.permission_group'), function (): void {
                 Permission::register('manage funnels settings')
                     ->label(__('statamic-funnels::settings.permission_manage'));
+
+                // Tracking-Code ist rohes JavaScript auf den Seiten der Site.
+                // Wer Funnels baut, soll das nicht nebenbei duerfen.
+                Permission::register('edit funnels tracking code')
+                    ->label(__('statamic-funnels::settings.permission_tracking'))
+                    ->description(__('statamic-funnels::settings.permission_tracking_description'));
             });
         });
 

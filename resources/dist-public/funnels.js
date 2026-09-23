@@ -134,6 +134,8 @@
                     }
                 });
             }
+
+            document.dispatchEvent(new Event('statamic-funnels:layout'));
         }
 
         form.addEventListener('change', function (event) {
@@ -173,8 +175,13 @@
     // ------------------------------------------------------------ Embedded
     //
     // Inside the embed script's iframe the page tells its parent how tall it
-    // is, so an inline embed never shows a second scroll bar. Only the height
-    // leaves the frame, and only to the page that framed it.
+    // is, so an inline embed never shows a second scroll bar.
+    //
+    // Sent with target origin `*`: which site framed the page is not known
+    // here (the referrer is the previous funnel page after the first step),
+    // and the allowed sites are enforced by `frame-ancestors`, not by this
+    // message. Only the height leaves the frame, nothing about the visitor.
+    // The receiving `embed.js` accepts it only from the frame it built.
     (function embedded() {
         var root = document.querySelector('[data-funnel-embedded]');
 
@@ -185,9 +192,15 @@
         // Gemessen am Inhalt, nicht am Dokument: `scrollHeight` ist nie
         // kleiner als der Rahmen selbst, und ein Rahmen, der nur wachsen kann,
         // schrumpft nach dem ersten Schritt nie wieder auf eine kurze Seite.
+        // Dazu die unteren Raender von Inhalt und Body, sonst fehlen ein paar
+        // Pixel und der Rahmen bekommt doch einen Scrollbalken.
         function report() {
-            var bottom = root.getBoundingClientRect().bottom + window.scrollY;
-            var height = Math.ceil(bottom + 16);
+            var style = window.getComputedStyle;
+            var bottom = root.getBoundingClientRect().bottom + window.scrollY
+                + (parseFloat(style(root).marginBottom) || 0)
+                + (parseFloat(style(document.body).marginBottom) || 0)
+                + (parseFloat(style(document.body).paddingBottom) || 0);
+            var height = Math.ceil(bottom) + 2;
 
             if (height === last) return;
 
@@ -197,9 +210,13 @@
 
         report();
         window.addEventListener('load', report);
+        // Nach dem Ein- und Ausblenden eines Bumps sofort, nicht erst, wenn
+        // der Beobachter es bemerkt.
+        document.addEventListener('statamic-funnels:layout', report);
 
         if (window.ResizeObserver) {
             new ResizeObserver(report).observe(root);
+            new ResizeObserver(report).observe(document.body);
         } else {
             window.setInterval(report, 500);
         }

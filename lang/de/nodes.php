@@ -118,9 +118,9 @@ return [
     'split_goal_upsell' => 'Upsell danach angenommen',
     'split_goal_revenue' => 'Umsatz je Besuch',
     'field_split_auto' => 'A/B-Test: Gewinner automatisch übernehmen',
-    'field_split_auto_help' => 'Hat jede Fassung die Mindestzahl an Besuchen und liegt eine mit 95 % Sicherheit vorn, sehen neue Besucher nur noch sie.',
-    'field_split_min_visits' => 'A/B-Test: Mindestbesuche je Fassung',
-    'field_split_min_visits_help' => 'Leer heißt 100.',
+    'field_split_auto_help' => 'Entschieden wird einmal, mit den ersten Besuchen je Fassung bis zur Mindestzahl, einen Tag nach dem letzten davon. Liegt eine mit 95 % Sicherheit vorn, sehen neue Besucher nur noch sie.',
+    'field_split_min_visits' => 'A/B-Test: Besuche je Fassung für die Entscheidung',
+    'field_split_min_visits_help' => 'Mindestens 100, leer heißt 100. Mehr Besuche erkennen kleinere Unterschiede.',
 
     // Bump-Regeln (F1).
     'field_bump_rules' => 'Bump-Regeln',
@@ -139,5 +139,7 @@ return [
 
     // Tracking je Kassenschritt (F6).
     'field_tracking_purchase' => 'Tracking-Code nach dem Kauf',
+    'field_tracking_purchase_service' => 'Tracking-Code: Einwilligung',
+    'field_tracking_purchase_service_help' => 'Der Dienst in statamic-consent, dessen Einwilligung diesen Code freigibt. Leer heißt: der aus der Konfiguration.',
     'field_tracking_purchase_help' => 'Wird einmal je bezahltem Kauf dieses Schritts auf der nächsten Seite ausgegeben, nur mit Einwilligung. Platzhalter: {amount}, {currency}, {order_id}.',
 ];
