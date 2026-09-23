@@ -151,6 +151,16 @@ form.
 
 The buyer gets the checkout back with a sentence; the reason is logged.
 
+### Fixed: a country field is always checked as a country
+
+A billing field with the key `country` is validated as a two-letter country code, whatever type the
+field library gives it. Before, "12" passed and the checkout ended with an error when the payment
+was created.
+
+### Fixed: the saved-card sentence names the card just entered
+
+The German text for an unnamed saved card now says "das Sie eben angegeben haben".
+
 ## 1.16.0 — 2026-09-22
 
 ### Fixed: the node library's tab bar scrolls, and now shows that it does
