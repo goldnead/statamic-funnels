@@ -6,6 +6,7 @@ use Goldnead\BrandContext\Facades\BrandContext;
 use Goldnead\StatamicFunnels\Events\FunnelFormSubmitted;
 use Goldnead\StatamicFunnels\Events\FunnelOfferAccepted;
 use Goldnead\StatamicFunnels\Events\FunnelOfferDeclined;
+use Goldnead\StatamicFunnels\Events\UpsellDeclined;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
@@ -19,6 +20,7 @@ use Goldnead\StatamicFunnels\Support\Consent;
 use Goldnead\StatamicFunnels\Support\Countdown;
 use Goldnead\StatamicFunnels\Support\Embed;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
+use Goldnead\StatamicFunnels\Support\PaymentsDoor;
 use Goldnead\StatamicFunnels\Support\SavedCard;
 use Goldnead\StatamicFunnels\Support\Sibling;
 use Goldnead\StatamicFunnels\Support\Tracking;
@@ -364,6 +366,14 @@ class AdvanceController
             // Gesagt, damit eine Mail am Ausgang `declined` einen Moment hat.
             FunnelOfferDeclined::dispatch($visit->fresh() ?? $visit, $step);
 
+            // Und ob es ein abgelehnter Upsell war: ein Nein, nachdem in diesem
+            // Lauf schon etwas bezahlt ist (fuer automations).
+            $bezahlt = $this->lastPaidPayment($visit);
+
+            if ($bezahlt !== null) {
+                UpsellDeclined::dispatch($visit->fresh() ?? $visit, $step, (string) $step->config('offer'), $bezahlt);
+            }
+
             return $this->go($funnel, $next);
         }
 
@@ -663,6 +673,17 @@ class AdvanceController
             $angaben = self::mitEinwilligung($angaben, ['meta' => $korbMeta]);
         }
 
+        // **Erinnerung bei Abbruch (payments P8)**: nur mit eigenem Haken, nicht
+        // mit der Kaufzustimmung. Und nur, wenn die Seite danach gefragt hat;
+        // ein Feld, das eine fremde Vorlage mitschickt, zaehlt nicht.
+        if (PaymentsDoor::asksForReminder() && $request->boolean('reminder_consent')) {
+            $angaben = self::mitEinwilligung($angaben, ['meta' => [
+                'reminder_consent' => true,
+                'reminder_consent_at' => now()->toIso8601String(),
+                'reminder_consent_text' => PaymentsDoor::reminderLabel(),
+            ]]);
+        }
+
         // Ob der Ein-Klick-Weg genommen wird, entscheidet sich hier — und er
         // ist eine Abkuerzung, kein Ausgang. Scheitert er, geht es unten ueber
         // die normale Kasse weiter.
@@ -821,7 +842,11 @@ class AdvanceController
         if (! $result) {
             Sibling::call($basket, 'releaseCoupon');
 
-            return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
+            // An der Tuer abgelehnt (Captcha, zu viele Versuche, Sperre)? Dann
+            // mit diesem Grund, sonst mit dem allgemeinen Satz.
+            $grund = app(PaymentsDoor::class)->message();
+
+            return back()->withErrors(['offer' => $grund ?? __('statamic-funnels::messages.offer_unavailable')]);
         }
 
         $this->rememberPending($visit, $step, $result->payment);
@@ -945,6 +970,25 @@ class AdvanceController
             'payment_id' => $payment->getKey(),
             'meta' => $meta,
         ])->save();
+    }
+
+    /** Der zuletzt bezahlte Kauf dieses Laufs, oder null. */
+    protected function lastPaidPayment(FunnelVisit $visit): ?Payment
+    {
+        $ids = array_values(array_filter(array_merge(
+            array_values((array) (($visit->meta ?? [])['payments'] ?? [])),
+            [$visit->payment_id],
+        )));
+
+        if ($ids === []) {
+            return null;
+        }
+
+        return Payment::query()
+            ->whereIn('id', $ids)
+            ->where('status', Payment::STATUS_PAID)
+            ->orderByDesc('id')
+            ->first();
     }
 
     protected function pendingPaymentFor(FunnelVisit $visit, FunnelStep $step): ?Payment

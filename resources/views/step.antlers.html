@@ -316,6 +316,20 @@
                             {{ if withdrawal:version }}<small class="funnel-consent-version">{{ trans key="statamic-funnels::messages.consent_version" version="{withdrawal:version}" }}</small>{{ /if }}
                         </p>
                     {{ /if }}
+                    {{# Erinnerung bei Abbruch: ein eigener Haken, nie
+                        vorangekreuzt, getrennt von der Kaufzustimmung. Nur
+                        wenn payments solche Mails verschickt. #}}
+                    {{ if funnel:reminder }}
+                        <label class="funnel-offer__reminder">
+                            <input type="checkbox" name="reminder_consent" value="1">
+                            <span>{{ funnel:reminder:label }}</span>
+                        </label>
+                    {{ /if }}
+
+                    {{# Das Captcha von statamic-payments, wenn es eingeschaltet
+                        ist. Ohne es lehnt die Kasse ab. #}}
+                    {{ funnel:captcha }}
+
                     <button type="submit">{{ if offer:button_label }}{{ offer:button_label }}{{ else }}{{ trans key="statamic-funnels::messages.order_button" }}{{ /if }}</button>
                 </form>
 

@@ -325,6 +325,20 @@ the form says.
 
 Against an older statamic-offers the checkout stays what it was: no field, no rule, no terms.
 
+#### Captcha, block list and reminders (statamic-payments 1.25)
+
+- **Captcha.** With `statamic-payments.protection.captcha` switched on, payments refuses every
+  checkout without a token. The shipped checkout renders the widget (`funnel:captcha` for a template
+  of your own). A checkout refused at the door says why: confirm the captcha, too many attempts, or a
+  general sentence for the block list (which list matched stays unsaid).
+- **Reminders on abandonment.** When payments sends them and wants consent
+  (`abandoned.capture = consent`), the checkout shows its own tick box, never pre-ticked and separate
+  from the order consent. Ticked, it travels as `meta.reminder_consent` (with time and wording) on
+  the payment. A box a template sends without the page asking does not count.
+- **Expiring thank-you link.** payments wraps the funnel's return address in its signed link when
+  `thanks.expires_minutes` is set; the funnel's own thank-you step keeps working behind it, because
+  it reads the purchase from the walk, not from the link.
+
 ### A deadline that holds
 
 An offer step can carry one, and it is **enforced on the server**: past it the step refuses to be
@@ -530,7 +544,7 @@ funnel addon must not start writing into somebody's CRM.
 | `statamic-offers` | says what a thing costs *here* |
 | `statamic-leadhub` | receives a captured address as a contact |
 | `statamic-email-templates` | renders the template a mail node names; without it a mail node saves but every send is recorded as failed |
-| `statamic-automations` | four trigger nodes: step entered, form submitted, offer accepted, funnel completed |
+| `statamic-automations` | four trigger nodes: step entered, form submitted, offer accepted, funnel completed. `UpsellDeclined` (visit, step, offer handle, the paid payment before it) fires on a "no" after a purchase in the same walk, for a trigger there |
 | Statamic forms | are the form; this addon never grew its own |
 
 ## Configuration

@@ -187,6 +187,12 @@ return [
     'settings_capi_on' => 'Conversions API on: the same events also go to Meta from the server, with the same event ID.',
     'settings_capi_off' => 'Conversions API off. With FUNNELS_META_CAPI_TOKEN in .env the events also go to Meta from the server.',
 
+    // Checkout: protection and reminder from statamic-payments (P7, P8).
+    'checkout_blocked_captcha' => 'Please confirm below that you are not a bot, then order again.',
+    'checkout_blocked_rate_limited' => 'There were many order attempts from here just now. Please wait a few minutes and try again.',
+    'checkout_blocked' => 'We cannot accept this order like this. Please write to us and we will sort it out.',
+    'reminder_consent_label' => 'Remind me by email if I do not finish the order.',
+
     'embed_domains_invalid' => 'Not a domain: :domains',
     'meta_pixel_id_invalid' => 'A pixel ID is digits only.',
     'tracking_mode_park' => 'With statamic-consent: every script starts only once the service “:service” is allowed. Only script code, anything else is dropped.',

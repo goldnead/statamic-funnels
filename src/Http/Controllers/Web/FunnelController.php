@@ -19,6 +19,7 @@ use Goldnead\StatamicFunnels\Support\FunnelMailRenderer;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\InAppBrowser;
 use Goldnead\StatamicFunnels\Support\OrderSummary;
+use Goldnead\StatamicFunnels\Support\PaymentsDoor;
 use Goldnead\StatamicFunnels\Support\PreviewToken;
 use Goldnead\StatamicFunnels\Support\SavedCard;
 use Goldnead\StatamicFunnels\Support\Split;
@@ -321,6 +322,15 @@ class FunnelController
             'preview' => $preview,
             // So a template can style or measure the two apart if it wants to.
             'variant' => $variant,
+            // Das Captcha von statamic-payments (P7), als fertiges Markup. Ist
+            // es eingeschaltet und fehlt auf der Seite, lehnt payments jede
+            // Kasse ab. Leer, wenn es aus ist oder payments es nicht kennt.
+            'captcha' => $step->type === 'offer' ? PaymentsDoor::captcha() : '',
+            // Der Haken fuer Erinnerungen bei Abbruch (payments P8). Null,
+            // wenn payments keine verschickt oder keine Einwilligung will.
+            'reminder' => $step->type === 'offer' && PaymentsDoor::asksForReminder()
+                ? ['label' => PaymentsDoor::reminderLabel()]
+                : null,
             // Der Hinweis im Browser von Instagram, Facebook, TikTok und
             // LinkedIn (F3). Null ueberall sonst.
             'in_app_browser' => InAppBrowser::forTemplate($funnel, request(), $preview),

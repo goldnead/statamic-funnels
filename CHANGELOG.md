@@ -45,6 +45,17 @@ statamic-consent service `tracking.consent_service`, or `tracking.without_consen
 `FUNNELS_META_CAPI_TOKEN` PageView, InitiateCheckout and Purchase also go from the server (Purchase on
 `PaymentPaid`), queued, with the pixel's event ID.
 
+### Added: captcha, block list and reminder consent from statamic-payments (P7, P8)
+
+The checkout renders the payments captcha widget; a checkout refused at the door names the reason
+(captcha, too many attempts, general for the block list). With abandonment reminders on and
+`capture = consent`, the checkout asks with its own box and passes `meta.reminder_consent`.
+
+### Added: `UpsellDeclined` event
+
+`Goldnead\StatamicFunnels\Events\UpsellDeclined(visit, step, offerHandle, payment)`: a "no" on an
+offer after a paid purchase in the same walk. Next to `FunnelOfferDeclined`, which fires on every no.
+
 ### Added: funnel settings in the editor
 
 *Settings* opens a stack for the in-app notice, embedding and tracking; saved with the graph into

@@ -15,10 +15,12 @@ use Goldnead\StatamicFunnels\Integrations\LeadHubBridge;
 use Goldnead\StatamicFunnels\Integrations\MetaConversions;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
+use Goldnead\StatamicFunnels\Support\PaymentsDoor;
 use Goldnead\StatamicFunnels\Support\Settings;
 use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
 use Goldnead\StatamicPayments\Cp\SuiteNav;
 use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Statamic\Facades\CP\Nav;
 use Statamic\Facades\Permission;
@@ -61,6 +63,10 @@ class ServiceProvider extends AddonServiceProvider
         // Wer Ereignisse serverseitig meldet (F7). Meta, bis jemand ein
         // zweites Ziel braucht; eine Site kann die Bindung ersetzen.
         $this->app->bindIf(ConversionSender::class, MetaConversions::class);
+
+        // Der Grund, aus dem payments eine Kasse an der Tuer abgelehnt hat,
+        // fuer die Dauer einer Anfrage (P7).
+        $this->app->scoped(PaymentsDoor::class);
     }
 
     /**
@@ -86,7 +92,7 @@ class ServiceProvider extends AddonServiceProvider
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'statamic-funnels');
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
 
-        $this->bootUtility()->bootCookie()->bootPermissions();
+        $this->bootUtility()->bootCookie()->bootPermissions()->bootPaymentsDoor();
 
         $this->registerInsightsMetrics();
 
@@ -224,6 +230,22 @@ class ServiceProvider extends AddonServiceProvider
                     ->label(__('statamic-funnels::settings.permission_manage'));
             });
         });
+
+        return $this;
+    }
+
+    /**
+     * Den Grund einer Ablehnung an der Tuer von payments mithoeren (P7).
+     *
+     * Von Hand und hinter `class_exists`, nicht als Listener-Klasse im
+     * Autoload: das Ereignis gibt es erst ab payments 1.25, und eine Klasse, die
+     * es im Typ nennt, waere gegen ein aelteres payments ein Verweis ins Leere.
+     */
+    protected function bootPaymentsDoor(): self
+    {
+        if (class_exists(PaymentsDoor::BLOCKED_EVENT)) {
+            Event::listen(PaymentsDoor::BLOCKED_EVENT, fn ($event) => app(PaymentsDoor::class)->remember($event));
+        }
 
         return $this;
     }
