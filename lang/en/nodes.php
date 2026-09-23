@@ -109,4 +109,35 @@ return [
     'countdown_none' => 'No deadline',
     'countdown_fixed' => 'One moment for everybody',
     'countdown_rolling' => 'A window per visitor',
+
+    // Split test: goal and winner (F2).
+    'field_split_goal' => 'Split test: goal',
+    'field_split_goal_help' => 'What the two versions are measured by.',
+    'split_goal_continue' => 'Continue to the next step',
+    'split_goal_purchase' => 'Purchase',
+    'split_goal_upsell' => 'Upsell accepted afterwards',
+    'split_goal_revenue' => 'Revenue per visit',
+    'field_split_auto' => 'Split test: pick the winner automatically',
+    'field_split_auto_help' => 'Once each version has the minimum number of visits and one leads with 95 % confidence, new visitors only see that one.',
+    'field_split_min_visits' => 'Split test: minimum visits per version',
+    'field_split_min_visits_help' => 'Empty means 100.',
+
+    // Bump rules (F1).
+    'field_bump_rules' => 'Bump rules',
+    'field_bump_rules_help' => 'When each bump shows next to the order button. Without rules everybody sees every bump.',
+    'bump_options' => 'Only with these pricing options',
+    'bump_options_all' => 'All pricing options',
+    'bump_requires' => 'Only together with',
+    'bump_requires_none' => 'No other bump needed',
+    'bump_returning' => 'Returning customers',
+    'bump_returning_show' => 'Show to everyone',
+    'bump_returning_hide' => 'Hide from returning customers',
+    'bump_returning_only' => 'Only show to returning customers',
+    'bump_preselected' => 'Preselected',
+    'bump_no_offer' => 'Choose an offer first.',
+    'bump_no_bumps' => 'This offer has no bumps.',
+
+    // Tracking per checkout step (F6).
+    'field_tracking_purchase' => 'Tracking code after the purchase',
+    'field_tracking_purchase_help' => 'Printed once per paid purchase of this step, on the next page, and only with consent. Placeholders: {amount}, {currency}, {order_id}.',
 ];

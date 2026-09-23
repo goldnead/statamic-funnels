@@ -2,6 +2,8 @@
 
 namespace Goldnead\StatamicFunnels\Nodes;
 
+use Goldnead\StatamicFunnels\Support\SplitResults;
+
 /**
  * What a step can be.
  *
@@ -98,6 +100,11 @@ abstract class StepType
             ['handle' => 'variant_entry', 'type' => 'entry', 'label' => __('statamic-funnels::nodes.field_variant_entry'), 'instructions' => __('statamic-funnels::nodes.field_variant_entry_help'), ...$onlyWithSplit],
             ['handle' => 'variant_headline', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_variant_headline'), ...$onlyWithSplit],
             ['handle' => 'variant_body', 'type' => 'textarea', 'label' => __('statamic-funnels::nodes.field_variant_body'), ...$onlyWithSplit],
+            // Woran gemessen wird und ob der Gewinner von selbst uebernommen
+            // wird (F2). Ohne Ziel bleibt es beim Weitergehen, wie bisher.
+            ['handle' => 'split_goal', 'type' => 'select', 'options' => SplitResults::goalOptions(), 'label' => __('statamic-funnels::nodes.field_split_goal'), 'instructions' => __('statamic-funnels::nodes.field_split_goal_help'), ...$onlyWithSplit],
+            ['handle' => 'split_auto', 'type' => 'toggle', 'label' => __('statamic-funnels::nodes.field_split_auto'), 'instructions' => __('statamic-funnels::nodes.field_split_auto_help'), ...$onlyWithSplit],
+            ['handle' => 'split_min_visits', 'type' => 'text', 'label' => __('statamic-funnels::nodes.field_split_min_visits'), 'instructions' => __('statamic-funnels::nodes.field_split_min_visits_help'), 'visible_when' => ['split_share' => 'filled', 'split_auto' => 'filled']],
         ];
     }
 

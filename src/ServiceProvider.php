@@ -3,6 +3,7 @@
 namespace Goldnead\StatamicFunnels;
 
 use Goldnead\BrandContext\Settings\SettingsRegistry;
+use Goldnead\StatamicFunnels\Contracts\ConversionSender;
 use Goldnead\StatamicFunnels\Contracts\ThumbnailRenderer;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelActionsController;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelsController;
@@ -11,6 +12,7 @@ use Goldnead\StatamicFunnels\Integrations\Insights\CompletionRate;
 use Goldnead\StatamicFunnels\Integrations\Insights\StepEvents;
 use Goldnead\StatamicFunnels\Integrations\Insights\Visits;
 use Goldnead\StatamicFunnels\Integrations\LeadHubBridge;
+use Goldnead\StatamicFunnels\Integrations\MetaConversions;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\Settings;
@@ -55,6 +57,10 @@ class ServiceProvider extends AddonServiceProvider
         // handful of stats, but there is no reason to pay for it on a request
         // that never renders anything. A test swaps the binding for a double.
         $this->app->singleton(ThumbnailRenderer::class, fn () => Thumbnails::detectRenderer());
+
+        // Wer Ereignisse serverseitig meldet (F7). Meta, bis jemand ein
+        // zweites Ziel braucht; eine Site kann die Bindung ersetzen.
+        $this->app->bindIf(ConversionSender::class, MetaConversions::class);
     }
 
     /**
@@ -193,6 +199,11 @@ class ServiceProvider extends AddonServiceProvider
     protected function bootCookie(): self
     {
         EncryptCookies::except(FunnelWalk::COOKIE);
+
+        // Die beiden Cookies des Meta-Pixels (F7). Das Skript schreibt sie im
+        // Browser; verschluesselt erwartet, verwirft Laravel sie still, und
+        // die Conversions API bekaeme nie `fbp` und `fbc`.
+        EncryptCookies::except(['_fbp', '_fbc']);
 
         return $this;
     }

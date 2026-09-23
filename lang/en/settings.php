@@ -24,6 +24,11 @@ return [
             'description' => 'The pictures on the cards in the funnel editor. The disk and the Chromium path stay in config/statamic-funnels.php because they describe the machine rather than the site; so do the cookies and the hidden selectors, which are a map and a selector list.',
         ],
 
+        'reach' => [
+            'title' => 'In-app browser, embedding, tracking',
+            'description' => 'For all funnels. What a single funnel uses of it (notice text, allowed domains, tracking code, pixel ID) is set in its settings in the editor. The Meta Conversions API access token belongs in .env (FUNNELS_META_CAPI_TOKEN).',
+        ],
+
         'integrations' => [
             'title' => 'Sibling addons',
             'description' => 'What a completed funnel hands on to other addons. The entitlements switch stays in the config alone: nothing in this addon reads it, so it switches nothing.',
@@ -73,6 +78,31 @@ return [
             'description' => 'On means an address captured in a funnel is handed to goldnead/statamic-leadhub as a contact. Nothing happens without LeadHub installed.',
         ],
 
+        'in_app_browser_enabled' => [
+            'label' => 'In-app browser notice',
+            'description' => 'Visitors from Instagram, Facebook, TikTok or LinkedIn see a note to open the page in their usual browser. Off means in no funnel, whatever the funnel says.',
+        ],
+
+        'embed_link_minutes' => [
+            'label' => 'Embedded links valid for (minutes)',
+            'description' => 'Inside a frame on another site the walk travels signed in the links. This is how long such a link stays good, the way back from the payment included.',
+        ],
+
+        'tracking_consent_service' => [
+            'label' => 'Service in statamic-consent',
+            'description' => 'The handle of the service whose consent releases tracking code and the Meta pixel. It has to exist in the consent config, otherwise everything stays blocked.',
+        ],
+
+        'tracking_without_consent_addon' => [
+            'label' => 'Without statamic-consent',
+            'description' => 'What happens to tracking code when statamic-consent is not installed.',
+        ],
+
+    ],
+
+    'options' => [
+        'without_consent_addon_block' => 'Print nothing',
+        'without_consent_addon_render' => 'Print it, the site’s banner controls it',
     ],
 
 ];

@@ -31,7 +31,7 @@ class FunnelWalk
      */
     public function existingVisit(Funnel $funnel): ?FunnelVisit
     {
-        $token = $this->request()->cookie(self::COOKIE);
+        $token = Embed::tokenFromRequest($this->request()) ?? $this->request()->cookie(self::COOKIE);
 
         if (! is_string($token) || ! $this->looksLikeToken($token)) {
             return null;
@@ -64,16 +64,49 @@ class FunnelWalk
      */
     public function token(): string
     {
-        $existing = $this->request()->cookie(self::COOKIE);
+        $request = $this->request();
+
+        // **Der signierte Weg zuerst** (F4). Im Rahmen auf einer fremden Seite
+        // kommt kein Cookie an, und zurueck vom Anbieter steht der Besuch nur
+        // in der Adresse. Er gewinnt auch gegen ein Cookie, das noch von einem
+        // frueheren Besuch in diesem Browser stammt: die Adresse sagt, welcher
+        // Weg gerade gegangen wird. Danach steht er auch im Cookie, damit die
+        // naechste Seite ohne Adresse auskommt.
+        $signed = Embed::tokenFromRequest($request);
+
+        if ($signed !== null) {
+            if ($request->cookie(self::COOKIE) !== $signed) {
+                $this->queueCookie($signed, Embed::requested($request));
+            }
+
+            return $signed;
+        }
+
+        $existing = $request->cookie(self::COOKIE);
 
         if (is_string($existing) && $this->looksLikeToken($existing)) {
             return $existing;
         }
 
         $token = Str::random(32);
-        cookie()->queue(cookie(self::COOKIE, $token, 60 * 24 * 30, null, null, null, true, false, 'Lax'));
+        $this->queueCookie($token, Embed::requested($request));
 
         return $token;
+    }
+
+    /**
+     * Im Rahmen `SameSite=None; Secure`, sonst `Lax`.
+     *
+     * Ein Browser, der Cookies im fremden Rahmen noch zulaesst, behaelt den
+     * Weg dann auch ohne Adresse. `None` geht nur mit `Secure`, also nur ueber
+     * https; ueber http bleibt es bei `Lax` und der Weg reist in der Adresse.
+     */
+    protected function queueCookie(string $token, bool $framed): void
+    {
+        $sicher = $this->request()->isSecure();
+        $sameSite = $framed && $sicher ? 'None' : 'Lax';
+
+        cookie()->queue(cookie(self::COOKIE, $token, 60 * 24 * 30, null, null, $sicher ?: null, true, false, $sameSite));
     }
 
     /**

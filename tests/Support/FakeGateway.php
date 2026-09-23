@@ -41,8 +41,15 @@ class FakeGateway implements SubscriptionGateway
         return 'fake';
     }
 
+    /** Wenn gesetzt, lehnt der „Anbieter" jede neue Zahlung ab, wie bei einem Ausfall. */
+    public bool $refuse = false;
+
     public function createPayment(array $payload): CheckoutSession
     {
+        if ($this->refuse) {
+            throw new RuntimeException('Anbieter nicht erreichbar');
+        }
+
         $this->lastPayload = $payload;
         $this->created++;
         $id = 'tr_'.$this->created;

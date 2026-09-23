@@ -109,12 +109,39 @@ class Split
             return $stored;
         }
 
-        $variant = self::decide((string) $visit->token, $step->node_key, self::share($step));
+        // Steht ein Gewinner fest (F2), sehen neue Besucher nur noch ihn. Wer
+        // schon eine Fassung hatte, behaelt sie: eine Seite, die mitten im Lauf
+        // wechselt, waere ein zweiter Test, den niemand angelegt hat.
+        $variant = self::winner($step) ?? self::decide((string) $visit->token, $step->node_key, self::share($step));
 
         $meta['variants'][$step->node_key] = $variant;
         $visit->forceFill(['meta' => $meta])->save();
 
         return $variant;
+    }
+
+    /**
+     * Die Fassung, die den Test gewonnen hat, oder null.
+     *
+     * Nur mit Automatik und nur, solange das Ziel dasselbe ist, fuer das sie
+     * gewonnen hat. Wer das Ziel wechselt, will die Frage neu stellen.
+     */
+    public static function winner(FunnelStep $step): ?string
+    {
+        if (! SplitResults::auto($step)) {
+            return null;
+        }
+
+        $funnel = $step->funnel;
+        $stored = ($funnel->meta ?? [])['split_winners'][$step->node_key] ?? null;
+
+        if (! is_array($stored) || ($stored['goal'] ?? null) !== SplitResults::goal($step)) {
+            return null;
+        }
+
+        $variant = $stored['variant'] ?? null;
+
+        return $variant === self::A || $variant === self::B ? $variant : null;
     }
 
     /**

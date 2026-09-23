@@ -1,5 +1,71 @@
 # Changelog
 
+## Unreleased
+
+### Added: bump rules (F1)
+
+Per checkout step and bump: only with some pricing options, only together with another bump,
+preselected, and shown to everyone, hidden from returning customers or shown only to them. The page
+shows and hides live (`funnels.js`); the server applies the same rules to the order.
+
+### Added: split tests with a goal and an automatic winner (F2)
+
+`split_goal` (`continue`, `purchase`, `upsell`, `revenue`), `split_auto`, `split_min_visits`. The
+winner is picked at 95 % confidence once each version has the minimum visits (z-test for rates,
+Welch test for revenue per visit) and stored in `funnels.meta.split_winners`; new visitors then only
+see it. The editor shows goal, figures, confidence and winner.
+
+### Added: in-app browser notice (F3)
+
+Instagram, Facebook, TikTok and LinkedIn are recognised from the user agent; the page says to open it
+in the real browser, with *Copy link* and, on Android, a Chrome link. Per funnel off or reworded;
+`in_app_browser.enabled` switches it off everywhere.
+
+### Added: popup and inline embedding on other sites (F4)
+
+`embed.js` opens a funnel as a popup (`data-funnel-popup`) or embeds it (`data-funnel-embed`). Every
+funnel page now sends `Content-Security-Policy: frame-ancestors 'self'` plus the funnel's allowed
+domains, and removes `X-Frame-Options`. **A site that frames a funnel page from another domain today
+has to list that domain on the funnel.** Inside a foreign frame the walk travels signed in links and
+forms (`embed.link_minutes`), a new route `statamic-funnels.advance-embed` accepts posts without a
+CSRF token from this site's own origin only, and the order button leaves the frame for the provider.
+
+### Added: statamic-offers 1.12 at the checkout (F5)
+
+Coupon from the link (`?coupon=`, remembered on the walk, funnel-wide codes carried on), pay what you
+want with an amount field, the country question for offers with a country rule, the thank-you line by
+amount, and the coupon terms for follow-up payments in `meta.coupon` of the first payment. A refused
+payment gives the coupon's use back. All guarded: against offers 1.11 the checkout is unchanged.
+
+### Added: tracking code and Meta pixel with Conversions API (F6, F7)
+
+Head code, purchase code (once per paid purchase, with `{amount}`, `{currency}`, `{order_id}`) and a
+Meta pixel per funnel, a purchase code per checkout step. Only with consent: parked under the
+statamic-consent service `tracking.consent_service`, or `tracking.without_consent_addon`. With
+`FUNNELS_META_CAPI_TOKEN` PageView, InitiateCheckout and Purchase also go from the server (Purchase on
+`PaymentPaid`), queued, with the pixel's event ID.
+
+### Added: funnel settings in the editor
+
+*Settings* opens a stack for the in-app notice, embedding and tracking; saved with the graph into
+`funnels.meta.settings`. Four new operator settings (in-app notice, link lifetime, consent service,
+behaviour without the consent addon).
+
+### Fixed: the checkout shows the consent text of the brand that sells
+
+On a multi-brand install the page drew the withdrawal wording under the request's brand and the
+order compared it under the offer's brand, so every order of an offer of a second brand with its own
+text ended in "the terms have changed". The checkout page now renders under the offer's brand.
+
+### Fixed: a capture step says why it did not go on
+
+Validation errors of form steps were never shown on the shipped template. They are now, above the
+form.
+
+### Fixed: a provider failure at checkout no longer ends on an error page
+
+The buyer gets the checkout back with a sentence; the reason is logged.
+
 ## 1.16.0 — 2026-09-22
 
 ### Fixed: the node library's tab bar scrolls, and now shows that it does

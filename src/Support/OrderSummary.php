@@ -3,6 +3,7 @@
 namespace Goldnead\StatamicFunnels\Support;
 
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicOffers\Offers;
 use Goldnead\StatamicPayments\Models\Payment;
 
 /**
@@ -57,8 +58,18 @@ class OrderSummary
         $total = 0;
         $currency = 'EUR';
 
+        // Der Danke-Satz zu einem frei gewaehlten Betrag (statamic-offers 1.12,
+        // `{{ offers:thanks }}`). Der Betrag steht im Handle der Zahlung
+        // (`offer:x:=2500`); der erste Kauf mit einer passenden Stufe gewinnt.
+        $thanks = null;
+
         foreach ($payments as $payment) {
             $currency = strtoupper((string) ($payment->currency ?: $currency));
+
+            if ($thanks === null && is_string($payment->product) && $payment->product !== '') {
+                $satz = Sibling::call(Offers::class, 'thankYouFor', [$payment->product]);
+                $thanks = is_string($satz) && $satz !== '' ? $satz : null;
+            }
             $total += (int) $payment->amount_cent;
 
             // Zeilen, wo es welche gibt: ein Bump ist eine eigene Zeile und
@@ -92,6 +103,7 @@ class OrderSummary
             'total' => self::money($total, $currency),
             'currency' => $currency,
             'email' => $visit->email,
+            'thanks' => $thanks,
         ];
     }
 

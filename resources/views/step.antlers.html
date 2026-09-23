@@ -9,13 +9,35 @@
     properties — a site restyles a funnel by setting six variables rather than
     fighting a stylesheet. #}}
 {{ if funnel:styles }}<link rel="stylesheet" href="{{ funnel:styles }}">{{ /if }}
-{{# Only where there is a clock to tick. A page without a deadline loads no
-    script at all. #}}
-{{ if countdown && funnel:scripts }}<script src="{{ funnel:scripts }}" defer></script>{{ /if }}
+{{# Only where there is something to draw: a clock, bumps with rules, the
+    in-app notice, an embedded page. `funnel:script` is null otherwise, and a
+    plain page loads no script at all. #}}
+{{ if funnel:script }}<script src="{{ funnel:script }}" defer></script>{{ /if }}
 
-<div class="funnel-step" data-funnel="{{ funnel:handle }}" data-step="{{ step:key }}" data-step-type="{{ step:type }}">
+<div class="funnel-step" data-funnel="{{ funnel:handle }}" data-step="{{ step:key }}" data-step-type="{{ step:type }}"{{ if funnel:embed }} data-funnel-embedded{{ /if }}>
+    {{# Im Browser einer App (Instagram, Facebook, TikTok, LinkedIn) fehlen
+        gespeicherte Karten, Apple Pay und die Banking-App. Der Hinweis steht
+        vor allem anderen, weil er vor dem Kauf gelesen werden muss. #}}
+    {{ if funnel:in_app_browser }}
+        <div class="funnel-inapp" role="note">
+            <p>{{ funnel:in_app_browser:text | sanitize }}</p>
+            <p class="funnel-inapp__actions">
+                {{ if funnel:in_app_browser:android_url }}<a class="funnel-inapp__open" href="{{ funnel:in_app_browser:android_url | sanitize }}">{{ funnel:in_app_browser:open_label }}</a>{{ /if }}
+                <button type="button" class="funnel-inapp__copy" data-funnel-copy-link="{{ funnel:in_app_browser:url | sanitize }}" data-funnel-copied="{{ funnel:in_app_browser:copied_label }}">{{ funnel:in_app_browser:copy_label }}</button>
+            </p>
+        </div>
+    {{ /if }}
     {{ if headline }}<h1>{{ headline }}</h1>{{ /if }}
     {{ if body }}<div class="funnel-step__body">{{ body | markdown }}</div>{{ /if }}
+
+    {{# Warum das Formular nicht weiterging, auf jedem Schritt ausser der Kasse
+        (die sagt es unter dem Preis). Vorher schwieg die Anmeldung bei einer
+        falschen Adresse. #}}
+    {{ if errors && step:type != "offer" }}
+        <ul class="funnel-errors" role="alert">
+            {{ errors }}<li>{{ value | sanitize }}</li>{{ /errors }}
+        </ul>
+    {{ /if }}
 
     {{# A form step: a native Statamic form, with this addon only noting who it was. #}}
     {{ if step:type == "capture" }}
@@ -116,10 +138,14 @@
                 {{ /if }}
                 <h2>{{ offer:headline }}</h2>
                 {{ if offer:body }}<div>{{ offer:body | markdown }}</div>{{ /if }}
+                {{# Bei „Zahl, was du willst" gibt es keinen einen Preis, nur
+                    eine Untergrenze. Die steht am Betragsfeld. #}}
+                {{ unless offer:pwyw }}
                 <p class="funnel-offer__price">
                     <strong>{{ offer:amount_local }} {{ offer:currency }}</strong>
                     {{ if offer:compare_at }}<s>{{ offer:compare_at }} {{ offer:currency }}</s>{{ /if }}
                 </p>
+                {{ /unless }}
 
                 {{# Warum der letzte Versuch nichts gekauft hat.
 
@@ -137,7 +163,9 @@
                 {{ /if }}
 
 
-                <form method="POST" action="{{ action }}" class="funnel-offer__accept" {{ if countdown:expired }}hidden{{ /if }}>
+                {{# Im Rahmen einer fremden Seite verlaesst der Bestellknopf den
+                    Rahmen: Stripe und Mollie lassen sich nicht einbetten. #}}
+                <form method="POST" action="{{ action }}" class="funnel-offer__accept"{{ if funnel:embed }} target="_top"{{ /if }} {{ if countdown:expired }}hidden{{ /if }}>
                     {{ csrf_field }}
                     <input type="hidden" name="accept" value="1">
 
@@ -182,9 +210,13 @@
                     {{ if offer:bumps }}
                         <fieldset class="funnel-offer__bumps">
                             <legend>{{ trans key="statamic-funnels::messages.bumps_legend" }}</legend>
+                            {{# Die Regeln des Kassenschritts als Angaben: zu welchen
+                                Zahlweisen der Bump gehoert und an welchem anderen er
+                                haengt. Das Skript blendet danach ein und aus; der
+                                Server setzt dieselben Regeln beim Bestellen durch. #}}
                             {{ offer:bumps }}
-                                <label class="funnel-bump">
-                                    <input type="checkbox" name="bumps[]" value="{{ handle }}">
+                                <label class="funnel-bump" data-funnel-bump="{{ handle }}"{{ if options }} data-funnel-bump-options="{{ options }}"{{ /if }}{{ if requires }} data-funnel-bump-requires="{{ requires }}"{{ /if }}{{ if preselected_rule }} data-funnel-bump-preselected{{ /if }}{{ if hidden }} hidden{{ /if }}>
+                                    <input type="checkbox" name="bumps[]" value="{{ handle }}"{{ if preselected }} checked{{ /if }}>
                                     <span class="funnel-bump__text">
                                         <strong>{{ headline }}</strong>
                                         {{ if body }}<span class="funnel-bump__body">{{ body | markdown }}</span>{{ /if }}
@@ -198,10 +230,39 @@
                         </fieldset>
                     {{ /if }}
 
+                    {{# Zahl, was du willst. Ein Zahlenfeld mit den Grenzen des
+                        Angebots; der Server prueft sie trotzdem. #}}
+                    {{ if offer:pwyw }}
+                        <label class="funnel-offer__amount">
+                            <span>{{ trans key="statamic-funnels::messages.amount_label" }}</span>
+                            <span class="funnel-offer__amount-input">
+                                <input type="number" name="amount" value="{{ offer:pwyw:suggested }}" min="{{ offer:pwyw:min }}" max="{{ offer:pwyw:max }}" step="0.01" inputmode="decimal" required>
+                                <span>{{ offer:pwyw:currency }}</span>
+                            </span>
+                            <small>{{ trans key="statamic-funnels::messages.amount_hint" min="{offer:pwyw:min_local} {offer:pwyw:currency}" }}</small>
+                        </label>
+                    {{ /if }}
+
+                    {{# Das Land, nur wenn das Angebot eine Laenderregel hat und
+                        die Anmeldung es nicht schon erfragt hat. #}}
+                    {{ if offer:country }}
+                        <label class="funnel-offer__country">
+                            <span>{{ if offer:country:free }}{{ trans key="statamic-funnels::messages.field_country" }}{{ else }}{{ trans key="statamic-funnels::messages.country_label" }}{{ /if }}</span>
+                            {{ if offer:country:free }}
+                                <input type="text" name="country" maxlength="2" size="2" autocomplete="country" required>
+                            {{ else }}
+                                <select name="country" autocomplete="country" required>
+                                    <option value="">{{ trans key="statamic-funnels::messages.country_choose" }}</option>
+                                    {{ offer:country:options }}<option value="{{ value }}">{{ label }}</option>{{ /offer:country:options }}
+                                </select>
+                            {{ /if }}
+                        </label>
+                    {{ /if }}
+
                     {{ if offer:coupons }}
                         <label class="funnel-offer__coupon">
                             <span>{{ trans key="statamic-funnels::messages.coupon_label" }}</span>
-                            <input type="text" name="coupon" autocomplete="off" spellcheck="false">
+                            <input type="text" name="coupon" value="{{ offer:coupon_code }}" autocomplete="off" spellcheck="false">
                         </label>
                     {{ /if }}
 
@@ -277,6 +338,7 @@
     {{ if order }}
         <div class="funnel-order">
             <h2>{{ trans key="statamic-funnels::messages.order_summary" }}</h2>
+            {{ if order:thanks }}<p class="funnel-order__thanks">{{ order:thanks }}</p>{{ /if }}
             <ul class="funnel-order__lines">
                 {{ order:lines }}
                     <li>

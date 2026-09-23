@@ -8,6 +8,8 @@ import {
 import { Canvas, NodeLibrary, setNodeOutputSpecs, useHistory } from '@goldnead/flow-canvas';
 import { nodeIcon, withLabels } from '../../support/nodeKinds.js';
 import PreviewPanel from '../../components/PreviewPanel.vue';
+import BumpRulesField from '../../components/BumpRulesField.vue';
+import FunnelSettingsStack from '../../components/FunnelSettingsStack.vue';
 
 /**
  * The funnel editor.
@@ -37,6 +39,12 @@ const props = defineProps({
     // `{ enabled, available }`. On but not available is the one state worth a
     // word in the side panel: the host has no browser to photograph pages with.
     thumbnails: { type: Object, default: () => ({ enabled: false, available: false }) },
+    // Was ausser dem Graphen am Funnel haengt (F3, F4, F6, F7).
+    settings: { type: Object, default: () => ({}) },
+    embed: { type: Object, default: () => ({ script: '', url: '' }) },
+    tracking: { type: Object, default: () => ({ mode: 'block', message: '', capi: false }) },
+    // Die Fehler des letzten Speicherns, von Inertia.
+    errors: { type: Object, default: () => ({}) },
 });
 
 // Every word the editor shows comes from the server: Statamic's JavaScript
@@ -57,7 +65,25 @@ const graph = ref({
     published: props.funnel.published,
     nodes: JSON.parse(JSON.stringify(props.funnel.nodes)),
     edges: JSON.parse(JSON.stringify(props.funnel.edges)),
+    // Die Domains als Text, eine je Zeile: so tippt sie ein Mensch, und der
+    // Server liest beides.
+    settings: {
+        ...props.settings,
+        embed_domains: (props.settings?.embed_domains ?? []).join('\n'),
+    },
 });
+
+const showSettings = ref(false);
+
+// Ein Fehler in den Einstellungen oeffnet sie wieder: sonst stuende die
+// Meldung in einem geschlossenen Stack, und das Speichern saehe gescheitert
+// aus, ohne Grund.
+watch(
+    () => props.errors,
+    (errors) => {
+        if (Object.keys(errors ?? {}).some((key) => key.startsWith('settings.'))) showSettings.value = true;
+    },
+);
 
 const selectedKey = ref(null);
 const showLibrary = ref(true);
@@ -162,7 +188,8 @@ function fieldIsVisible(field) {
 
     return Object.entries(rules).every(([handle, rule]) => {
         const value = selected.value?.config?.[handle];
-        const filled = value !== null && value !== undefined && value !== '';
+        // Ein ausgeschalteter Schalter ist nicht „gefuellt".
+        const filled = value !== null && value !== undefined && value !== '' && value !== false;
 
         return rule === 'filled' ? filled : !filled;
     });
@@ -337,6 +364,10 @@ function save() {
     saving.value = true;
     router.patch(props.saveUrl, graph.value, {
         preserveScroll: true,
+        onSuccess: () => {
+            // Gespeichert und ohne Fehler: der Stack darf zu.
+            if (!Object.keys(props.errors ?? {}).some((key) => key.startsWith('settings.'))) showSettings.value = false;
+        },
         onFinish: () => { saving.value = false; },
     });
 }
@@ -438,6 +469,30 @@ const thumbnailHint = computed(
 /** The two versions of the selected step, when it is running a test. */
 const selectedSplit = computed(() => (selectedKey.value ? (props.splits?.[selectedKey.value] ?? null) : null));
 
+/** Eine Zahl je Fassung, passend zum Ziel: Quote, oder Umsatz je Besuch. */
+function splitFigure(row, goal) {
+    if (goal === 'revenue') {
+        if (row.revenue_per_visit_cent === null || row.revenue_per_visit_cent === undefined) return '–';
+
+        return (row.revenue_per_visit_cent / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    return row.rate === null || row.rate === undefined ? '–' : `${row.rate}%`;
+}
+
+const splitConfidence = computed(() => {
+    const c = selectedSplit.value?.confidence;
+
+    return c === null || c === undefined ? '–' : `${Math.floor(c * 1000) / 10}%`;
+});
+
+/** Das Angebot des gewaehlten Schritts, mit Bumps und Zahlweisen, fuer die Bump-Regeln. */
+const selectedOffer = computed(() => {
+    const handle = selected.value?.config?.offer;
+
+    return handle ? (props.offers.find((o) => o.value === handle) ?? null) : null;
+});
+
 /**
  * Die Seitenauswahl: Statamics eigener `entries`-Feldtyp, gefahren durch einen
  * `PublishContainer` — derselbe Weg, den die Kampagnen-Maske im Marketing-Addon
@@ -523,8 +578,24 @@ function entryFieldsFor(handle) {
                 :disabled="!previewUrl"
                 @click="showPreview = !showPreview"
             />
+            <Button
+                icon="cog"
+                :text="t('settings', 'open', 'Settings')"
+                :variant="showSettings ? 'filled' : 'default'"
+                @click="showSettings = true"
+            />
             <Button variant="primary" :text="t('ui', 'save', 'Save')" :disabled="saving" @click="save" />
         </Header>
+
+        <FunnelSettingsStack
+            v-model:open="showSettings"
+            v-model="graph.settings"
+            :labels="labels.settings ?? {}"
+            :embed="embed"
+            :tracking="tracking"
+            :errors="errors"
+            @save="save"
+        />
 
         <div class="flex min-h-0 flex-1 gap-4">
             <NodeLibrary
@@ -590,21 +661,44 @@ function entryFieldsFor(handle) {
 
                 <!-- Which version is winning, right where the test is set up.
                      A split report on another screen is a report nobody opens. -->
-                <div v-if="selectedSplit" class="mb-4 rounded-lg border border-content-border p-3">
-                    <p class="mb-2 text-2xs font-medium uppercase tracking-wide text-gray-500">
-                        {{ t('stats', 'split', 'Split test') }}
+                <div v-if="selectedSplit" class="mb-4 rounded-lg border border-content-border p-3" data-split-result>
+                    <div class="mb-2 flex items-center justify-between gap-2">
+                        <p class="text-2xs font-medium uppercase tracking-wide text-gray-500">
+                            {{ t('stats', 'split', 'Split test') }}
+                        </p>
+                        <Badge
+                            v-if="selectedSplit.winner"
+                            pill
+                            color="green"
+                            :text="`${t('split', 'winner', 'Winner')}: ${selectedSplit.winner.toUpperCase()}`"
+                        />
+                        <Badge v-else pill color="amber" :text="t('split', 'open', 'Still open')" />
+                    </div>
+                    <p class="mb-3 text-xs text-gray-600 dark:text-gray-400">
+                        {{ t('split', 'goal', 'Goal') }}: {{ selectedSplit.goal_label }}
                     </p>
                     <div class="grid grid-cols-2 gap-3">
-                        <div v-for="(row, key) in selectedSplit" :key="key">
-                            <p class="text-xs font-medium text-gray-500">{{ key.toUpperCase() }}</p>
-                            <p class="text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                                {{ row.rate === null ? '–' : `${row.rate}%` }}
+                        <div v-for="(row, key) in selectedSplit.variants" :key="key">
+                            <p class="text-xs font-medium text-gray-500">
+                                {{ key.toUpperCase() }}
+                                <span v-if="!selectedSplit.winner && selectedSplit.leader === key" class="ms-1 text-2xs text-gray-400">· {{ t('split', 'leading', 'Leading') }}</span>
                             </p>
-                            <p class="text-2xs text-gray-500">
-                                {{ row.continued }} / {{ row.visits }}
+                            <p class="text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                                {{ splitFigure(row, selectedSplit.goal) }}
+                                <span v-if="selectedSplit.goal === 'revenue'" class="text-2xs font-normal text-gray-500">{{ t('split', 'per_visit', 'per visit') }}</span>
+                            </p>
+                            <p class="text-2xs tabular-nums text-gray-500">
+                                <template v-if="selectedSplit.goal === 'revenue'">{{ row.visits }} {{ t('split', 'visits', 'Visits') }}</template>
+                                <template v-else>{{ row.conversions }} / {{ row.visits }}</template>
                             </p>
                         </div>
                     </div>
+                    <p class="mt-3 text-2xs text-gray-500">
+                        {{ t('split', 'confidence', 'Confidence') }}: <span class="tabular-nums">{{ splitConfidence }}</span>
+                    </p>
+                    <p v-if="selectedSplit.auto && !selectedSplit.winner" class="mt-1 text-2xs text-gray-500">
+                        {{ t('split', 'waiting', '').replace(':min', selectedSplit.min_visits) }}
+                    </p>
                 </div>
 
                 <!-- A mail says where it hangs and what it has done. The trigger is
@@ -661,6 +755,23 @@ function entryFieldsFor(handle) {
                                 v-if="field.type === 'form' || field.type === 'offer' || field.type === 'select'"
                                 v-model="selected.config[field.handle]"
                                 :options="optionsFor(field)"
+                            />
+                            <Switch
+                                v-else-if="field.type === 'toggle'"
+                                :model-value="!!selected.config[field.handle]"
+                                @update:model-value="selected.config[field.handle] = $event"
+                            />
+                            <BumpRulesField
+                                v-else-if="field.type === 'bump_rules'"
+                                v-model="selected.config[field.handle]"
+                                :offer="selectedOffer"
+                                :labels="labels.bumps ?? {}"
+                            />
+                            <Textarea
+                                v-else-if="field.type === 'code'"
+                                v-model="selected.config[field.handle]"
+                                :rows="4"
+                                class="font-mono"
                             />
                             <Textarea
                                 v-else-if="field.type === 'textarea'"

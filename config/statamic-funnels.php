@@ -114,6 +114,72 @@ return [
         'hide_selectors' => [],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | The in-app browser notice
+    |--------------------------------------------------------------------------
+    |
+    | Instagram, Facebook, TikTok and LinkedIn open links in their own browser,
+    | where saved cards, Apple Pay and the bank's app are missing. A funnel
+    | page opened there says so and offers the way out. Each funnel can switch
+    | it off and word it differently; this switch turns it off everywhere.
+    |
+    */
+
+    'in_app_browser' => [
+        'enabled' => true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Embedding on other sites
+    |--------------------------------------------------------------------------
+    |
+    | A funnel can open as a popup or sit inline on another site, through the
+    | shipped `embed.js`. Which sites may frame it is set per funnel; every
+    | funnel page sends `frame-ancestors` with that list and nothing else.
+    |
+    | Inside a frame on another site the browser holds back this site's
+    | cookies, so the walk travels in the page's links and forms instead,
+    | signed. `link_minutes` is how long such a link stays good.
+    |
+    */
+
+    'embed' => [
+        'link_minutes' => 180,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Tracking
+    |--------------------------------------------------------------------------
+    |
+    | Tracking code and the Meta pixel go out only with consent. With
+    | goldnead/statamic-consent installed, every script is parked as
+    | `type="text/plain"` under `consent_service` and the consent script starts
+    | it once that service is allowed; the server-side events read the same
+    | decision. Name a service the consent config actually has.
+    |
+    | Without the consent addon, `without_consent_addon` decides: `block`
+    | prints nothing, `render` prints the code as it is, for a site whose own
+    | banner handles it.
+    |
+    | `meta.access_token` switches on the Conversions API: PageView,
+    | InitiateCheckout and Purchase are sent from the server as well, with the
+    | same event id as the pixel so Meta counts each once.
+    |
+    */
+
+    'tracking' => [
+        'consent_service' => 'meta_pixel',
+        'without_consent_addon' => 'block',
+        'meta' => [
+            'access_token' => env('FUNNELS_META_CAPI_TOKEN'),
+            'test_event_code' => env('FUNNELS_META_TEST_EVENT_CODE'),
+            'api_version' => 'v21.0',
+        ],
+    ],
+
     'integrations' => [
         // Hand a captured address to goldnead/statamic-leadhub as a contact.
         'leadhub' => false,

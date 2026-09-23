@@ -24,6 +24,11 @@ return [
             'description' => 'Die Bilder auf den Karten im Funnel-Editor. Dateisystem und Chromium-Pfad stehen weiterhin in config/statamic-funnels.php, weil sie die Maschine beschreiben und nicht die Seite; ebenso die Cookies und die auszublendenden Selektoren, die eine Abbildung beziehungsweise eine Selektorenliste sind.',
         ],
 
+        'reach' => [
+            'title' => 'In-App-Browser, Einbetten, Tracking',
+            'description' => 'Für alle Funnels. Was ein einzelner Funnel davon nutzt (Hinweistext, erlaubte Domains, Tracking-Code, Pixel-ID), steht in seinen Einstellungen im Editor. Der Zugangsschlüssel der Meta Conversions API gehört in die .env (FUNNELS_META_CAPI_TOKEN).',
+        ],
+
         'integrations' => [
             'title' => 'Nachbar-Addons',
             'description' => 'Was ein abgeschlossener Funnel an andere Addons weitergibt. Der Schalter für Entitlements steht weiterhin nur in der Config: er wird an keiner Stelle dieses Addons gelesen und schaltet deshalb nichts.',
@@ -73,6 +78,31 @@ return [
             'description' => 'An heißt: eine im Funnel erfasste Adresse wird als Kontakt an goldnead/statamic-leadhub übergeben. Ohne installiertes LeadHub passiert nichts.',
         ],
 
+        'in_app_browser_enabled' => [
+            'label' => 'Hinweis im In-App-Browser',
+            'description' => 'Wer aus Instagram, Facebook, TikTok oder LinkedIn kommt, sieht den Hinweis, die Seite im normalen Browser zu öffnen. Aus heißt: in keinem Funnel, egal was dort eingestellt ist.',
+        ],
+
+        'embed_link_minutes' => [
+            'label' => 'Gültigkeit eingebetteter Links in Minuten',
+            'description' => 'Im Rahmen einer fremden Seite reist der Besuch signiert in den Links. So lange bleibt ein solcher Link gültig, auch der Rückweg von der Zahlung.',
+        ],
+
+        'tracking_consent_service' => [
+            'label' => 'Dienst in statamic-consent',
+            'description' => 'Der Handle des Dienstes, dessen Einwilligung Tracking-Code und Meta-Pixel freigibt. Er muss in der Consent-Konfiguration stehen, sonst bleibt alles gesperrt.',
+        ],
+
+        'tracking_without_consent_addon' => [
+            'label' => 'Ohne statamic-consent',
+            'description' => 'Was mit Tracking-Code passiert, wenn statamic-consent nicht installiert ist.',
+        ],
+
+    ],
+
+    'options' => [
+        'without_consent_addon_block' => 'Nichts ausgeben',
+        'without_consent_addon_render' => 'Ausgeben, das Banner der Site steuert es',
     ],
 
 ];

@@ -13,12 +13,16 @@ use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Nodes\AccountStep;
 use Goldnead\StatamicFunnels\Nodes\CaptureStep;
 use Goldnead\StatamicFunnels\Support\BillingFields;
+use Goldnead\StatamicFunnels\Support\BumpRules;
+use Goldnead\StatamicFunnels\Support\CheckoutInputs;
 use Goldnead\StatamicFunnels\Support\Consent;
 use Goldnead\StatamicFunnels\Support\Countdown;
+use Goldnead\StatamicFunnels\Support\Embed;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\SavedCard;
+use Goldnead\StatamicFunnels\Support\Sibling;
+use Goldnead\StatamicFunnels\Support\Tracking;
 use Goldnead\StatamicOffers\Models\Offer;
-use Goldnead\StatamicOffers\Support\Basket;
 use Goldnead\StatamicPayments\Models\Payment;
 use Goldnead\StatamicPayments\Support\Checkout;
 use Goldnead\StatamicPayments\Support\FollowUp;
@@ -28,6 +32,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use Statamic\Facades\User;
 use Throwable;
 
@@ -60,6 +65,17 @@ class AdvanceController
         // weitergehen koennte.
         abort_unless($step && ! $step->disabled && $step->type !== 'mail', 404);
 
+        // **Aus dem Rahmen einer fremden Seite (F4).** Diese Route hat kein
+        // CSRF-Token, weil im Rahmen keine Sitzung ankommt. An seiner Stelle
+        // zwei Pruefungen: das Formular stammt von dieser Site, und es traegt
+        // einen Weg, den diese Site signiert hat.
+        $embedded = $request->route()?->getName() === 'statamic-funnels.advance-embed';
+
+        if ($embedded) {
+            abort_unless(Embed::sameOrigin($request), 403);
+            abort_unless(Embed::tokenFromRequest($request) !== null, 403);
+        }
+
         $visit = $this->walk->visit($model);
 
         // You can only leave a step you are standing on. Every page is directly
@@ -69,11 +85,28 @@ class AdvanceController
         // accepted branch of an offer they never saw.
         abort_unless($visit->hasReached($step->node_key), 403);
 
+        if (! $embedded) {
+            return $this->dispatchStep($request, $model, $step, $visit);
+        }
+
+        // Im Rahmen landet eine Ablehnung nicht in der Sitzung; sie wird hier
+        // zur Weiterleitung, und {@see Embed::adapt()} traegt sie signiert mit.
+        try {
+            $response = $this->dispatchStep($request, $model, $step, $visit);
+        } catch (ValidationException $e) {
+            $response = back()->withInput()->withErrors($e->errors());
+        }
+
+        return Embed::adapt($response, $request, (string) $visit->token, true);
+    }
+
+    protected function dispatchStep(Request $request, Funnel $funnel, FunnelStep $step, FunnelVisit $visit)
+    {
         return match ($step->type) {
-            'offer' => $this->offer($request, $model, $step, $visit),
-            'capture' => $this->capture($request, $model, $step, $visit),
-            'account' => $this->account($request, $model, $step, $visit),
-            default => $this->plain($model, $step, $visit),
+            'offer' => $this->offer($request, $funnel, $step, $visit),
+            'capture' => $this->capture($request, $funnel, $step, $visit),
+            'account' => $this->account($request, $funnel, $step, $visit),
+            default => $this->plain($funnel, $step, $visit),
         };
     }
 
@@ -462,12 +495,103 @@ class AdvanceController
             return back()->withErrors(['offer' => __('statamic-funnels::messages.pricing_option_missing')]);
         }
 
-        $basket = Basket::make(
-            $offer,
+        // Die Haekchen, nach den Regeln dieses Kassenschritts (F1): eine
+        // Zahlweise, zu der der Bump nicht gehoert, ein fehlender anderer Bump,
+        // eine wiederkehrende Kaeuferin, die ihn nicht sehen sollte. Was die
+        // Regel verbietet, kauft nichts, egal was das Formular sagt.
+        $bumps = BumpRules::filter(
+            $step,
             array_values(array_filter((array) $request->input('bumps', []), 'is_string')),
-            config('statamic-funnels.coupons', true) ? (string) $request->input('coupon', '') : null,
             $optionen === [] ? null : $gewaehlt,
+            BumpRules::isReturning($visit),
         );
+
+        // **Das Land, wenn das Angebot eine Laenderregel hat.** Aus der
+        // Anmeldung, sonst aus der Frage der Kasse. Was die Kasse erfragt,
+        // bleibt am Besuch: es ist dasselbe Land, das auf die Rechnung und in
+        // `payments.country` gehoert.
+        $land = (($visit->meta ?? [])['billing'] ?? [])['country'] ?? null;
+
+        if ((! is_string($land) || $land === '') && $request->filled('country')) {
+            $land = strtoupper(trim((string) $request->input('country')));
+
+            if (preg_match('/^[A-Z]{2}$/', $land) !== 1) {
+                return back()->withErrors(['country' => __('statamic-funnels::messages.country_invalid')]);
+            }
+
+            $meta = $visit->meta ?? [];
+            $meta['billing'] = array_merge((array) ($meta['billing'] ?? []), ['country' => $land]);
+            $visit->forceFill(['meta' => $meta])->save();
+        }
+
+        $land = is_string($land) && $land !== '' ? $land : null;
+
+        // **Zahl, was du willst.** Der Betrag ist die eine Angabe aus dem
+        // Browser, die geglaubt wird — innerhalb der Grenzen des Angebots.
+        // Geprueft wird hier, damit die Kaeuferin einen Satz liest und nicht
+        // ein „nicht verfuegbar"; der Korb prueft es danach noch einmal.
+        $betrag = null;
+
+        if (CheckoutInputs::isPayWhatYouWant($offer)) {
+            $betrag = CheckoutInputs::amountFrom($request);
+
+            if ($betrag !== null && ! CheckoutInputs::acceptsAmount($offer, $betrag)) {
+                return back()->withInput()->withErrors(['amount' => CheckoutInputs::amountRangeMessage($offer)]);
+            }
+        }
+
+        // Der Code: was im Feld steht. Kommt das Feld gar nicht mit (eine
+        // eigene Vorlage ohne Code-Feld), gilt ein funnelweiter Code aus einem
+        // frueheren Kauf dieses Laufs. Ein Feld, das die Kaeuferin geleert
+        // hat, bleibt leer.
+        $code = null;
+
+        if (config('statamic-funnels.coupons', true)) {
+            $code = $request->has('coupon')
+                ? (string) $request->input('coupon', '')
+                : CheckoutInputs::carriedCoupon($visit);
+        }
+
+        try {
+            $basket = CheckoutInputs::basket($offer, $bumps, $code, $optionen === [] ? null : $gewaehlt, $betrag, $land);
+        } catch (Throwable $e) {
+            // Eine Ablehnung mit einem Satz fuer die Kaeuferin, vor dem
+            // allgemeinen `InvalidArgumentException` darunter:
+            // `AmountNotAccepted` am Betragsfeld, `OfferNotAvailable` oben an
+            // der Kasse, jede andere mit `buyerMessage()` je nach Angebot.
+            if (($ablehnung = CheckoutInputs::refusal($e, $offer)) !== null) {
+                return back()->withInput()->withErrors([$ablehnung[0] => $ablehnung[1]]);
+            }
+
+            if (! $e instanceof InvalidArgumentException) {
+                throw $e;
+            }
+
+            // Ein Formular, das nicht zu dieser Seite gehoert: eine Zahlweise
+            // oder ein Betrag, den das Angebot nicht kennt.
+            Log::info('statamic-funnels: der Korb hat die Angaben der Kasse abgelehnt.', [
+                'funnel' => $funnel->handle,
+                'step' => $step->node_key,
+                'offer' => $offer->handle,
+                'error' => $e->getMessage(),
+            ]);
+
+            // Bei einem frei gewaehlten Betrag ist es fast immer der Betrag.
+            return CheckoutInputs::isPayWhatYouWant($offer)
+                ? back()->withInput()->withErrors(['amount' => CheckoutInputs::amountRangeMessage($offer)])
+                : back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
+        }
+
+        // Ein funnelweiter Code gilt fuer die weiteren Angebote dieses Laufs.
+        CheckoutInputs::carry($visit, $basket->coupon());
+
+        // InitiateCheckout an die Conversions API (F7), mit derselben ID wie
+        // der Pixel auf der Seite. Nie auf Kosten der Bestellung.
+        try {
+            Tracking::initiateCheckout($funnel, $step, $visit, $request, $basket->netCent(), $offer->currency());
+        } catch (Throwable) {
+            // Gemeldet wird im Sender; hier geht es weiter zur Kasse.
+        }
 
         // Der Handle, der die Zahlung traegt — mit der gewaehlten Zahlweise
         // daran, sonst waere der Plan darunter der des Angebots und nicht der
@@ -529,6 +653,15 @@ class AdvanceController
         // eine Zahlung anlegen — ein Upsell ohne Beleg waere derselbe Fehler
         // wie ein Upsell ohne Anschrift.
         $angaben = self::mitEinwilligung($angaben, Consent::details($offer, $visit, $consentText));
+
+        // Die Gutschein-Bedingungen fuer die Folgezahlungen eines Abos
+        // (statamic-offers 1.12, `Basket::paymentMeta()`). An die **erste**
+        // Zahlung, eingefroren; payments liest sie beim Anlegen des Abos.
+        $korbMeta = Sibling::call($basket, 'paymentMeta');
+
+        if (is_array($korbMeta) && $korbMeta !== []) {
+            $angaben = self::mitEinwilligung($angaben, ['meta' => $korbMeta]);
+        }
 
         // Ob der Ein-Klick-Weg genommen wird, entscheidet sich hier — und er
         // ist eine Abkuerzung, kein Ausgang. Scheitert er, geht es unten ueber
@@ -644,6 +777,13 @@ class AdvanceController
             ? route('statamic-funnels.step', [$funnel->handle, $accepted->slug])
             : route('statamic-funnels.entry', $funnel->handle);
 
+        // Kam der Kauf aus dem Rahmen einer fremden Seite, kommt die Kaeuferin
+        // oben zurueck, ohne Cookie dieser Site. Der signierte Weg in der
+        // Adresse fuehrt sie zu ihrem Besuch und damit zu ihrer Bestellung.
+        if (Embed::tokenFromRequest($request) !== null) {
+            $zurueck = Embed::carry($zurueck, (string) $visit->token, false);
+        }
+
         // Zwei Wege, ein Ziel: beide legen dieselbe Zahlung an und schicken zum
         // Anbieter. Der Unterschied ist die Absicht, die an der Zahlung haengt
         // — `subscription_intent`, aus dem der Webhook spaeter die Vereinbarung
@@ -654,11 +794,33 @@ class AdvanceController
         // Der Korb faehrt mit. Die Folgeeinzuege belasten nur den Betrag des
         // ersten Handles; ein Bump neben einer Ratenoption ist damit einmal
         // gekauft und nicht jede Rate wieder.
-        $result = $plan
-            ? $this->subscriptions->start($basket->handles(), $kaeufer, $zurueck, $angaben, $basket->discount())
-            : $this->checkout->start($basket->handles(), $kaeufer, $zurueck, $basket->discount(), $angaben);
+        // `discount()` loest den Gutschein ein. Kommt keine Zahlung zustande,
+        // gibt der Korb die Einloesung zurueck (offers 1.12,
+        // `releaseCoupon()`): ein Code mit einem einzigen Einsatz waere sonst
+        // verbraucht, ohne dass jemand etwas gekauft hat.
+        try {
+            $result = $plan
+                ? $this->subscriptions->start($basket->handles(), $kaeufer, $zurueck, $angaben, $basket->discount())
+                : $this->checkout->start($basket->handles(), $kaeufer, $zurueck, $basket->discount(), $angaben);
+        } catch (Throwable $e) {
+            Sibling::call($basket, 'releaseCoupon');
+
+            // Der Anbieter ist nicht erreichbar oder lehnt ab. Die Kaeuferin
+            // bekommt die Kasse mit einem Satz zurueck statt einer Fehlerseite;
+            // der Grund steht im Log.
+            Log::error('statamic-funnels: die Zahlung konnte beim Anbieter nicht angelegt werden.', [
+                'funnel' => $funnel->handle,
+                'step' => $step->node_key,
+                'offer' => $offer->handle,
+                'error' => $e->getMessage(),
+            ]);
+
+            return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
+        }
 
         if (! $result) {
+            Sibling::call($basket, 'releaseCoupon');
+
             return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
         }
 

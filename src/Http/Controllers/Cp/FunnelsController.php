@@ -2,14 +2,18 @@
 
 namespace Goldnead\StatamicFunnels\Http\Controllers\Cp;
 
+use Goldnead\StatamicFunnels\Contracts\ConversionSender;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
+use Goldnead\StatamicFunnels\Support\FunnelSettings;
 use Goldnead\StatamicFunnels\Support\GraphWriter;
 use Goldnead\StatamicFunnels\Support\MailStats;
 use Goldnead\StatamicFunnels\Support\PreviewToken;
 use Goldnead\StatamicFunnels\Support\Setup;
+use Goldnead\StatamicFunnels\Support\SplitResults;
 use Goldnead\StatamicFunnels\Support\StepOrder;
 use Goldnead\StatamicFunnels\Support\StepStats;
+use Goldnead\StatamicFunnels\Support\TrackingConsent;
 use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
 use Goldnead\StatamicOffers\Models\Offer;
 use Illuminate\Http\Request;
@@ -123,7 +127,9 @@ class FunnelsController extends CpController
             // Only for steps actually running a test. A funnel where every card
             // sprouted an A and a B would bury the one number that matters
             // under two that say the same thing.
-            'splits' => StepStats::byVariant($funnel),
+            // Mit Ziel, Sicherheit und Gewinner (F2). Legt dabei fest, was
+            // feststeht, damit der Editor den Gewinner zeigt, sobald es einen gibt.
+            'splits' => SplitResults::forFunnel($funnel),
             // Was die Mail-Knoten getan haben: ausgeloest, zugestellt,
             // fehlgeschlagen. Aus der Auslieferungstabelle, nicht aus
             // Wegmarken — eine Mail ist keine Station.
@@ -144,6 +150,18 @@ class FunnelsController extends CpController
             'saveUrl' => cp_route('utilities.funnels.update', $funnel->id),
             'indexUrl' => cp_route('utilities.funnels'),
             'publicUrl' => route('statamic-funnels.entry', $funnel->handle),
+            // Was ausser dem Graphen am Funnel haengt (F3, F4, F6, F7).
+            'settings' => FunnelSettings::of($funnel),
+            // Die Schnipsel zum Einbetten auf fremden Seiten (F4).
+            'embed' => [
+                'script' => asset('vendor/statamic-funnels/embed.js'),
+                'url' => route('statamic-funnels.entry', $funnel->handle),
+            ],
+            // Ob die Tracking-Codes ueberhaupt ausgegeben werden, und warum
+            // nicht (F6, F7). Der Editor sagt es, statt still nichts zu tun.
+            'tracking' => TrackingConsent::describe() + [
+                'capi' => app(ConversionSender::class)->enabled(),
+            ],
             // What the config panel offers where a step asks for a form or an
             // offer. Sent with the page so the panel never has to fetch.
             'forms' => Form::all()->map(fn ($form) => [
@@ -153,6 +171,16 @@ class FunnelsController extends CpController
             'offers' => Offer::query()->orderBy('name')->get()->map(fn (Offer $offer) => [
                 'value' => $offer->handle,
                 'label' => $offer->name.($offer->amount() ? ' · '.$offer->amount().' '.$offer->currency() : ''),
+                // Fuer die Bump-Regeln (F1): welche Bumps das Angebot fuehrt
+                // und welche Zahlweisen es zur Wahl stellt.
+                'bumps' => array_map(fn (Offer $bump) => [
+                    'value' => $bump->handle,
+                    'label' => $bump->name,
+                ], $offer->bumpOffers()),
+                'options' => array_map(fn (array $option) => [
+                    'value' => $option['key'],
+                    'label' => $option['label'] !== '' ? $option['label'] : $option['key'],
+                ], $offer->pricingOptions()),
             ])->all(),
             // Die Seitenauswahl: Statamics `entries`-Feldtyp, nicht eine
             // Combobox mit eigener Suchroute. Eintraege reisen nicht mit —
@@ -360,11 +388,75 @@ class FunnelsController extends CpController
             'edges.*.from_node_key' => ['required', 'string', 'max:64'],
             'edges.*.to_node_key' => ['required', 'string', 'max:64'],
             'edges.*.from_output' => ['nullable', 'string', 'max:64'],
+
+            // Was ausser dem Graphen am Funnel haengt (F3, F4, F6, F7). Fehlt
+            // der Schluessel, bleibt stehen, was gespeichert ist.
+            'settings' => ['sometimes', 'array'],
+            'settings.in_app_enabled' => ['sometimes', 'boolean'],
+            'settings.in_app_text' => ['nullable', 'string', 'max:1000'],
+            'settings.embed_domains' => ['nullable', function ($attribute, $value, $fail) {
+                if (! is_string($value) && ! is_array($value)) {
+                    $fail(__('statamic-funnels::messages.embed_domains_invalid', ['domains' => '']));
+
+                    return;
+                }
+
+                $falsch = FunnelSettings::invalidOrigins($value);
+
+                if ($falsch !== []) {
+                    $fail(__('statamic-funnels::messages.embed_domains_invalid', ['domains' => implode(', ', $falsch)]));
+                }
+            }],
+            'settings.tracking_head' => ['nullable', 'string', 'max:20000'],
+            'settings.tracking_thanks' => ['nullable', 'string', 'max:20000'],
+            'settings.meta_pixel_id' => ['nullable', 'string', 'regex:/^\s*\d{5,32}\s*$/'],
+        ], [
+            'settings.meta_pixel_id.regex' => __('statamic-funnels::messages.meta_pixel_id_invalid'),
         ]);
+
+        if (array_key_exists('settings', $data)) {
+            $this->saveSettings($funnel, (array) $data['settings']);
+        }
+
+        unset($data['settings']);
 
         $this->writer->write($funnel, $data);
 
         return back()->with('message', __('statamic-funnels::messages.saved'));
+    }
+
+    /**
+     * Die Einstellungen in `funnels.meta.settings`, gesaeubert.
+     *
+     * Nur dieser Schluessel wird geschrieben: `meta` traegt daneben die
+     * Gewinner der A/B-Tests, und die gehoeren nicht dem Formular.
+     *
+     * @param  array<string, mixed>  $settings
+     */
+    protected function saveSettings(Funnel $funnel, array $settings): void
+    {
+        $meta = $funnel->meta ?? [];
+        $bisher = (array) ($meta['settings'] ?? []);
+
+        $text = fn ($v) => is_string($v) && trim($v) !== '' ? $v : null;
+
+        $meta['settings'] = array_merge($bisher, array_filter([
+            'in_app_enabled' => array_key_exists('in_app_enabled', $settings) ? (bool) $settings['in_app_enabled'] : ($bisher['in_app_enabled'] ?? true),
+            'in_app_text' => array_key_exists('in_app_text', $settings) ? $text($settings['in_app_text']) : ($bisher['in_app_text'] ?? null),
+            'embed_domains' => array_key_exists('embed_domains', $settings) ? FunnelSettings::origins($settings['embed_domains'] ?? []) : ($bisher['embed_domains'] ?? []),
+            'tracking_head' => array_key_exists('tracking_head', $settings) ? $text($settings['tracking_head']) : ($bisher['tracking_head'] ?? null),
+            'tracking_thanks' => array_key_exists('tracking_thanks', $settings) ? $text($settings['tracking_thanks']) : ($bisher['tracking_thanks'] ?? null),
+            'meta_pixel_id' => array_key_exists('meta_pixel_id', $settings) ? ($text(trim((string) $settings['meta_pixel_id'])) ?? null) : ($bisher['meta_pixel_id'] ?? null),
+        ], fn ($v) => $v !== null));
+
+        // Geleerte Felder sind geleert, nicht „wie vorher".
+        foreach (['in_app_text', 'tracking_head', 'tracking_thanks', 'meta_pixel_id'] as $key) {
+            if (array_key_exists($key, $settings) && $text($settings[$key]) === null) {
+                unset($meta['settings'][$key]);
+            }
+        }
+
+        $funnel->forceFill(['meta' => $meta])->save();
     }
 
     /**
@@ -458,6 +550,60 @@ class FunnelsController extends CpController
             ],
             'thumbnails' => [
                 'hint' => __('statamic-funnels::messages.thumbnails_need_chromium'),
+            ],
+            // Die Ergebnisse eines A/B-Tests (F2).
+            'split' => [
+                'goal' => __('statamic-funnels::messages.split_goal'),
+                'visits' => __('statamic-funnels::messages.split_visits'),
+                'conversions' => __('statamic-funnels::messages.split_conversions'),
+                'per_visit' => __('statamic-funnels::messages.split_per_visit'),
+                'confidence' => __('statamic-funnels::messages.split_confidence'),
+                'winner' => __('statamic-funnels::messages.split_winner'),
+                'leading' => __('statamic-funnels::messages.split_leading'),
+                'open' => __('statamic-funnels::messages.split_open'),
+                'waiting' => __('statamic-funnels::messages.split_waiting'),
+            ],
+            // Die Bump-Regeln (F1).
+            'bumps' => [
+                'options' => __('statamic-funnels::nodes.bump_options'),
+                'options_all' => __('statamic-funnels::nodes.bump_options_all'),
+                'requires' => __('statamic-funnels::nodes.bump_requires'),
+                'requires_none' => __('statamic-funnels::nodes.bump_requires_none'),
+                'returning' => __('statamic-funnels::nodes.bump_returning'),
+                'returning_show' => __('statamic-funnels::nodes.bump_returning_show'),
+                'returning_hide' => __('statamic-funnels::nodes.bump_returning_hide'),
+                'returning_only' => __('statamic-funnels::nodes.bump_returning_only'),
+                'preselected' => __('statamic-funnels::nodes.bump_preselected'),
+                'no_offer' => __('statamic-funnels::nodes.bump_no_offer'),
+                'no_bumps' => __('statamic-funnels::nodes.bump_no_bumps'),
+            ],
+            // Die Einstellungen des Funnels (F3, F4, F6, F7).
+            'settings' => [
+                'open' => __('statamic-funnels::messages.settings_open'),
+                'title' => __('statamic-funnels::messages.settings_title'),
+                'in_app' => __('statamic-funnels::messages.settings_in_app'),
+                'in_app_help' => __('statamic-funnels::messages.settings_in_app_help'),
+                'in_app_enabled' => __('statamic-funnels::messages.settings_in_app_enabled'),
+                'in_app_text' => __('statamic-funnels::messages.settings_in_app_text'),
+                'in_app_text_help' => __('statamic-funnels::messages.settings_in_app_text_help'),
+                'embed' => __('statamic-funnels::messages.settings_embed'),
+                'embed_help' => __('statamic-funnels::messages.settings_embed_help'),
+                'embed_domains' => __('statamic-funnels::messages.settings_embed_domains'),
+                'embed_domains_help' => __('statamic-funnels::messages.settings_embed_domains_help'),
+                'embed_script' => __('statamic-funnels::messages.settings_embed_script'),
+                'embed_popup' => __('statamic-funnels::messages.settings_embed_popup'),
+                'embed_inline' => __('statamic-funnels::messages.settings_embed_inline'),
+                'embed_button' => __('statamic-funnels::messages.settings_embed_button'),
+                'tracking' => __('statamic-funnels::messages.settings_tracking'),
+                'tracking_head' => __('statamic-funnels::messages.settings_tracking_head'),
+                'tracking_head_help' => __('statamic-funnels::messages.settings_tracking_head_help'),
+                'tracking_thanks' => __('statamic-funnels::messages.settings_tracking_thanks'),
+                'tracking_thanks_help' => __('statamic-funnels::messages.settings_tracking_thanks_help'),
+                'meta_pixel_id' => __('statamic-funnels::messages.settings_meta_pixel_id'),
+                'meta_pixel_id_help' => __('statamic-funnels::messages.settings_meta_pixel_id_help'),
+                'capi_on' => __('statamic-funnels::messages.settings_capi_on'),
+                'capi_off' => __('statamic-funnels::messages.settings_capi_off'),
+                'save' => __('Save'),
             ],
         ];
     }

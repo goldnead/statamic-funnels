@@ -2,6 +2,7 @@
 
 namespace Goldnead\StatamicFunnels\Http\Controllers\Web;
 
+use Goldnead\BrandContext\Facades\BrandContext;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
@@ -9,23 +10,32 @@ use Goldnead\StatamicFunnels\Nodes\AccountStep;
 use Goldnead\StatamicFunnels\Nodes\CaptureStep;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
 use Goldnead\StatamicFunnels\Support\BillingFields;
+use Goldnead\StatamicFunnels\Support\BumpRules;
+use Goldnead\StatamicFunnels\Support\CheckoutInputs;
 use Goldnead\StatamicFunnels\Support\Consent;
 use Goldnead\StatamicFunnels\Support\Countdown;
+use Goldnead\StatamicFunnels\Support\Embed;
 use Goldnead\StatamicFunnels\Support\FunnelMailRenderer;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
+use Goldnead\StatamicFunnels\Support\InAppBrowser;
 use Goldnead\StatamicFunnels\Support\OrderSummary;
 use Goldnead\StatamicFunnels\Support\PreviewToken;
 use Goldnead\StatamicFunnels\Support\SavedCard;
 use Goldnead\StatamicFunnels\Support\Split;
+use Goldnead\StatamicFunnels\Support\SplitResults;
+use Goldnead\StatamicFunnels\Support\Tracking;
 use Goldnead\StatamicOffers\Models\Offer;
 use Goldnead\StatamicPayments\Support\Catalogue;
 use Goldnead\StatamicPayments\Support\Subscriptions;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Statamic\Contracts\Entries\Entry;
 use Statamic\Facades\Entry as EntryFacade;
 use Statamic\Facades\Site;
 use Statamic\Http\Responses\DataResponse;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Throwable;
 
 /**
@@ -37,6 +47,13 @@ use Throwable;
  */
 class FunnelController
 {
+    /**
+     * Was {@see Tracking} fuer die Antwort dieser Anfrage gebaut hat.
+     *
+     * @var array{head: string, body: string}
+     */
+    protected array $tracking = ['head' => '', 'body' => ''];
+
     public function __construct(
         protected FunnelWalk $walk,
         protected StepRegistry $registry,
@@ -54,7 +71,7 @@ class FunnelController
         // that takes money in the middle is worse than a missing page.
         abort_unless($step !== null, 404);
 
-        return $this->render($model, $step);
+        return $this->framed($request, $model, $this->render($model, $step));
     }
 
     public function step(Request $request, string $funnel, string $slug)
@@ -64,7 +81,49 @@ class FunnelController
 
         abort_unless($step !== null && ! $step->disabled, 404);
 
-        return $this->render($model, $step);
+        return $this->framed($request, $model, $this->render($model, $step));
+    }
+
+    /**
+     * Wer diese Seite rahmen darf (F4), an jeder Antwort.
+     *
+     * Auch ohne Einbettung: `frame-ancestors 'self'` ist dann die Aussage,
+     * dass niemand sonst eine Kasse dieser Site in einen Rahmen legen darf.
+     */
+    protected function framed(Request $request, Funnel $funnel, mixed $response): SymfonyResponse
+    {
+        $response = $response instanceof SymfonyResponse ? $response : response($response);
+
+        $tracking = $this->tracking;
+        $this->tracking = ['head' => '', 'body' => ''];
+
+        if (($tracking['head'] !== '' || $tracking['body'] !== '')
+            && ! $response->isRedirection()
+            && str_contains((string) $response->headers->get('Content-Type', 'text/html'), 'html')
+            && is_string($content = $response->getContent())) {
+            $response->setContent(Tracking::inject($content, $tracking['head'], $tracking['body']));
+        }
+
+        return Embed::protect($response, $funnel, Embed::requested($request));
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $offer
+     * @return array{head: string, body: string}
+     */
+    protected function trackingFor(Funnel $funnel, FunnelStep $step, FunnelVisit $visit, ?array $offer): array
+    {
+        try {
+            return Tracking::forPage($funnel, $step, $visit, request(), $offer);
+        } catch (Throwable $e) {
+            Log::warning('statamic-funnels: der Tracking-Code konnte nicht gebaut werden.', [
+                'funnel' => $funnel->handle,
+                'step' => $step->node_key,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ['head' => '', 'body' => ''];
+        }
     }
 
     /**
@@ -115,6 +174,10 @@ class FunnelController
 
         if (! $preview) {
             $this->walk->enter($visit, $step);
+
+            // Ein Gutschein-Link zeigt meist auf den Einstieg, nicht auf die
+            // Kasse. Gemerkt wird er deshalb auf jedem Schritt.
+            CheckoutInputs::rememberLinkCoupon(request(), $visit);
         }
 
         // Reaching the end *is* the end. Waiting for a form submit on a page
@@ -142,7 +205,36 @@ class FunnelController
         // preview there is no visitor, so it is always A and nothing is written:
         // an editor clicking through their own funnel must not be counted into
         // their own experiment.
+        // Steht bei einem Test mit Automatik ein Gewinner fest? Gefragt hoechstens
+        // alle zehn Minuten je Schritt: die Auswertung ist ein paar Abfragen,
+        // und die muss nicht jeder Besucher bezahlen. Nie auf Kosten der Seite.
+        if (! $preview && Split::running($step) && SplitResults::auto($step)) {
+            try {
+                if (Cache::add('statamic-funnels:split-decide:'.$funnel->id.':'.$step->node_key, true, 600)) {
+                    SplitResults::decide($funnel, $step);
+                }
+            } catch (Throwable $e) {
+                Log::warning('statamic-funnels: der A/B-Test konnte nicht ausgewertet werden.', [
+                    'funnel' => $funnel->handle,
+                    'step' => $step->node_key,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $step->setRelation('funnel', $funnel);
+
+        // **Die Kasse zeichnet unter der Marke des Angebots**, wie sie spaeter
+        // unter ihr bestellt ({@see AdvanceController::offer()}). Sonst steht
+        // auf der Seite der Einwilligungstext der Standardmarke, die Kasse
+        // vergleicht mit dem der verkaufenden, und jede Bestellung eines
+        // Angebots der zweiten Marke endet in „die Bedingungen haben sich
+        // geaendert" (gefunden am 23.09.2026 beim Einbetten).
+        $this->useOfferBrand($step);
+
         $variant = Split::variantFor($step, $preview ? null : $visit);
+
+        $embedded = ! $preview && Embed::requested(request());
 
         $context = [
             'handle' => $funnel->handle,
@@ -168,9 +260,17 @@ class FunnelController
             'body' => $step->config('body'),
             // What the template posts back to. Built here so no template has to
             // know how this addon routes.
-            'action' => route('statamic-funnels.advance', [$funnel->handle, $step->node_key]),
+            //
+            // Im Rahmen einer fremden Seite (F4) die eingebettete Route, mit
+            // dem signierten Weg in der Adresse: so funktioniert auch eine
+            // eigene Vorlage, die nur `funnel:action` kennt.
+            'action' => $embedded
+                ? route('statamic-funnels.advance-embed', [$funnel->handle, $step->node_key]).'?'.http_build_query([Embed::WALK_INPUT => Embed::walkLink((string) $visit->token)])
+                : route('statamic-funnels.advance', [$funnel->handle, $step->node_key]),
+            // Null ausserhalb eines Rahmens.
+            'embed' => $embedded ? ['walk' => Embed::walkLink((string) $visit->token)] : null,
             'form' => $step->config('form'),
-            'offer' => $this->offerFor($step, $preview),
+            'offer' => $this->offerFor($step, $preview, $preview ? null : $visit),
             // Ob dieser Schritt ohne erneute Karteneingabe abbuchen wuerde, und
             // womit. Null heisst: normale Kasse, der Kaeufer geht zum Anbieter.
             //
@@ -221,11 +321,24 @@ class FunnelController
             'preview' => $preview,
             // So a template can style or measure the two apart if it wants to.
             'variant' => $variant,
+            // Der Hinweis im Browser von Instagram, Facebook, TikTok und
+            // LinkedIn (F3). Null ueberall sonst.
+            'in_app_browser' => InAppBrowser::forTemplate($funnel, request(), $preview),
         ];
 
         // B's overrides, where B has any. Applied to the bag rather than to the
         // step, so nothing about the saved graph changes when somebody looks.
         $context = Split::apply($step, $variant, $context);
+
+        // Das Skript, nur wo es etwas zu zeichnen gibt.
+        $context['script'] = self::needsScript($context) ? $context['scripts'] : null;
+
+        // Tracking-Code und Meta-Pixel (F6, F7), fuer die fertige Antwort.
+        // Nie in der Vorschau: ein Redakteur, der seine Seite ansieht, ist
+        // kein Besucher, auch nicht fuer eine Werbeplattform.
+        $this->tracking = $preview
+            ? ['head' => '', 'body' => '']
+            : $this->trackingFor($funnel, $step, $visit, $context['offer'] ?? null);
 
         // A step can point at a Statamic entry, and then *that* is the page:
         // its own template, its own content, its own page builder. The funnel
@@ -285,8 +398,64 @@ class FunnelController
             //
             // Als flache Liste von Saetzen, weil eine Vorlage sie so ausgeben
             // kann, ohne die Feldnamen des Formulars zu kennen.
-            'errors' => array_values(session('errors')?->getBag('default')?->all() ?? []),
+            //
+            // Im Rahmen kommt die Sitzung nicht an; dort reisen die Fehler
+            // signiert in der Adresse ({@see Embed::errorsFrom()}).
+            'errors' => array_values(array_unique(array_merge(
+                session('errors')?->getBag('default')?->all() ?? [],
+                Embed::errorsFrom(request()),
+            ))),
         ] + $context);
+    }
+
+    /**
+     * Die Marke des Angebots dieses Schritts zur aktuellen machen, wenn es eine hat.
+     *
+     * Still, wenn es nicht geht: eine geloeschte Marke laesst die Kasse beim
+     * Bestellen ablehnen und ins Log schreiben; die Seite selbst soll trotzdem
+     * aufgehen.
+     */
+    protected function useOfferBrand(FunnelStep $step): void
+    {
+        if ($step->type !== 'offer' || ! BrandContext::multiBrandEnabled()) {
+            return;
+        }
+
+        $handle = $step->config('offer');
+        $offer = is_string($handle) && $handle !== '' ? Offer::query()->where('handle', $handle)->first() : null;
+
+        if (! $offer || (int) $offer->brand_id <= 0) {
+            return;
+        }
+
+        try {
+            BrandContext::setCurrent((int) $offer->brand_id);
+        } catch (Throwable) {
+            // Siehe oben.
+        }
+    }
+
+    /**
+     * Ob die Seite `funnels.js` braucht.
+     *
+     * Eine Uhr, die tickt, Bumps mit Regeln, der Hinweis im In-App-Browser,
+     * eine eingebettete Seite. Eine gewoehnliche Seite laedt kein Skript.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    protected static function needsScript(array $context): bool
+    {
+        if (! $context['scripts']) {
+            return false;
+        }
+
+        $bumpsMitRegeln = collect($context['offer']['bumps'] ?? [])
+            ->contains(fn (array $bump) => $bump['options'] !== '' || $bump['requires'] !== null);
+
+        return $context['countdown'] !== null
+            || $bumpsMitRegeln
+            || ! empty($context['in_app_browser'])
+            || ! empty($context['embed']);
     }
 
     /**
@@ -579,7 +748,7 @@ class FunnelController
     /**
      * @return array<string, mixed>|null
      */
-    protected function offerFor(FunnelStep $step, bool $preview = false): ?array
+    protected function offerFor(FunnelStep $step, bool $preview = false, ?FunnelVisit $visit = null): ?array
     {
         $handle = $step->config('offer');
 
@@ -621,19 +790,25 @@ class FunnelController
             // The tick-boxes beside the order button. Named by the offer, not
             // by the page, so a template cannot add one — and a bump that has
             // been switched off simply stops appearing.
-            'bumps' => array_map(fn (Offer $bump) => [
-                'handle' => $bump->handle,
-                'name' => $bump->name,
-                'headline' => $bump->headline ?: $bump->name,
-                'body' => $bump->body,
-                'amount' => $bump->amount(),
-                'amount_local' => $bump->amountLocal(),
-                'compare_at' => $bump->compareAt(),
-                'compare_at_local' => $bump->compareAtLocal(),
-                'currency' => $bump->currency(),
-            ], $offer->bumpOffers()),
+            //
+            // Mit den Regeln des Kassenschritts (F1): wer den Bump nicht sehen
+            // soll, bekommt ihn gar nicht erst; Zahlweise und Abhaengigkeit
+            // reisen als Angaben fuer das Skript mit, das ein- und ausblendet.
+            'bumps' => $this->bumpsFor($step, $offer, $visit),
             // Whether the page should show a field for a code at all.
             'coupons' => (bool) config('statamic-funnels.coupons', true),
+            // Was im Code-Feld steht: der Code aus dem Gutschein-Link, oder
+            // einer, der seit einem frueheren Kauf fuer den ganzen Lauf gilt.
+            // Vorbelegt, nicht eingeloest — das macht erst der Korb.
+            'coupon_code' => config('statamic-funnels.coupons', true)
+                ? CheckoutInputs::prefilledCoupon(request(), $visit, $offer)
+                : null,
+            // „Zahl, was du willst": Grenzen und Vorschlag fuer das Betragsfeld.
+            // Null bei einem festen Preis.
+            'pwyw' => CheckoutInputs::payWhatYouWant($offer),
+            // Die Laenderfrage, wenn das Angebot eine Regel hat und das Land
+            // noch nicht aus der Anmeldung bekannt ist.
+            'country' => CheckoutInputs::countryQuestion($offer, $visit),
             // **Der Zahlungsrhythmus, wenn das Angebot einen fuehrt.**
             //
             // Nicht Schmuck, sondern Pflichtangabe: § 312j Abs. 2 BGB will den
@@ -670,6 +845,65 @@ class FunnelController
                 'plan' => $this->planFor($prefix.$offer->handle.':'.$option['key'], $offer->currency()),
             ], $offer->pricingOptions()),
         ];
+    }
+
+    /**
+     * Die Bumps neben dem Bestellknopf, mit ihren Regeln.
+     *
+     * `hidden` ist der Zustand beim ersten Zeichnen: zur vorbelegten
+     * (ersten) Zahlweise und zu den vorausgewaehlten Bumps. Ohne Skript bleibt
+     * es dabei; mit Skript folgt es der Auswahl.
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function bumpsFor(FunnelStep $step, Offer $offer, ?FunnelVisit $visit): array
+    {
+        $returning = BumpRules::isReturning($visit);
+        $ersteOption = $offer->pricingOptions()[0]['key'] ?? null;
+
+        $bumps = array_values(array_filter(
+            $offer->bumpOffers(),
+            fn (Offer $bump) => BumpRules::shownTo($step, $bump->handle, $returning),
+        ));
+
+        $regeln = [];
+
+        foreach ($bumps as $bump) {
+            $regeln[$bump->handle] = BumpRules::for($step, $bump->handle);
+        }
+
+        $vorbelegt = array_keys(array_filter($regeln, fn (array $r) => $r['preselected']));
+
+        return array_map(function (Offer $bump) use ($regeln, $vorbelegt, $ersteOption, $step, $returning) {
+            $regel = $regeln[$bump->handle];
+
+            // Sichtbar, wenn die Zahlweise passt und der Bump, an dem er
+            // haengt, vorausgewaehlt ist — so, wie die Seite aufgeht. Dieselbe
+            // Pruefung wie beim Bestellen, nur mit der Auswahl beim Laden.
+            $zeigen = in_array(
+                $bump->handle,
+                BumpRules::filter($step, array_values(array_unique(array_merge($vorbelegt, [$bump->handle]))), $ersteOption, $returning),
+                true,
+            );
+
+            return [
+                'handle' => $bump->handle,
+                'name' => $bump->name,
+                'headline' => $bump->headline ?: $bump->name,
+                'body' => $bump->body,
+                'amount' => $bump->amount(),
+                'amount_local' => $bump->amountLocal(),
+                'compare_at' => $bump->compareAt(),
+                'compare_at_local' => $bump->compareAtLocal(),
+                'currency' => $bump->currency(),
+                'preselected' => $regel['preselected'] && $zeigen,
+                // Fuer das Skript: beim Einblenden wieder ankreuzen.
+                'preselected_rule' => $regel['preselected'],
+                'options' => implode(',', $regel['options']),
+                'requires' => $regel['requires'],
+                'hidden' => ! $zeigen,
+            ];
+        }, $bumps);
     }
 
     /**

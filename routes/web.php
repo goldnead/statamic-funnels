@@ -2,6 +2,8 @@
 
 use Goldnead\StatamicFunnels\Http\Controllers\Web\AdvanceController;
 use Goldnead\StatamicFunnels\Http\Controllers\Web\FunnelController;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -48,3 +50,17 @@ Route::get($prefix.'/{funnel}/{slug}', [FunnelController::class, 'step'])
 Route::post($prefix.'/{funnel}/{nodeKey}/advance', AdvanceController::class)
     ->middleware('throttle:30,1')
     ->name('statamic-funnels.advance');
+
+/*
+ * Dasselbe, aus dem Rahmen auf einer fremden Seite (F4).
+ *
+ * Dort kommt weder die Sitzung noch ihr CSRF-Token an: der Browser haelt die
+ * Cookies dieser Site im fremden Rahmen zurueck. Statt des Tokens prueft der
+ * Controller die Herkunft des Formulars (`Origin`, sonst `Referer`) und den
+ * signierten Weg (`_walk`). Eine fremde Seite kann den Rahmen zeigen, aber
+ * nicht in ihm absenden. Siehe `Support\Embed`.
+ */
+Route::post($prefix.'/{funnel}/{nodeKey}/advance-embed', AdvanceController::class)
+    ->withoutMiddleware([ValidateCsrfToken::class, VerifyCsrfToken::class])
+    ->middleware('throttle:30,1')
+    ->name('statamic-funnels.advance-embed');

@@ -290,6 +290,41 @@ the page can take a coupon code. Both are settled on the server:
 
 Set `coupons` to `false` to leave the field off the page entirely.
 
+#### Bump rules
+
+A checkout step decides, per bump of its offer, when that bump shows (inspector → *Bump rules*):
+
+| Rule | What it does |
+|---|---|
+| Only with these pricing options | The bump belongs to some pricing options only; with any other one it is hidden and unticked. |
+| Only together with | The bump shows once another bump is ticked. |
+| Preselected | The box starts ticked (and is ticked again when it reappears). |
+| Returning customers | *Show to everyone*, *hide from returning customers*, or *only returning customers*. Returning means a paid purchase under the same address outside this walk; the address comes from the capture step or the logged-in account. |
+
+The page draws the rules as `data-funnel-bump-*` attributes and `funnels.js` shows and hides.
+**The server applies the same rules to the order**: a box the rule forbids buys nothing, whatever
+the form says.
+
+#### A code from a link, a price the buyer picks, a country rule (statamic-offers 1.12)
+
+- **Coupon link.** `?coupon=CODE` (the name is `statamic-offers.coupon_link.parameter`) fills the
+  code field. The link usually points at the funnel's entry, so the code is remembered on the walk
+  until the checkout. Filled in is not redeemed; an unknown or expired code fills nothing and breaks
+  nothing. A code marked *funnel-wide* in offers is carried to the later checkouts of the walk.
+- **Pay what you want.** The checkout shows an amount field with the offer's floor, suggestion and
+  ceiling; the amount is checked on the server. Without the field (a template of your own) the
+  suggestion applies, never zero. The thank-you page shows the offer's thank-you line for the amount
+  paid (`funnel:order:thanks`).
+- **Country rule.** An offer sold only in some countries (or everywhere except some) makes the
+  checkout ask for the country, unless the capture step already did. A country outside the rule is
+  refused with the offer's own sentence.
+- **Coupon terms for follow-up payments.** A coupon that runs for more than the first payment of a
+  subscription travels as `meta.coupon` on the first payment, frozen; statamic-payments reads it
+  when it creates the subscription.
+- If the provider refuses the payment, the code's use is given back.
+
+Against an older statamic-offers the checkout stays what it was: no field, no rule, no terms.
+
 ### A deadline that holds
 
 An offer step can carry one, and it is **enforced on the server**: past it the step refuses to be
@@ -341,6 +376,77 @@ Three properties it has, and each is the reason such a thing is usually worthles
 The result shows in the editor, on the step where the test is set up — a split report on another
 screen is a report nobody opens. Only fields B actually sets are swapped: a test that changes one
 headline must not silently blank the body.
+
+**Goal and winner.** A test measures one of four goals (`split_goal`):
+
+| Goal | Counted |
+|---|---|
+| `continue` (default) | visitors who went on to a step this one leads to |
+| `purchase` | a paid purchase on this or a later step (written by the webhook, not the click) |
+| `upsell` | an offer accepted on a **later** step |
+| `revenue` | revenue per visit, from the paid payments of those purchases, minus refunds |
+
+With `split_auto` on, the winner is picked once each version has `split_min_visits` visits (default
+100) and one leads with 95 % confidence: a two-proportion z-test for the rates, a Welch test on the
+means for revenue. From then on new visitors only see the winner; a visitor who already had a
+version keeps it. The winner is stored per goal in `funnels.meta.split_winners`, so changing the goal
+starts over. The editor shows goal, both figures, the confidence and the winner.
+
+### The in-app browser notice
+
+Instagram, Facebook, TikTok and LinkedIn open links in their own browser, where saved cards, Apple
+Pay and the bank's app are missing. A funnel page opened there starts with a notice (recognised on
+the server from the user agent, no flicker), a *Copy link* button and, on Android, a link that opens
+Chrome. iOS offers no such link; the text points to the app's menu. On by default, off and worded
+per funnel (editor → *Settings*, `:app` stands for the app's name), off everywhere with
+`in_app_browser.enabled`.
+
+### Embedding on another site
+
+A funnel can open as a popup or sit inline on another website:
+
+```html
+<script src="https://your-site.com/vendor/statamic-funnels/embed.js" async></script>
+
+<a href="https://your-site.com/f/course" data-funnel-popup>Sign up</a>
+<div data-funnel-embed="https://your-site.com/f/course"></div>
+```
+
+Button, image or text link: any element with `data-funnel-popup` opens the popup (its value or its
+`href` is the address). The editor shows these snippets under *Settings → Embedding*.
+
+- **Who may frame it.** Every funnel page sends `Content-Security-Policy: frame-ancestors 'self'`
+  plus the domains listed on the funnel. A site not on the list shows an empty frame.
+- **No cookies needed.** Inside a frame on another site the browser holds back this site's cookies,
+  so the walk travels signed in the page's links and forms (`w`, `_walk`, valid for
+  `embed.link_minutes`). The embedded forms post to a route without a CSRF token and are accepted
+  only from this site's own origin with a valid signed walk. A template of your own keeps working as
+  long as it posts to `funnel:action`.
+- **Payment happens outside the frame.** Stripe and Mollie refuse to be framed, so the order button
+  targets `_top`; the way back from the provider carries the signed walk, and the thank-you page
+  finds the purchase without a cookie.
+
+### Tracking code and the Meta pixel
+
+Per funnel (editor → *Settings → Tracking*): code for the head of every page, code for after a
+purchase (once per paid purchase, placeholders `{amount}`, `{currency}`, `{order_id}`), and a Meta
+pixel ID. A checkout step can carry its own purchase code (`tracking_purchase`). The code goes into
+the finished response before `</head>` and `</body>`, so it also works on steps that show an entry.
+
+**Only with consent.** With goldnead/statamic-consent every script is parked as
+`type="text/plain" data-consent-service="<tracking.consent_service>"` and starts once that service is
+allowed; `<noscript>` and other elements are dropped, because they would load without consent.
+Without the consent addon `tracking.without_consent_addon` decides: `block` (default) prints nothing,
+`render` prints the code as it is for a site whose own banner controls it.
+
+**Meta Conversions API.** With `FUNNELS_META_CAPI_TOKEN` set, PageView (on every page),
+InitiateCheckout (on ordering) and Purchase (from statamic-payments' `PaymentPaid`, so a buyer who
+closes the tab still counts) also go to Meta from the server, queued, **with the same event ID as the
+pixel**, so Meta counts each once. Only with consent; the purchase uses the consent recorded on the
+visit, since the webhook has no browser. `user_data` is an allow-list: the hashed address, and IP,
+browser and the `_fbp`/`_fbc` cookies only with consent. `FUNNELS_META_TEST_EVENT_CODE` sends to
+the Events Manager's test view. Meta accepting a request is not proof: check that the test event
+shows up there **as one event**, not two.
 
 ### URLs
 
@@ -443,6 +549,13 @@ funnel addon must not start writing into somebody's CRM.
 | `thumbnails.chrome_path` | `null` | Names the browser when it is not on `PATH`. Named but not executable means no renderer, not a fallback. |
 | `thumbnails.cookies` | `[]` | Cookies the browser carries into the page. Empty means the consent addon's cookie with everything granted, when that addon is installed. |
 | `thumbnails.hide_selectors` | `[]` | CSS selectors hidden before the shot. For a banner no cookie can silence. |
+| `in_app_browser.enabled` | `true` | Off, no funnel shows the in-app browser notice, whatever the funnel says. |
+| `embed.link_minutes` | `180` | How long a signed walk in an embedded page's links stays good, the way back from the payment included. |
+| `tracking.consent_service` | `meta_pixel` | The statamic-consent service whose consent releases tracking code and the pixel. A service the consent config does not have keeps everything blocked. |
+| `tracking.without_consent_addon` | `block` | Without statamic-consent: `block` prints no tracking code, `render` prints it as it is. |
+| `tracking.meta.access_token` | `env('FUNNELS_META_CAPI_TOKEN')` | Empty means no server-side events, the pixel still works. |
+| `tracking.meta.test_event_code` | `env('FUNNELS_META_TEST_EVENT_CODE')` | Sends to the Events Manager's test view. Remove after testing. |
+| `tracking.meta.api_version` | `v21.0` | The Graph API version in the URL. |
 
 ## Multi-site
 

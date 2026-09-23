@@ -109,4 +109,35 @@ return [
     'countdown_none' => 'Keine Frist',
     'countdown_fixed' => 'Ein Zeitpunkt für alle',
     'countdown_rolling' => 'Ein Fenster je Besucher',
+
+    // A/B-Test: Ziel und Gewinner (F2).
+    'field_split_goal' => 'A/B-Test: Ziel',
+    'field_split_goal_help' => 'Woran die beiden Fassungen gemessen werden.',
+    'split_goal_continue' => 'Weiter zum nächsten Schritt',
+    'split_goal_purchase' => 'Kauf',
+    'split_goal_upsell' => 'Upsell danach angenommen',
+    'split_goal_revenue' => 'Umsatz je Besuch',
+    'field_split_auto' => 'A/B-Test: Gewinner automatisch übernehmen',
+    'field_split_auto_help' => 'Hat jede Fassung die Mindestzahl an Besuchen und liegt eine mit 95 % Sicherheit vorn, sehen neue Besucher nur noch sie.',
+    'field_split_min_visits' => 'A/B-Test: Mindestbesuche je Fassung',
+    'field_split_min_visits_help' => 'Leer heißt 100.',
+
+    // Bump-Regeln (F1).
+    'field_bump_rules' => 'Bump-Regeln',
+    'field_bump_rules_help' => 'Wann welcher Bump neben dem Bestellknopf steht. Ohne Angaben sieht jeder jeden Bump.',
+    'bump_options' => 'Nur bei diesen Zahlweisen',
+    'bump_options_all' => 'Alle Zahlweisen',
+    'bump_requires' => 'Nur zusammen mit',
+    'bump_requires_none' => 'Kein anderer Bump nötig',
+    'bump_returning' => 'Wiederkehrende Kund:innen',
+    'bump_returning_show' => 'Für alle zeigen',
+    'bump_returning_hide' => 'Für wiederkehrende ausblenden',
+    'bump_returning_only' => 'Nur für wiederkehrende zeigen',
+    'bump_preselected' => 'Vorausgewählt',
+    'bump_no_offer' => 'Wähle zuerst ein Angebot.',
+    'bump_no_bumps' => 'Dieses Angebot hat keine Bumps.',
+
+    // Tracking je Kassenschritt (F6).
+    'field_tracking_purchase' => 'Tracking-Code nach dem Kauf',
+    'field_tracking_purchase_help' => 'Wird einmal je bezahltem Kauf dieses Schritts auf der nächsten Seite ausgegeben, nur mit Einwilligung. Platzhalter: {amount}, {currency}, {order_id}.',
 ];

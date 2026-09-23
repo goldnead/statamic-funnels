@@ -438,6 +438,117 @@
     margin-top: 0.2rem;
 }
 
+/* A bump that its rule hides. The grid above would otherwise win over the
+   `hidden` attribute, and a hidden box would stay on screen. */
+.funnel-offer__bumps .funnel-bump[hidden] {
+    display: none;
+}
+
+/* Pay what you want: one field with the currency beside it, and the floor
+   underneath. Stacked, not in the flex row the consent label uses. */
+.funnel-offer__accept > label.funnel-offer__amount,
+.funnel-offer__accept > label.funnel-offer__country {
+    display: block;
+    color: var(--funnel-ink);
+    font-size: 0.95rem;
+    margin: 0 0 1.1rem;
+}
+
+/* The label's own words above the field, as on every other form row. The
+   consent row above writes its span inline, and would win here otherwise. */
+.funnel-offer__accept > label.funnel-offer__amount > span:first-child,
+.funnel-offer__accept > label.funnel-offer__country > span:first-child {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.3rem;
+}
+
+.funnel-offer__accept > label.funnel-offer__amount > .funnel-offer__amount-input {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 500;
+}
+
+.funnel-offer__amount-input input {
+    max-width: 10rem;
+    font-size: 1.15rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.funnel-offer__amount small {
+    display: block;
+    margin-top: 0.3rem;
+    color: var(--funnel-muted);
+    font-size: 0.82rem;
+}
+
+/* Why a form step did not go on. Same look as the checkout's own list. */
+.funnel-errors {
+    margin: 0 0 1.1rem;
+    padding: 0.7rem 1rem 0.7rem 1.6rem;
+    border-left: 3px solid #b91c1c;
+    color: #b91c1c;
+    font-size: 0.9rem;
+    list-style: disc;
+}
+
+/* The thank-you line of a pay-what-you-want purchase. */
+.funnel-order__thanks {
+    font-size: 1.05rem;
+    margin: 0 0 1rem;
+}
+
+/* The in-app browser notice. First on the page, because it has to be read
+   before anybody reaches for a card that is not there. */
+.funnel-inapp {
+    margin: 0 0 1.75rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--funnel-line);
+    border-left: 3px solid var(--funnel-accent);
+    border-radius: var(--funnel-radius);
+    background: var(--funnel-surface);
+    font-size: 0.92rem;
+}
+
+.funnel-inapp p {
+    margin: 0;
+}
+
+.funnel-inapp .funnel-inapp__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 0.8rem;
+}
+
+.funnel-inapp__open,
+.funnel-inapp__copy {
+    display: inline-block;
+    padding: 0.45rem 0.9rem;
+    border-radius: var(--funnel-radius);
+    border: 1px solid var(--funnel-accent);
+    background: transparent;
+    color: var(--funnel-accent);
+    font: inherit;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.funnel-inapp__open {
+    background: var(--funnel-accent);
+    color: var(--funnel-surface);
+}
+
+/* Inside a frame on another site the page sits in a popup or a box somebody
+   else sized; the generous top padding of a full page is wasted there. */
+.funnel-step[data-funnel-embedded] {
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+}
+
 @media (prefers-color-scheme: dark) {
     .funnel-step {
         --funnel-ink: #e7ebef;

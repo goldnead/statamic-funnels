@@ -195,6 +195,13 @@ class MarkeKommtVomAngebotTest extends TestCase
      */
     protected function fremdeMarkeGiltJetzt(): void
     {
+        // Seit 23.09.2026 zeichnet schon die Kassenseite unter der Marke des
+        // Angebots (siehe EinwilligungUnterDerMarkeTest). Im Test ueberlebt
+        // die Marke die Anfrage, im Betrieb nicht: jede Anfrage beginnt dort
+        // wieder unter der Marke ihres Pfads. Die Bestellung beginnt deshalb
+        // hier ausdruecklich unter der fremden, wie eine neue Anfrage.
+        BrandContext::setCurrent($this->fremde);
+
         $this->assertSame(
             $this->fremde->id,
             BrandContext::currentId(),

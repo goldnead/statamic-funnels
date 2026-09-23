@@ -82,6 +82,24 @@ class Settings implements ProvidesSettings
                 ],
             ],
             [
+                // In-App-Hinweis, Einbetten, Tracking (F3, F4, F6, F7). Der
+                // Zugangsschluessel der Conversions API steht nicht hier: er
+                // ist ein Geheimnis und gehoert in die .env.
+                'title' => __('statamic-funnels::settings.groups.reach.title'),
+                'description' => __('statamic-funnels::settings.groups.reach.description'),
+                'fields' => [
+                    static::field('in_app_browser.enabled', 'boolean'),
+                    static::field('embed.link_minutes', 'integer', ['min' => 5]),
+                    static::field('tracking.consent_service', 'string'),
+                    static::field('tracking.without_consent_addon', 'select', [
+                        'options' => [
+                            'block' => __('statamic-funnels::settings.options.without_consent_addon_block'),
+                            'render' => __('statamic-funnels::settings.options.without_consent_addon_render'),
+                        ],
+                    ]),
+                ],
+            ],
+            [
                 'title' => __('statamic-funnels::settings.groups.integrations.title'),
                 'description' => __('statamic-funnels::settings.groups.integrations.description'),
                 'fields' => [
