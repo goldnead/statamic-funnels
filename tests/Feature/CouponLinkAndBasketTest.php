@@ -9,6 +9,7 @@ use Goldnead\StatamicOffers\Models\Coupon;
 use Goldnead\StatamicOffers\Models\Offer;
 use Goldnead\StatamicOffers\Support\Basket;
 use Goldnead\StatamicPayments\Models\Payment;
+use Goldnead\StatamicPayments\Support\FollowUp;
 use PHPUnit\Framework\Attributes\Test;
 
 /**
@@ -369,6 +370,94 @@ class CouponLinkAndBasketTest extends TestCase
         $this->asVisitor()->get('/f/kurs/zusatz')
             ->assertOk()
             ->assertSee('name="coupon" value="CHOR20"', false);
+    }
+
+    #[Test]
+    public function der_funnelweite_code_gilt_auch_beim_ein_klick_upsell(): void
+    {
+        if ((new \ReflectionMethod(FollowUp::class, 'accept'))->getNumberOfParameters() < 6) {
+            $this->markTestSkipped('statamic-payments ohne Rabatt im Ein-Klick-Weg.');
+        }
+
+        $funnel = $this->kasse();
+        $this->zweiteKasse($funnel);
+        $coupon = $this->coupon(['funnel_wide' => true]);
+        $this->bisZurKasse();
+
+        $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1', 'coupon' => 'CHOR20']);
+        $this->bezahlen(Payment::query()->firstOrFail());
+
+        $this->asVisitor()->get('/f/kurs/zusatz');
+        $this->asVisitor()->post('/f/kurs/zusatz/advance', ['accept' => '1', 'confirmed' => '1', 'coupon' => 'CHOR20'])->assertRedirect();
+
+        // Ein Klick, keine zweite Kasse: die gespeicherte Karte, mit Rabatt.
+        $upsell = Payment::query()->latest('id')->firstOrFail();
+        $this->assertNotNull($upsell->parent_payment_id, 'kein Ein-Klick-Kauf, sondern die Kasse');
+        $this->assertSame('CHOR20', $upsell->discount_code);
+        $this->assertSame(2320, $upsell->amount_cent);
+        $this->assertSame(2, (int) $coupon->fresh()->used_count);
+    }
+
+    #[Test]
+    public function lehnt_der_anbieter_den_ein_klick_ab_wird_der_code_nur_einmal_verbraucht(): void
+    {
+        if ((new \ReflectionMethod(FollowUp::class, 'accept'))->getNumberOfParameters() < 6) {
+            $this->markTestSkipped('statamic-payments ohne Rabatt im Ein-Klick-Weg.');
+        }
+
+        $funnel = $this->kasse();
+        $this->zweiteKasse($funnel);
+        $coupon = $this->coupon(['funnel_wide' => true]);
+        $this->bisZurKasse();
+
+        $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1', 'coupon' => 'CHOR20']);
+        $this->bezahlen(Payment::query()->firstOrFail());
+
+        // Das Mandat ist tot: der Ein-Klick-Weg scheitert, es geht ueber die Kasse.
+        $this->gateway->refuseFollowUp = true;
+
+        $this->asVisitor()->get('/f/kurs/zusatz');
+        $this->asVisitor()->post('/f/kurs/zusatz/advance', ['accept' => '1', 'confirmed' => '1', 'coupon' => 'CHOR20'])->assertRedirect();
+
+        // Erster Kauf und die Kasse danach: zwei Einloesungen, nicht drei.
+        $this->assertSame(2, (int) $coupon->fresh()->used_count);
+        $this->assertSame('CHOR20', Payment::query()->latest('id')->firstOrFail()->discount_code);
+    }
+
+    #[Test]
+    public function wirft_der_ein_klick_wird_der_code_freigegeben_und_die_kasse_uebernimmt(): void
+    {
+        if ((new \ReflectionMethod(FollowUp::class, 'accept'))->getNumberOfParameters() < 6) {
+            $this->markTestSkipped('statamic-payments ohne Rabatt im Ein-Klick-Weg.');
+        }
+
+        // Vor der ersten Anfrage gebunden, sonst haelt der Controller das echte.
+        $this->app->instance(FollowUp::class, new class($this->gateway) extends FollowUp
+        {
+            public function accept(...$args): ?Payment
+            {
+                if (($args[5] ?? null) !== null) {
+                    throw new \RuntimeException('unerwartet');
+                }
+
+                return parent::accept(...$args);
+            }
+        });
+
+        $funnel = $this->kasse();
+        $this->zweiteKasse($funnel);
+        $coupon = $this->coupon(['funnel_wide' => true]);
+        $this->bisZurKasse();
+
+        $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1', 'coupon' => 'CHOR20']);
+        $this->bezahlen(Payment::query()->firstOrFail());
+
+        $this->asVisitor()->get('/f/kurs/zusatz');
+        $antwort = $this->asVisitor()->post('/f/kurs/zusatz/advance', ['accept' => '1', 'confirmed' => '1', 'coupon' => 'CHOR20'])->assertRedirect();
+
+        $antwort->assertSessionHasNoErrors();
+        $this->assertStringStartsWith('https://checkout.example/', (string) $antwort->headers->get('Location'), 'nicht ueber die Kasse weiter');
+        $this->assertSame(2, (int) $coupon->fresh()->used_count);
     }
 
     #[Test]

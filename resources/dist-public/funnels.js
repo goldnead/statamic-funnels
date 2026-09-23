@@ -80,6 +80,23 @@
         tick();
     })();
 
+    // ------------------------------------------------------- Price on top
+    //
+    // The price above the form follows the chosen pricing option, so the page
+    // never shows a different amount from the one about to be charged.
+    (function price() {
+        var target = document.querySelector('[data-funnel-price-target]');
+        var radios = document.querySelectorAll('input[name="pricing_option"][data-funnel-price]');
+
+        if (!target || !radios.length) return;
+
+        radios.forEach(function (radio) {
+            radio.addEventListener('change', function () {
+                if (radio.checked) target.textContent = radio.getAttribute('data-funnel-price');
+            });
+        });
+    })();
+
     // ---------------------------------------------------------------- Bumps
     //
     // A bump can belong to some pricing options only, or hang on another bump.

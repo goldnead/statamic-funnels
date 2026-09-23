@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Fixed (review round 3)
+
+- **Embedding: the way back from the provider is bound to the browser that ordered.** The order
+  (top level) sets a short-lived cookie with the one-time token; a return link opened in another
+  browser does not get the visit. Without `Sec-Fetch-Dest` a signed walk is no longer accepted
+  (fail closed). Inside a frame the walk is removed from the address before any script runs, so a
+  pixel cannot send it along. No fixed consent banner inside a frame.
+- **Escaped output (behaviour change):** headline, text, offer and bump texts, labels and the
+  withdrawal wording are escaped in the shipped template; Markdown still works, HTML inside it is
+  shown as text. A funnel that put HTML into a headline or text field now shows it literally. This
+  closes a way around the permission *Edit tracking code*.
+- The editor warns when a consent service is missing from the consent config.
+- After a refused coupon the chosen pricing option, bumps, country and code stay, and the message
+  stands at the field. The price at the top follows the chosen pricing option. The coupon field is
+  full width on narrow screens.
+- A funnel-wide coupon also applies to the one-click upsell (statamic-payments >= 1.25); a refused
+  or failing one-click gives the coupon's use back before the checkout takes over.
+- Declining the same offer twice records and announces one decline, not two.
+- Split tests show the progress to the sample (51/100) until they are decided.
+
 ### Fixed (review round 2)
 
 - **Embedding: a walk could be taken over.** A signed walk in the address (`?w=`) was accepted on

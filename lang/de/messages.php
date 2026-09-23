@@ -205,6 +205,7 @@ return [
     // Tracking: Dienst je Code, eigenes Recht (F6, F7).
     'settings_tracking_service' => 'Einwilligung',
     'settings_tracking_service_help' => 'Der Dienst in statamic-consent, dessen Einwilligung diesen Code freigibt. Leer heißt: :service.',
+    'settings_service_unknown' => 'Den Dienst „:service“ gibt es in der Consent-Konfiguration nicht. Code unter diesem Dienst startet nie. Tragen Sie ihn in config/statamic-consent.php ein oder wählen Sie einen vorhandenen.',
     'settings_tracking_locked' => 'Tracking-Code dürfen nur Benutzer mit dem Recht „Tracking-Code bearbeiten“ ändern.',
     'tracking_forbidden' => 'Sie dürfen Tracking-Code nicht bearbeiten.',
 

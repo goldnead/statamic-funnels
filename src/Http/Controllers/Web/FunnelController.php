@@ -56,6 +56,9 @@ class FunnelController
      */
     protected array $tracking = ['head' => '', 'body' => ''];
 
+    /** Felder der Kasse, deren Fehler am Feld stehen statt oben in der Liste. */
+    protected const FIELD_ERRORS = ['coupon', 'amount'];
+
     public function __construct(
         protected FunnelWalk $walk,
         protected StepRegistry $registry,
@@ -136,6 +139,16 @@ class FunnelController
             && str_contains((string) $response->headers->get('Content-Type', 'text/html'), 'html')
             && is_string($content = $response->getContent())) {
             $response->setContent(Tracking::inject($content, $tracking['head'], $tracking['body']));
+        }
+
+        // Im Rahmen den signierten Weg aus der Adresse nehmen, bevor irgendein
+        // Skript sie liest: ein Pixel schickt die Adresse als `dl=` mit. Der
+        // Weg reist ab hier nur in Formularen und Weiterleitungen.
+        if (Embed::requested($request)
+            && ! $response->isRedirection()
+            && str_contains((string) $response->headers->get('Content-Type', 'text/html'), 'html')
+            && is_string($content = $response->getContent())) {
+            $response->setContent(Embed::withAddressCleanup($content));
         }
 
         return Embed::protect($response, $funnel, Embed::requested($request));
@@ -293,6 +306,10 @@ class FunnelController
             // Nicht `consent`: der Schluessel stuende in der Vorlage flach neben
             // dem Tag `{{ consent:head }}` und verdeckte ihn.
             'consent_addon' => TrackingConsent::addonPresent(),
+            // Das Banner nicht im Rahmen: dort deckte es das Angebot ab. Was
+            // geparkt ist, bleibt im Rahmen geparkt; der Kauf-Code laeuft
+            // oben auf der Danke-Seite.
+            'consent_banner' => TrackingConsent::addonPresent() && ($preview || ! Embed::requested(request())),
             'step' => [
                 'key' => $step->node_key,
                 'type' => $step->type,
@@ -453,10 +470,17 @@ class FunnelController
             //
             // Im Rahmen kommt die Sitzung nicht an; dort reisen die Fehler
             // signiert in der Adresse ({@see Embed::errorsFrom()}).
+            //
+            // Ohne die Fehler, die an ihrem Feld stehen (`field_errors`).
             'errors' => array_values(array_unique(array_merge(
-                session('errors')?->getBag('default')?->all() ?? [],
+                collect(session('errors')?->getBag('default')?->messages() ?? [])
+                    ->except(self::FIELD_ERRORS)->flatten()->all(),
                 Embed::errorsFrom(request()),
             ))),
+            // Die Meldung am Feld, fuer Code und Betrag der Kasse.
+            'field_errors' => collect(self::FIELD_ERRORS)
+                ->mapWithKeys(fn (string $feld) => [$feld => session('errors')?->getBag('default')?->first($feld) ?: null])
+                ->all(),
         ] + $context);
     }
 
@@ -506,6 +530,7 @@ class FunnelController
 
         return $context['countdown'] !== null
             || $bumpsMitRegeln
+            || ! empty($context['offer']['pricing_options'])
             || ! empty($context['in_app_browser'])
             || ! empty($context['embed']);
     }
@@ -824,6 +849,14 @@ class FunnelController
 
         $prefix = (string) config('statamic-offers.handle_prefix', 'offer:');
 
+        // Die gewaehlte Zahlweise: nach einer Ablehnung die zuletzt gewaehlte.
+        $optionen = $offer->pricingOptions();
+        $keys = array_column($optionen, 'key');
+        $alt = old('pricing_option');
+        $gewaehlt = is_string($alt) && in_array($alt, $keys, true) ? $alt : ($keys[0] ?? null);
+        $gewaehlteOption = collect($optionen)->firstWhere('key', $gewaehlt);
+        $gewaehltePreis = $gewaehlteOption ? Offer::localise($gewaehlteOption['amount_cent']).' '.$offer->currency() : null;
+
         return [
             'handle' => $offer->handle,
             'buy_handle' => $prefix.$offer->handle,
@@ -896,7 +929,12 @@ class FunnelController
                 'amount_local' => Offer::localise($option['amount_cent']),
                 'currency' => $offer->currency(),
                 'plan' => $this->planFor($prefix.$offer->handle.':'.$option['key'], $offer->currency()),
+                // Vorausgewaehlt: nach einer Ablehnung die zuletzt gewaehlte,
+                // sonst die erste.
+                'checked' => $option['key'] === $gewaehlt,
             ], $offer->pricingOptions()),
+            // Der Preis oben: der der gewaehlten Zahlweise, sonst der des Angebots.
+            'price_local' => $gewaehltePreis ?? trim(($offer->amountLocal() ?? '').' '.$offer->currency()),
         ];
     }
 
@@ -949,7 +987,10 @@ class FunnelController
                 'compare_at' => $bump->compareAt(),
                 'compare_at_local' => $bump->compareAtLocal(),
                 'currency' => $bump->currency(),
-                'preselected' => $regel['preselected'] && $zeigen,
+                // Nach einer Ablehnung, was angekreuzt war; sonst die Vorauswahl.
+                'preselected' => is_array(old('bumps'))
+                    ? in_array($bump->handle, old('bumps'), true) && $zeigen
+                    : $regel['preselected'] && $zeigen,
                 // Fuer das Skript: beim Einblenden wieder ankreuzen.
                 'preselected_rule' => $regel['preselected'],
                 'options' => implode(',', $regel['options']),

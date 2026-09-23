@@ -343,7 +343,9 @@
         grid-row: 2;
     }
 
-    .funnel-offer__coupon {
+    /* So specific as the rule above, or its `align-items: center` wins and
+       the field stays narrow in the middle of a phone screen. */
+    .funnel-offer__accept .funnel-offer__coupon {
         flex-direction: column;
         align-items: stretch;
         gap: 0.35rem;
@@ -492,6 +494,18 @@
     color: #b91c1c;
     font-size: 0.9rem;
     list-style: disc;
+}
+
+/* Why this field was refused, right under it. */
+.funnel-offer__field-error {
+    display: block;
+    margin: -0.6rem 0 1.1rem;
+    color: #b91c1c;
+    font-size: 0.85rem;
+}
+
+.funnel-offer__amount .funnel-offer__field-error {
+    margin: 0.3rem 0 0;
 }
 
 /* The thank-you line of a pay-what-you-want purchase. */

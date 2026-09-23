@@ -2,6 +2,7 @@
 
 namespace Goldnead\StatamicFunnels\Tests\Feature;
 
+use Goldnead\StatamicFunnels\Events\FunnelOfferDeclined;
 use Goldnead\StatamicFunnels\Events\UpsellDeclined;
 use Goldnead\StatamicFunnels\Tests\Support\WalksAFunnel;
 use Goldnead\StatamicFunnels\Tests\TestCase;
@@ -178,6 +179,27 @@ class PaymentsGuardAndReminderTest extends TestCase
             && $e->offerHandle === 'cd'
             && $e->payment?->is($zahlung)
             && $e->visit->email === 'k@example.com');
+    }
+
+    #[Test]
+    public function zweimal_nein_ist_ein_ereignis(): void
+    {
+        // Ein zweites Absenden (Doppelklick, Zurueck-Taste) ist keine zweite
+        // Ablehnung: sonst liefe jede Automation ein zweites Mal.
+        $this->mitUpsell();
+        $this->bisZurKasse();
+        $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1']);
+        $this->bezahlen(Payment::query()->firstOrFail());
+
+        Event::fake([UpsellDeclined::class, FunnelOfferDeclined::class]);
+
+        $this->asVisitor()->get('/f/kurs/upsell');
+        $this->asVisitor()->post('/f/kurs/upsell/advance', ['accept' => '0'])->assertRedirect('/f/kurs/danke');
+        $this->asVisitor()->post('/f/kurs/upsell/advance', ['accept' => '0'])->assertRedirect('/f/kurs/danke');
+
+        Event::assertDispatchedTimes(UpsellDeclined::class, 1);
+        Event::assertDispatchedTimes(FunnelOfferDeclined::class, 1);
+        $this->assertSame(1, $this->besuch()->events()->where('node_key', 'upsell')->where('event', 'declined')->count());
     }
 
     #[Test]

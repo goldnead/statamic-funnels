@@ -135,14 +135,33 @@ class Embed
             return true;
         }
 
-        $dest = $request->headers->get('Sec-Fetch-Dest');
-
-        return $dest === null || $dest === '' || in_array($dest, ['iframe', 'frame', 'embed'], true);
+        // Ohne den Kopf (alte Browser) nein: fail closed. Ein Rahmen, der dann
+        // keinen Weg mitfuehren kann, beginnt jede Seite neu; das ist
+        // aergerlich, aber keine Uebernahme eines fremden Besuchs.
+        return in_array($request->headers->get('Sec-Fetch-Dest'), ['iframe', 'frame', 'embed'], true);
     }
 
     // --------------------------------------------------- Rueckweg vom Anbieter
 
     public const RETURN = 'fr';
+
+    /**
+     * Das Cookie, das den Rueckweg an den Browser bindet, der bestellt hat.
+     *
+     * Gesetzt von der Bestellung oben (der Bestellknopf im Rahmen zielt auf
+     * `_top`), `Lax`, so lange wie der Rueckweg gilt. Ein Rueckweg ohne dieses
+     * Cookie ist ein Link, den jemand anderes geschickt hat.
+     */
+    public const RETURN_COOKIE = 'statamic_funnel_return';
+
+    /** Das Einmal-Token aus einem Rueckweg, oder null. */
+    public static function nonceFrom(string $url): ?string
+    {
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $nonce = explode('.', (string) ($query[self::RETURN] ?? ''), 2)[1] ?? null;
+
+        return is_string($nonce) && $nonce !== '' ? $nonce : null;
+    }
 
     /**
      * Der Rueckweg vom Anbieter nach einem Kauf aus dem Rahmen.
@@ -171,8 +190,7 @@ class Embed
     /** Das Token an die Zahlung binden, die fuer diesen Rueckweg angelegt wurde. */
     public static function bindReturn(string $url, FunnelVisit $visit, int $paymentId): void
     {
-        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
-        $nonce = explode('.', (string) ($query[self::RETURN] ?? ''), 2)[1] ?? null;
+        $nonce = self::nonceFrom($url);
         $meta = $visit->meta ?? [];
 
         if ($nonce === null || ! isset($meta['return_links'][$nonce])) {
@@ -210,6 +228,15 @@ class Embed
             return null;
         }
 
+        // Nur der Browser, der bestellt hat. Ein anderer, der den Link
+        // bekommen hat, bekommt den Besuch nicht, und das Token bleibt fuer
+        // den richtigen stehen.
+        $bindung = $request->cookie(self::RETURN_COOKIE);
+
+        if (! is_string($bindung) || ! hash_equals($nonce, $bindung)) {
+            return null;
+        }
+
         unset($meta['return_links'][$nonce]);
         $visit->forceFill(['meta' => $meta])->save();
 
@@ -218,6 +245,25 @@ class Embed
             && Payment::query()->whereKey($link['payment_id'])->exists();
 
         return $gueltig ? (string) $visit->token : null;
+    }
+
+    /**
+     * Ein Skript ganz vorn im Kopf, das `w` und `e` aus der Adresse nimmt.
+     *
+     * Vor jedem anderen Skript, damit weder ein Pixel noch ein Analyse-Code
+     * den signierten Weg zu sehen bekommt.
+     */
+    public static function withAddressCleanup(string $html): string
+    {
+        $skript = "<script>(function(){try{var u=new URL(window.location.href),d=false;['".self::WALK."','".self::ERRORS."'].forEach(function(k){if(u.searchParams.has(k)){u.searchParams['delete'](k);d=true;}});if(d){window.history.replaceState(window.history.state,'',u.toString());}}catch(e){}})();</script>";
+
+        if (preg_match('/<head\b[^>]*>/i', $html, $m, PREG_OFFSET_CAPTURE) === 1) {
+            $nach = $m[0][1] + strlen($m[0][0]);
+
+            return substr($html, 0, $nach)."\n".$skript.substr($html, $nach);
+        }
+
+        return $skript."\n".$html;
     }
 
     /** Die Adresse ohne Rueckweg-Token. */

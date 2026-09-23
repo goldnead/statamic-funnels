@@ -39,8 +39,11 @@
             </p>
         </div>
     {{ /if }}
-    {{ if headline }}<h1>{{ headline }}</h1>{{ /if }}
-    {{ if body }}<div class="funnel-step__body">{{ body | markdown }}</div>{{ /if }}
+    {{# Maskiert, auch im Markdown: was im CP steht, wird hier nie zu HTML
+        oder Skript. Skripte gehoeren in den Tracking-Code, und den darf nur
+        bearbeiten, wer das Recht dazu hat. #}}
+    {{ if headline }}<h1>{{ headline | sanitize }}</h1>{{ /if }}
+    {{ if body }}<div class="funnel-step__body">{{ body | sanitize | markdown }}</div>{{ /if }}
 
     {{# Warum das Formular nicht weiterging, auf jedem Schritt ausser der Kasse
         (die sagt es unter dem Preis). Vorher schwieg die Anmeldung bei einer
@@ -70,7 +73,7 @@
             {{ if newsletter }}
                 <label class="funnel-form__newsletter">
                     <input type="checkbox" name="newsletter" value="1"{{ if newsletter:checked }} checked{{ /if }}>
-                    <span>{{ newsletter:label }}</span>
+                    <span>{{ newsletter:label | sanitize }}</span>
                 </label>
             {{ /if }}
 
@@ -148,13 +151,15 @@
                         {{ /if }}
                     </p>
                 {{ /if }}
-                <h2>{{ offer:headline }}</h2>
-                {{ if offer:body }}<div>{{ offer:body | markdown }}</div>{{ /if }}
+                <h2>{{ offer:headline | sanitize }}</h2>
+                {{ if offer:body }}<div>{{ offer:body | sanitize | markdown }}</div>{{ /if }}
                 {{# Bei „Zahl, was du willst" gibt es keinen einen Preis, nur
                     eine Untergrenze. Die steht am Betragsfeld. #}}
                 {{ unless offer:pwyw }}
                 <p class="funnel-offer__price">
-                    <strong>{{ offer:amount_local }} {{ offer:currency }}</strong>
+                    {{# Folgt der gewaehlten Zahlweise (funnels.js), damit oben nicht
+                        ein anderer Preis steht als der, der gleich abgebucht wird. #}}
+                    <strong data-funnel-price-target>{{ offer:price_local }}</strong>
                     {{ if offer:compare_at }}<s>{{ offer:compare_at }} {{ offer:currency }}</s>{{ /if }}
                 </p>
                 {{ /unless }}
@@ -170,7 +175,7 @@
                     Aussage an den Kaeufer, keine an das Log. #}}
                 {{ if errors }}
                     <ul class="funnel-offer__errors" role="alert">
-                        {{ errors }}<li>{{ value }}</li>{{ /errors }}
+                        {{ errors }}<li>{{ value | sanitize }}</li>{{ /errors }}
                     </ul>
                 {{ /if }}
 
@@ -198,9 +203,9 @@
                             <legend>{{ trans key="statamic-funnels::messages.pricing_option_legend" }}</legend>
                             {{ offer:pricing_options }}
                                 <label class="funnel-pricing-option">
-                                    <input type="radio" name="pricing_option" value="{{ key }}"{{ if first }} checked{{ /if }} required>
+                                    <input type="radio" name="pricing_option" value="{{ key }}"{{ if checked }} checked{{ /if }} data-funnel-price="{{ amount_local }} {{ currency }}" required>
                                     <span class="funnel-pricing-option__text">
-                                        <strong>{{ label }}</strong>
+                                        <strong>{{ label | sanitize }}</strong>
                                         {{# Der Betrag steht genau einmal je Zeile. Bei einem
                                             Rhythmus sagt die Plan-Zeile ihn ohnehin — daneben
                                             noch einmal „520,00 EUR" liest sich wie ein zweiter
@@ -230,8 +235,8 @@
                                 <label class="funnel-bump" data-funnel-bump="{{ handle }}"{{ if options }} data-funnel-bump-options="{{ options }}"{{ /if }}{{ if requires }} data-funnel-bump-requires="{{ requires }}"{{ /if }}{{ if preselected_rule }} data-funnel-bump-preselected{{ /if }}{{ if hidden }} hidden{{ /if }}>
                                     <input type="checkbox" name="bumps[]" value="{{ handle }}"{{ if preselected }} checked{{ /if }}>
                                     <span class="funnel-bump__text">
-                                        <strong>{{ headline }}</strong>
-                                        {{ if body }}<span class="funnel-bump__body">{{ body | markdown }}</span>{{ /if }}
+                                        <strong>{{ headline | sanitize }}</strong>
+                                        {{ if body }}<span class="funnel-bump__body">{{ body | sanitize | markdown }}</span>{{ /if }}
                                     </span>
                                     <span class="funnel-bump__price">
                                         +{{ amount_local }} {{ currency }}
@@ -252,6 +257,7 @@
                                 <span>{{ offer:pwyw:currency }}</span>
                             </span>
                             <small>{{ trans key="statamic-funnels::messages.amount_hint" min="{offer:pwyw:min_local} {offer:pwyw:currency}" }}</small>
+                            {{ if field_errors:amount }}<small class="funnel-offer__field-error" role="alert">{{ field_errors:amount | sanitize }}</small>{{ /if }}
                         </label>
                     {{ /if }}
 
@@ -265,7 +271,7 @@
                             {{ else }}
                                 <select name="country" autocomplete="country" required>
                                     <option value="">{{ trans key="statamic-funnels::messages.country_choose" }}</option>
-                                    {{ offer:country:options }}<option value="{{ value }}">{{ label }}</option>{{ /offer:country:options }}
+                                    {{ offer:country:options }}<option value="{{ value }}"{{ if selected }} selected{{ /if }}>{{ label }}</option>{{ /offer:country:options }}
                                 </select>
                             {{ /if }}
                         </label>
@@ -274,8 +280,9 @@
                     {{ if offer:coupons }}
                         <label class="funnel-offer__coupon">
                             <span>{{ trans key="statamic-funnels::messages.coupon_label" }}</span>
-                            <input type="text" name="coupon" value="{{ offer:coupon_code | sanitize }}" autocomplete="off" spellcheck="false">
+                            <input type="text" name="coupon" value="{{ offer:coupon_code | sanitize }}" autocomplete="off" spellcheck="false"{{ if field_errors:coupon }} aria-invalid="true"{{ /if }}>
                         </label>
+                        {{ if field_errors:coupon }}<p class="funnel-offer__field-error" role="alert">{{ field_errors:coupon | sanitize }}</p>{{ /if }}
                     {{ /if }}
 
                     {{# Womit abgebucht wird, unmittelbar ueber dem Knopf.
@@ -309,22 +316,22 @@
                     {{ if withdrawal:paragraphs }}
                         <div class="funnel-offer__withdrawal">
                             {{ withdrawal:paragraphs }}
-                                {{ if heading }}<p><strong>{{ text }}</strong></p>{{ else }}<p>{{ text }}</p>{{ /if }}
+                                {{ if heading }}<p><strong>{{ text | sanitize }}</strong></p>{{ else }}<p>{{ text | sanitize }}</p>{{ /if }}
                             {{ /withdrawal:paragraphs }}
                         </div>
                     {{ /if }}
-                    <input type="hidden" name="consent_text" value="{{ withdrawal:consent_text }}">
+                    <input type="hidden" name="consent_text" value="{{ withdrawal:consent_text | sanitize }}">
                     {{ if withdrawal:checkbox_required }}
                         <label>
                             <input type="checkbox" name="confirmed" value="1" required>
                             <span>
-                                {{ withdrawal:waiver_text }}
+                                {{ withdrawal:waiver_text | sanitize }}
                                 {{ if withdrawal:version }}<small class="funnel-consent-version">{{ trans key="statamic-funnels::messages.consent_version" version="{withdrawal:version}" }}</small>{{ /if }}
                             </span>
                         </label>
                     {{ else }}
                         <p class="funnel-offer__consent">
-                            {{ withdrawal:waiver_text }}
+                            {{ withdrawal:waiver_text | sanitize }}
                             {{ if withdrawal:version }}<small class="funnel-consent-version">{{ trans key="statamic-funnels::messages.consent_version" version="{withdrawal:version}" }}</small>{{ /if }}
                         </p>
                     {{ /if }}
@@ -364,11 +371,11 @@
     {{ if order }}
         <div class="funnel-order">
             <h2>{{ trans key="statamic-funnels::messages.order_summary" }}</h2>
-            {{ if order:thanks }}<p class="funnel-order__thanks">{{ order:thanks }}</p>{{ /if }}
+            {{ if order:thanks }}<p class="funnel-order__thanks">{{ order:thanks | sanitize }}</p>{{ /if }}
             <ul class="funnel-order__lines">
                 {{ order:lines }}
                     <li>
-                        <span class="funnel-order__name">{{ name }}</span>
+                        <span class="funnel-order__name">{{ name | sanitize }}</span>
                         <span class="funnel-order__amount">{{ amount }}</span>
                     </li>
                 {{ /order:lines }}
@@ -437,6 +444,6 @@
         </form>
     {{ /if }}
 </div>
-{{ if funnel:consent_addon }}{{ consent:banner }}{{ /if }}
+{{ if funnel:consent_banner }}{{ consent:banner }}{{ /if }}
 </body>
 </html>

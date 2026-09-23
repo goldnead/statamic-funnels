@@ -203,6 +203,7 @@ return [
     // Tracking: service per code, own permission (F6, F7).
     'settings_tracking_service' => 'Consent',
     'settings_tracking_service_help' => 'The statamic-consent service whose consent releases this code. Empty means :service.',
+    'settings_service_unknown' => 'The service “:service” does not exist in the consent config. Code under this service never starts. Add it to config/statamic-consent.php or pick an existing one.',
     'settings_tracking_locked' => 'Only users with the “Edit tracking code” permission may change tracking code.',
     'tracking_forbidden' => 'You may not edit tracking code.',
 

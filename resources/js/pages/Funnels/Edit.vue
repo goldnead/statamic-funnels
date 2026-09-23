@@ -685,12 +685,18 @@ function entryFieldsFor(handle) {
                                 {{ key.toUpperCase() }}
                                 <span v-if="!selectedSplit.winner && selectedSplit.leader === key" class="ms-1 text-2xs text-gray-400">· {{ t('split', 'leading', 'Leading') }}</span>
                             </p>
-                            <p class="text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                            <!-- Vor der Entscheidung der Fortschritt zur Stichprobe,
+                                 nicht eine Quote, die wie ein Ergebnis aussieht. -->
+                            <p v-if="selectedSplit.auto && !selectedSplit.decided" class="text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                                {{ Math.min(row.visits, selectedSplit.min_visits) }}/{{ selectedSplit.min_visits }}
+                            </p>
+                            <p v-else class="text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                 {{ splitFigure(row, selectedSplit.goal) }}
                                 <span v-if="selectedSplit.goal === 'revenue'" class="text-2xs font-normal text-gray-500">{{ t('split', 'per_visit', 'per visit') }}</span>
                             </p>
                             <p class="text-2xs tabular-nums text-gray-500">
-                                <template v-if="selectedSplit.goal === 'revenue'">{{ row.visits }} {{ t('split', 'visits', 'Visits') }}</template>
+                                <template v-if="selectedSplit.auto && !selectedSplit.decided">{{ t('split', 'visits', 'Visits') }}</template>
+                                <template v-else-if="selectedSplit.goal === 'revenue'">{{ row.visits }} {{ t('split', 'visits', 'Visits') }}</template>
                                 <template v-else>{{ row.conversions }} / {{ row.visits }}</template>
                             </p>
                         </div>

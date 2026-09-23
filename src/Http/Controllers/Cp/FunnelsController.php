@@ -665,6 +665,7 @@ class FunnelsController extends CpController
                 'tracking_service' => __('statamic-funnels::messages.settings_tracking_service'),
                 'tracking_service_help' => __('statamic-funnels::messages.settings_tracking_service_help'),
                 'tracking_locked' => __('statamic-funnels::messages.settings_tracking_locked'),
+                'service_unknown' => __('statamic-funnels::messages.settings_service_unknown'),
                 'save' => __('Save'),
             ],
         ];

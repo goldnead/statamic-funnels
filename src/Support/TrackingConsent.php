@@ -77,16 +77,21 @@ class TrackingConsent
      * Fuer den Editor: gilt eine Einwilligung, und wenn nicht, warum nichts
      * ausgegeben wird.
      *
-     * @return array{mode: string, service: string, message: string}
+     * @return array{mode: string, service: string, message: string, default_known: bool|null}
      */
     public static function describe(): array
     {
         $mode = self::state(request())['mode'];
 
+        $bekannt = array_column(self::serviceOptions(), 'value');
+
         return [
             'mode' => $mode,
             'service' => self::service(),
             'message' => (string) __('statamic-funnels::messages.tracking_mode_'.$mode, ['service' => self::service()]),
+            // Steht der Vorgabedienst in der Consent-Config? Null ohne Addon.
+            // Fehlt er, startet geparkter Code nie, still.
+            'default_known' => $mode === self::PARK ? in_array(self::service(), $bekannt, true) : null,
         ];
     }
 

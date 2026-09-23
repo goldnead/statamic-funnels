@@ -361,6 +361,14 @@ class AdvanceController
     protected function offer(Request $request, Funnel $funnel, FunnelStep $step, $visit)
     {
         if (! $request->boolean('accept')) {
+            // Einmal je Besuch und Schritt. Ein zweites Absenden (Doppelklick,
+            // Zurueck-Taste) fuehrt weiter, schreibt aber keine zweite
+            // Ablehnung und loest nichts ein zweites Mal aus: jede Automation
+            // am Ereignis liefe sonst doppelt.
+            if ($visit->events()->where('node_key', $step->node_key)->where('event', FunnelStepEvent::DECLINED)->exists()) {
+                return $this->go($funnel, $funnel->nextStep($step->node_key, 'declined'));
+            }
+
             $next = $this->walk->advance($visit, $step, 'declined', FunnelStepEvent::DECLINED);
 
             // Gesagt, damit eine Mail am Ausgang `declined` einen Moment hat.
@@ -516,6 +524,19 @@ class AdvanceController
             BumpRules::isReturning($visit),
         );
 
+        // Ein getippter Code, der nicht gilt, kauft nicht still zum vollen
+        // Preis: wer einen Rabatt erwartet und ihn nicht bekommt, soll es vor
+        // der Zahlung erfahren. Ein leeres Feld ist kein Code. Vor allem
+        // anderen geprueft, damit nichts am Besuch gespeichert ist, wenn die
+        // Seite mit den Eingaben zurueckkommt.
+        if (config('statamic-funnels.coupons', true) && $request->filled('coupon')) {
+            $abgelehnt = CheckoutInputs::couponRefusal((string) $request->input('coupon'), $offer);
+
+            if ($abgelehnt !== null) {
+                return back()->withInput()->withErrors(['coupon' => $abgelehnt]);
+            }
+        }
+
         // **Das Land, wenn das Angebot eine Laenderregel hat.** Aus der
         // Anmeldung, sonst aus der Frage der Kasse. Was die Kasse erfragt,
         // bleibt am Besuch: es ist dasselbe Land, das auf die Rechnung und in
@@ -560,15 +581,6 @@ class AdvanceController
             $code = $request->has('coupon')
                 ? (string) $request->input('coupon', '')
                 : CheckoutInputs::carriedCoupon($visit);
-
-            // Ein getippter Code, der nicht gilt, kauft nicht still zum vollen
-            // Preis: wer einen Rabatt erwartet und ihn nicht bekommt, soll es
-            // vor der Zahlung erfahren. Ein leeres Feld ist kein Code.
-            $abgelehnt = $request->filled('coupon') ? CheckoutInputs::couponRefusal($code, $offer) : null;
-
-            if ($abgelehnt !== null) {
-                return back()->withInput()->withErrors(['coupon' => $abgelehnt]);
-            }
         }
 
         try {
@@ -716,10 +728,39 @@ class AdvanceController
             // beim Ein-Klick-Weg blieb `payment_items.offer` bis payments
             // 1.17.1 leer, und der Upsell-Bericht ordnete den Umsatz keinem
             // Angebot zu. Hier weiss der Aufrufer es, also sagt er es.
-            $payment = $this->followUp->accept($previous, $buyHandle, [
+            $args = [$previous, $buyHandle, [
                 'funnel' => $funnel->handle,
                 'step' => $step->node_key,
-            ], array_merge($angaben, ['offer_handles' => [$buyHandle => $offer->handle]]), $visit->email);
+            ], array_merge($angaben, ['offer_handles' => [$buyHandle => $offer->handle]]), $visit->email];
+
+            // Der Gutschein auch beim Ein-Klick-Kauf (payments ab 1.25 nimmt
+            // ihn als sechstes Argument). Aelteren payments wird er gar nicht
+            // erst eingeloest, sonst waere er verbraucht, ohne zu wirken.
+            // Gefragt wird die Klasse des Pakets, nicht die Instanz: eine
+            // Unterklasse der Site kann die Parameter anders schreiben.
+            $mitRabatt = (new \ReflectionMethod(FollowUp::class, 'accept'))->getNumberOfParameters() >= 6;
+
+            if ($mitRabatt) {
+                $args[] = $basket->discount();
+            }
+
+            try {
+                $payment = $this->followUp->accept(...$args);
+            } catch (Throwable $e) {
+                // Wirft der Ein-Klick-Weg, ist das wie eine Ablehnung: Code
+                // zurueck, Grund ins Log, weiter ueber die Kasse.
+                Log::warning('statamic-funnels: der Ein-Klick-Kauf hat geworfen, es geht ueber die Kasse weiter.', [
+                    'funnel' => $funnel->handle,
+                    'step' => $step->node_key,
+                    'error' => $e->getMessage(),
+                ]);
+                $payment = null;
+            }
+
+            if (! $payment && $mitRabatt) {
+                // Faellt es gleich auf die Kasse durch, loest die ihn neu ein.
+                Sibling::call($basket, 'releaseCoupon');
+            }
 
             // Ging der Ein-Klick-Weg nicht, ist das **kein Ende, sondern ein
             // Umweg.**
@@ -872,6 +913,20 @@ class AdvanceController
 
         if ($ausDemRahmen) {
             Embed::bindReturn($zurueck, $visit, (int) $result->payment->getKey());
+
+            // Die Bindung an diesen Browser. Diese Anfrage ist oben (der
+            // Bestellknopf zielt auf `_top`), das Cookie ist also eines der
+            // Site selbst. Das Besuchs-Cookie wird dabei nicht angefasst.
+            $nonce = Embed::nonceFrom($zurueck);
+
+            if ($nonce !== null) {
+                cookie()->queue(cookie(
+                    Embed::RETURN_COOKIE,
+                    $nonce,
+                    max(1, (int) config('statamic-funnels.embed.link_minutes', 180)),
+                    null, null, $request->isSecure() ?: null, true, false, 'Lax',
+                ));
+            }
         }
 
         // Off to the provider. Nothing is accepted yet — only the webhook

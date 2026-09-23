@@ -5,6 +5,8 @@ namespace Goldnead\StatamicFunnels\Tests\Feature;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Support\Embed;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
+use Goldnead\StatamicFunnels\Support\TrackingConsent;
+use Goldnead\StatamicFunnels\Tests\Support\ConsentTagProbe;
 use Goldnead\StatamicFunnels\Tests\Support\WalksAFunnel;
 use Goldnead\StatamicFunnels\Tests\TestCase;
 use Goldnead\StatamicPayments\Models\Payment;
@@ -31,6 +33,17 @@ use Statamic\Facades\User;
 class EmbedTest extends TestCase
 {
     use WalksAFunnel;
+
+    /** Die Bindung des Rueckwegs an den Browser, der oben bestellt hat. */
+    protected ?string $bindung = null;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Wie ein Browser im Rahmen. Tests, die oben laufen, sagen es selbst.
+        $this->withHeaders(['Sec-Fetch-Dest' => 'iframe']);
+    }
 
     #[Test]
     public function jede_seite_verbietet_fremde_rahmen_ohne_erlaubte_domains(): void
@@ -148,9 +161,10 @@ class EmbedTest extends TestCase
 
         $this->bezahlen(Payment::query()->firstOrFail());
 
-        // Zurueck vom Anbieter, oben, ohne Cookie: einmal umgeleitet auf die
-        // Adresse ohne Rueckweg-Token, dabei das Cookie des Besuchs gesetzt.
-        $antwort = $this->get($pfad);
+        // Zurueck vom Anbieter, oben, ohne Besuchs-Cookie, aber mit der
+        // Bindung aus der Bestellung: einmal umgeleitet auf die Adresse ohne
+        // Rueckweg-Token, dabei das Cookie des Besuchs gesetzt.
+        $antwort = $this->derBesteller()->get($pfad);
         $antwort->assertRedirect()->assertCookie(FunnelWalk::COOKIE, $visit->token, false);
 
         $ziel = $antwort->headers->get('Location');
@@ -176,13 +190,13 @@ class EmbedTest extends TestCase
     {
         [$visit, $pfad] = $this->imRahmenBestellt();
 
-        $this->get($pfad)->assertCookie(FunnelWalk::COOKIE, $visit->token, false);
+        $this->derBesteller()->get($pfad)->assertCookie(FunnelWalk::COOKIE, $visit->token, false);
 
-        // Ein zweiter Browser mit demselben Link bekommt den Besuch nicht.
+        // Derselbe Browser ein zweites Mal bekommt ihn nicht noch einmal.
         // (Die Cookie-Warteschlange lebt im Test ueber die Anfrage hinaus.)
         $this->flushSession();
         $this->app['cookie']->flushQueuedCookies();
-        $zweite = $this->get($pfad);
+        $zweite = $this->derBesteller()->get($pfad);
         $zweite->assertRedirect();
         $this->assertNotSame($visit->token, $this->cookieWert($zweite));
     }
@@ -194,7 +208,7 @@ class EmbedTest extends TestCase
         $this->bezahlen(Payment::query()->firstOrFail());
 
         $fremd = 'vorhandenvorhandenvorhandenvorha';
-        $antwort = $this->withUnencryptedCookie(FunnelWalk::COOKIE, $fremd)->get($pfad);
+        $antwort = $this->derBesteller()->withUnencryptedCookie(FunnelWalk::COOKIE, $fremd)->get($pfad);
 
         $antwort->assertRedirect();
         $this->assertNull($this->cookieWert($antwort));
@@ -203,6 +217,58 @@ class EmbedTest extends TestCase
         $this->withUnencryptedCookie(FunnelWalk::COOKIE, $fremd)->get($antwort->headers->get('Location'))
             ->assertOk()
             ->assertSee(__('statamic-funnels::messages.order_summary'));
+    }
+
+    #[Test]
+    public function ein_fremder_browser_bekommt_mit_dem_rueckweg_den_besuch_nicht(): void
+    {
+        // Angreifer bestellt im Rahmen und schickt dem Opfer seinen Rueckweg.
+        // Das Opfer (eigener Browser, keine Bindung) darf den Besuch des
+        // Angreifers nicht bekommen, sonst bestellt es auf dessen Adresse.
+        [$angreifer, $pfad] = $this->imRahmenBestellt();
+        $this->bezahlen(Payment::query()->firstOrFail());
+
+        $this->flushSession();
+        $this->app['cookie']->flushQueuedCookies();
+
+        $opfer = $this->get($pfad);
+
+        $opfer->assertRedirect();
+        $this->assertNull($this->cookieWert($opfer));
+
+        $this->get($opfer->headers->get('Location'))
+            ->assertOk()
+            ->assertDontSee(__('statamic-funnels::messages.order_summary'));
+
+        // Der Besteller selbst kommt danach noch durch: das Token ist nicht
+        // verbraucht, nur weil ein anderer es versucht hat.
+        $this->flushSession();
+        $this->app['cookie']->flushQueuedCookies();
+        $this->derBesteller()->get($pfad)->assertCookie(FunnelWalk::COOKIE, $angreifer->token, false);
+    }
+
+    #[Test]
+    public function die_bestellung_im_rahmen_setzt_die_bindung_ohne_das_besuchs_cookie_zu_ueberschreiben(): void
+    {
+        $this->imRahmenBestellt();
+
+        $this->assertNotNull($this->bindung);
+    }
+
+    #[Test]
+    public function ohne_sec_fetch_dest_gilt_ein_w_nicht(): void
+    {
+        // Alte Browser sagen nicht, ob sie rahmen: dann gilt der Weg nicht
+        // (fail closed). Die eingebettete Route prueft ihre Herkunft selbst.
+        $this->kasse();
+        $this->get('/f/kurs?embed=1');
+        $fremd = FunnelVisit::query()->latest('id')->firstOrFail();
+
+        $this->withoutHeader('Sec-Fetch-Dest')
+            ->get('/f/kurs?embed=1&w='.urlencode(Embed::walkLink($fremd->token)))
+            ->assertOk();
+
+        $this->assertSame(2, FunnelVisit::count());
     }
 
     // ----------------------------------------------- Besuch nicht uebernehmbar
@@ -261,6 +327,40 @@ class EmbedTest extends TestCase
 
         $antwort->assertOk();
         $this->assertNull($this->cookieWert($antwort));
+    }
+
+    #[Test]
+    public function im_rahmen_verschwindet_der_weg_vor_jedem_tracking_aus_der_adresse(): void
+    {
+        // Sonst traegt der Pixel `w` als `dl=…` zu Meta.
+        TrackingConsent::resolveUsing(fn () => ['addon' => false, 'granted' => true]);
+        config(['statamic-funnels.tracking.without_consent_addon' => 'render']);
+        $this->kasse([], [], ['settings' => ['meta_pixel_id' => '123456789012345']]);
+
+        $seite = $this->get('/f/kurs?embed=1')->assertOk()->getContent();
+        TrackingConsent::resolveUsing(null);
+
+        $wegnehmen = strpos($seite, 'history.replaceState');
+        $pixel = strpos($seite, "fbq('init'");
+
+        $this->assertNotFalse($wegnehmen);
+        $this->assertNotFalse($pixel);
+        $this->assertLessThan($pixel, $wegnehmen);
+    }
+
+    #[Test]
+    public function im_rahmen_steht_kein_fixiertes_consent_banner(): void
+    {
+        // Im kleinen Rahmen deckte es das Angebot ab. Geparktes Tracking
+        // bleibt dort ohne Einwilligung geparkt; der Kauf-Code laeuft oben.
+        ConsentTagProbe::register();
+        TrackingConsent::resolveUsing(fn () => ['addon' => true, 'granted' => false]);
+        $this->kasse();
+
+        $seite = $this->get('/f/kurs?embed=1')->assertOk();
+        TrackingConsent::resolveUsing(null);
+
+        $seite->assertSee('<!--consent-head-->', false)->assertDontSee('<!--consent-banner-->', false);
     }
 
     // ------------------------------------------------ CSRF mit echter Middleware
@@ -327,14 +427,26 @@ class EmbedTest extends TestCase
             ->assertOk()
             ->assertSee('class="funnel-offer__accept" target="_top"', false);
 
-        $this->withHeaders(['Origin' => 'http://localhost'])
+        // Der Bestellknopf zielt auf `_top`: diese Anfrage ist oben, und ihre
+        // Antwort setzt die Bindung des Rueckwegs an genau diesen Browser.
+        $bestellt = $this->withHeaders(['Origin' => 'http://localhost', 'Sec-Fetch-Dest' => 'document'])
             ->post('/f/kurs/kasse/advance-embed?_walk='.$w, ['accept' => '1', 'confirmed' => '1'])
             ->assertRedirect();
+
+        $this->bindung = $bestellt->getCookie(Embed::RETURN_COOKIE)?->getValue();
 
         $rueckweg = $this->gateway->lastPayload['redirectUrl'] ?? null;
         $this->assertIsString($rueckweg, 'kein Rueckweg an den Anbieter uebergeben');
 
         return [$visit, parse_url($rueckweg, PHP_URL_PATH).'?'.parse_url($rueckweg, PHP_URL_QUERY)];
+    }
+
+    /** Der Browser, der oben bestellt hat: mit der Bindung. */
+    protected function derBesteller(): static
+    {
+        $this->assertNotNull($this->bindung, 'die Bestellung hat keine Bindung gesetzt');
+
+        return $this->withCookie(Embed::RETURN_COOKIE, $this->bindung);
     }
 
     protected function cookieWert($antwort): ?string

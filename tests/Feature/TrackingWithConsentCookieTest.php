@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use PHPUnit\Framework\Attributes\Test;
+use Statamic\Facades\User;
 
 /**
  * F6/F7 mit einer echten Einwilligung: dem Cookie, wie statamic-consent es
@@ -104,6 +105,37 @@ class TrackingWithConsentCookieTest extends TestCase
         $this->asVisitor()->get('/f/kurs')->assertOk();
 
         $this->assertSame(0, $this->pageViews());
+    }
+
+    #[Test]
+    public function der_editor_warnt_wenn_der_vorgabedienst_nicht_in_der_consent_config_steht(): void
+    {
+        // Sonst startet Tracking unter `meta_pixel` nie, und niemand sieht warum.
+        config(['statamic-funnels.tracking.consent_service' => 'marketing']);
+        $funnel = $this->kasse();
+
+        $props = $this->editorProps($funnel);
+
+        $this->assertFalse($props['tracking']['default_known']);
+        $this->assertSame(['meta_pixel', 'statistik'], array_column($props['tracking']['services'], 'value'));
+    }
+
+    #[Test]
+    public function mit_bekanntem_vorgabedienst_keine_warnung(): void
+    {
+        $funnel = $this->kasse();
+
+        $this->assertTrue($this->editorProps($funnel)['tracking']['default_known']);
+    }
+
+    /** @return array<string, mixed> */
+    protected function editorProps($funnel): array
+    {
+        $user = tap(User::make()->email('studio@example.com')->makeSuper())->save();
+        $response = $this->actingAs($user)->get('/cp/utilities/funnels/'.$funnel->id.'/edit')->assertOk();
+        preg_match('/data-page="(.*?)"/s', $response->getContent(), $m);
+
+        return json_decode(html_entity_decode($m[1], ENT_QUOTES), true)['props'];
     }
 
     #[Test]

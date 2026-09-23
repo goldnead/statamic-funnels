@@ -44,6 +44,15 @@ const locked = computed(() => props.tracking?.can_edit === false);
 
 const services = computed(() => props.tracking?.services ?? []);
 
+// Ein Dienst, den die Consent-Config nicht kennt: der Code startet nie.
+function unknownService(value) {
+    if (!value || !services.value.length) return null;
+
+    return services.value.some((s) => s.value === value)
+        ? null
+        : t('service_unknown', '').replace(':service', value);
+}
+
 const serviceHelp = computed(() => t('tracking_service_help', '').replace(':service', props.tracking?.service ?? ''));
 
 const error = (key) => props.errors?.[`settings.${key}`] ?? null;
@@ -112,6 +121,12 @@ const error = (key) => props.errors?.[`settings.${key}`] ?? null;
                 <Card>
                     <Alert :variant="trackingVariant" :text="tracking.message" class="mb-4" />
                     <Alert v-if="locked" variant="warning" :text="t('tracking_locked')" class="mb-4" />
+                    <Alert
+                        v-if="tracking.default_known === false"
+                        variant="error"
+                        :text="t('service_unknown', '').replace(':service', tracking.service)"
+                        class="mb-4"
+                    />
 
                     <template v-for="slot in [
                         { key: 'tracking_head', service: 'tracking_head_service', label: t('tracking_head', 'Code in the head of every page'), help: t('tracking_head_help'), code: true },
@@ -139,7 +154,7 @@ const error = (key) => props.errors?.[`settings.${key}`] ?? null;
                         <Field
                             :label="t('tracking_service', 'Consent')"
                             :instructions="serviceHelp"
-                            :error="error(slot.service)"
+                            :error="error(slot.service) || unknownService(modelValue[slot.service])"
                             class="mb-5"
                         >
                             <Select

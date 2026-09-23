@@ -337,9 +337,13 @@ class CheckoutInputs
             ? $liste
             : array_values(array_diff(array_keys($alle), $liste));
 
+        // Nach einer Ablehnung steht das zuletzt gewaehlte Land wieder da.
+        $alt = is_string(old('country')) ? strtoupper(old('country')) : null;
+
         $options = array_map(fn (string $code) => [
             'value' => $code,
             'label' => $alle[$code] ?? $code,
+            'selected' => $code === $alt,
         ], $codes);
 
         usort($options, fn (array $a, array $b) => strcoll($a['label'], $b['label']));
