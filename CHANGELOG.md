@@ -1,61 +1,45 @@
 # Changelog
 
-## Unreleased
+## 1.17.0 — 2026-09-23
 
-### Fixed (review round 4)
+### Upgrading
 
-- **Escaped output, completed.** The offer's button label, the field library's labels, the reminder
-  label, the in-app notice's labels, prices, and every visitor input put back into a form field
-  (name, address, library fields) are escaped as well. Markdown from the CP is rendered by a new
-  modifier `funnels_markdown` (CommonMark with `html_input: escape`, `allow_unsafe_links: false`):
-  `[x](javascript:…)` is no longer a link, while quotes (`>`) and autolinks (`<https://…>`) work
-  again. Together with round 3 this closes a way around the permission *Edit tracking code*; only
-  the tracking slots output code unescaped.
-- After a refused coupon the bumps are shown for the chosen pricing option, not the first one.
-- README: known embedding limits (Safari before 16.4, switching to a banking app).
+- **Funnel pages now send `Content-Security-Policy: frame-ancestors 'self'`** plus the funnel's
+  allowed embedding domains, and remove `X-Frame-Options`. A site that frames a funnel page from
+  another domain today has to list that domain on the funnel (*Settings* in the editor). If your
+  application or web server sets its own `Content-Security-Policy` or `X-Frame-Options` on the
+  funnel routes (`/f/…` by default), it replaces or overrules this header: exempt those routes or
+  add to the policy instead of replacing it, or embedding on other sites will not work.
+- **Headlines, texts and labels are escaped** (see Changed). A funnel that put HTML into a headline
+  or text field now shows it as text; use Markdown instead.
+- **Publish the front-end assets again:** `php artisan vendor:publish --tag=statamic-funnels --force`.
+  `funnels.js` and `funnels.css` changed and `embed.js` is new; without it bump rules, the embedded
+  frame and the in-app notice do not work.
+- **If you published the step view** (`--tag=statamic-funnels-views`), publish it again with
+  `--force` or merge by hand: an old copy has none of the escaping, consent, captcha or bump rules.
+- **New permission `edit funnels tracking code`.** Only roles that have it can edit the tracking
+  code; give it to whoever should.
+- No migration. Funnel settings are stored in `funnels.meta`.
+- The checkout parts that build on sibling addons switch on with their versions: coupons, pay what
+  you want and the country question need statamic-offers 1.12; captcha, block list, reminder
+  consent and the coupon on the one-click upsell need statamic-payments 1.25. Against older
+  versions the checkout behaves as before.
 
-### Fixed (review round 3)
+### Changed: output is escaped, Markdown is safe
 
-- **Embedding: the way back from the provider is bound to the browser that ordered.** The order
-  (top level) sets a short-lived cookie with the one-time token; a return link opened in another
-  browser does not get the visit. Without `Sec-Fetch-Dest` a signed walk is no longer accepted
-  (fail closed). Inside a frame the walk is removed from the address before any script runs, so a
-  pixel cannot send it along. No fixed consent banner inside a frame.
-- **Escaped output (behaviour change):** headline, text, offer and bump texts, labels and the
-  withdrawal wording are escaped in the shipped template; Markdown still works, HTML inside it is
-  shown as text. A funnel that put HTML into a headline or text field now shows it literally.
-- The editor warns when a consent service is missing from the consent config.
-- After a refused coupon the chosen pricing option, bumps, country and code stay, and the message
-  stands at the field. The price at the top follows the chosen pricing option. The coupon field is
-  full width on narrow screens.
-- A funnel-wide coupon also applies to the one-click upsell (statamic-payments >= 1.25); a refused
-  or failing one-click gives the coupon's use back before the checkout takes over.
-- Declining the same offer twice records and announces one decline, not two.
-- Split tests show the progress to the sample (51/100) until they are decided.
+Headline, text, offer and bump texts, the offer's button label, labels of the field library, the
+reminder label and the in-app notice, prices, the withdrawal wording, and every visitor input put
+back into a form field (name, address, library fields) are escaped in the shipped template.
+Markdown from the Control Panel is rendered by a new modifier `funnels_markdown` (CommonMark with
+`html_input: escape`, `allow_unsafe_links: false`): quotes (`>`) and autolinks (`<https://…>`)
+work, HTML inside it is shown as text, and `[x](javascript:…)` is no longer a link. This closes a
+way around the permission *Edit tracking code*; only the tracking slots output code unescaped.
+**Behaviour change:** a funnel that put HTML into a headline or text field now shows it literally.
 
-### Fixed (review round 2)
+### Changed: checkout texts say "Sie"
 
-- **Embedding: a walk could be taken over.** A signed walk in the address (`?w=`) was accepted on
-  every request and overwrote the visitor's cookie for 30 days, so a link with somebody else's walk
-  put the victim into the sender's visit. It now counts only inside a frame (`embed=1` and
-  `Sec-Fetch-Dest: iframe`), a frame never writes a cookie, and the way back from the provider uses a
-  one-time token bound to the payment, removed from the address by a redirect. An existing cookie is
-  never overwritten.
-- **Laravel 13:** the embedded route also excludes `PreventRequestForgery`, not only its subclasses.
-- **Split tests decide once, on a fixed sample**, at least 100 visits per version and a day after the
-  last of them; "no difference" is recorded too. Deciding on every look found false winners in about a
-  third of A/A tests.
-- **A typed coupon that does not apply refuses the order** with the reason at the field instead of
-  charging the full price; the amount and code typed stay in the fields after an error.
-- **Tracking:** the shipped template is a whole document with viewport and, with statamic-consent,
-  its script and banner, so parked code actually starts. A consent service per code. New permission
-  *Edit tracking code*.
-- **Meta Purchase** also for an earlier purchase of the same walk (`meta.funnel_visit_id` on the
-  payment).
-- Embedded frame height counts margins and is re-sent after a bump shows or hides.
-- In-app notice: Threads, Pinterest, Snapchat; on Android a text without Apple Pay.
-- Checkout texts address the buyer formally, like the rest of the suite. A refusal at payments' door
-  shows payments' own sentence (`Checkout::refusal()`, `CheckoutBlocked::$message`).
+Checkout texts address the buyer formally, like the rest of the suite. If you override the
+package's translations, check your copies.
 
 ### Added: bump rules (F1)
 
@@ -66,15 +50,20 @@ shows and hides live (`funnels.js`); the server applies the same rules to the or
 ### Added: split tests with a goal and an automatic winner (F2)
 
 `split_goal` (`continue`, `purchase`, `upsell`, `revenue`), `split_auto`, `split_min_visits`. The
-winner is picked at 95 % confidence once each version has the minimum visits (z-test for rates,
-Welch test for revenue per visit) and stored in `funnels.meta.split_winners`; new visitors then only
-see it. The editor shows goal, figures, confidence and winner.
+winner is picked at 95 % confidence (z-test for rates, Welch test for revenue per visit) and stored
+in `funnels.meta.split_winners`; new visitors then only see it. The editor shows goal, figures,
+confidence and winner, and the progress to the sample (51/100) until the test is decided.
+
+A test decides once, on a fixed sample: at least 100 visits per version and a day after the last
+of them. "No difference" is recorded too. Deciding on every look found false winners in about a
+third of A/A tests.
 
 ### Added: in-app browser notice (F3)
 
-Instagram, Facebook, TikTok and LinkedIn are recognised from the user agent; the page says to open it
-in the real browser, with *Copy link* and, on Android, a Chrome link. Per funnel off or reworded;
-`in_app_browser.enabled` switches it off everywhere.
+Instagram, Facebook, TikTok, LinkedIn, Threads, Pinterest and Snapchat are recognised from the user
+agent; the page says to open it in the real browser, with *Copy link* and, on Android, a Chrome
+link (and a text without Apple Pay). Per funnel off or reworded; `in_app_browser.enabled` switches
+it off everywhere.
 
 ### Added: popup and inline embedding on other sites (F4)
 
@@ -83,7 +72,22 @@ funnel page now sends `Content-Security-Policy: frame-ancestors 'self'` plus the
 domains, and removes `X-Frame-Options`. **A site that frames a funnel page from another domain today
 has to list that domain on the funnel.** Inside a foreign frame the walk travels signed in links and
 forms (`embed.link_minutes`), a new route `statamic-funnels.advance-embed` accepts posts without a
-CSRF token from this site's own origin only, and the order button leaves the frame for the provider.
+CSRF token from this site's own origin only (on Laravel 13 it also excludes
+`PreventRequestForgery`), and the order button leaves the frame for the provider. The frame height
+counts margins and is sent again after a bump shows or hides.
+
+How a walk stays with the right visitor:
+
+- A signed walk in the address (`?w=`) counts only inside a frame (`embed=1` and
+  `Sec-Fetch-Dest: iframe`); without `Sec-Fetch-Dest` it is refused. A frame never writes a
+  cookie, and an existing cookie is never overwritten, so a link carrying somebody else's walk
+  cannot put a visitor into the sender's visit.
+- Inside a frame the walk is removed from the address before any script runs, so a pixel cannot
+  send it along. No fixed consent banner inside a frame.
+- The way back from the provider uses a one-time token bound to the payment, removed from the
+  address by a redirect, and bound to the browser that ordered by a short-lived cookie: a return
+  link opened in another browser does not get the visit.
+- Known limits (Safari before 16.4, switching to a banking app) are in the README.
 
 ### Added: statamic-offers 1.12 at the checkout (F5)
 
@@ -91,6 +95,13 @@ Coupon from the link (`?coupon=`, remembered on the walk, funnel-wide codes carr
 want with an amount field, the country question for offers with a country rule, the thank-you line by
 amount, and the coupon terms for follow-up payments in `meta.coupon` of the first payment. A refused
 payment gives the coupon's use back. All guarded: against offers 1.11 the checkout is unchanged.
+
+- A typed coupon that does not apply refuses the order with the reason at the field instead of
+  charging the full price. After a refused coupon the chosen pricing option, its bumps, the
+  country, the amount and the code stay in the form. The price at the top follows the chosen
+  pricing option; the coupon field is full width on narrow screens.
+- A funnel-wide coupon also applies to the one-click upsell (statamic-payments 1.25); a refused or
+  failing one-click gives the coupon's use back before the checkout takes over.
 
 ### Added: tracking code and Meta pixel with Conversions API (F6, F7)
 
@@ -100,16 +111,24 @@ statamic-consent service `tracking.consent_service`, or `tracking.without_consen
 `FUNNELS_META_CAPI_TOKEN` PageView, InitiateCheckout and Purchase also go from the server (Purchase on
 `PaymentPaid`), queued, with the pixel's event ID.
 
+The shipped template is a whole document with viewport and, with statamic-consent, its script and
+banner, so parked code actually starts. Each code names its consent service, and the editor warns
+when that service is missing from the consent config. Meta Purchase also fires for an earlier
+purchase of the same walk (`meta.funnel_visit_id` on the payment). Editing tracking code needs the
+new permission *Edit tracking code* (`edit funnels tracking code`).
+
 ### Added: captcha, block list and reminder consent from statamic-payments (P7, P8)
 
 The checkout renders the payments captcha widget; a checkout refused at the door names the reason
-(captcha, too many attempts, general for the block list). With abandonment reminders on and
+(captcha, too many attempts, general for the block list) in payments' own sentence
+(`Checkout::refusal()`, `CheckoutBlocked::$message`). With abandonment reminders on and
 `capture = consent`, the checkout asks with its own box and passes `meta.reminder_consent`.
 
 ### Added: `UpsellDeclined` event
 
 `Goldnead\StatamicFunnels\Events\UpsellDeclined(visit, step, offerHandle, payment)`: a "no" on an
 offer after a paid purchase in the same walk. Next to `FunnelOfferDeclined`, which fires on every no.
+Declining the same offer twice records and announces one decline, not two.
 
 ### Added: funnel settings in the editor
 
