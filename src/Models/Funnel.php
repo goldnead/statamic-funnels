@@ -16,6 +16,7 @@ use Illuminate\Support\Collection;
  * @property bool $published
  * @property array<string, mixed>|null $meta
  * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property Collection<int, FunnelStep> $steps
  * @property Collection<int, FunnelEdge> $edges
  */

@@ -585,9 +585,15 @@ every funnel event is a trigger (source type `funnels`). Without it nothing is l
 switches the bridge off. A hook fires in the brand of the payment, else in the brand of the request,
 so a purchase confirmed by the provider's webhook reaches the hooks of the brand that sold it.
 
-Every payload starts with the frame the suite addons share: `event` (the handle), `occurred_at`
-(ISO 8601 with offset), `brand` (`{id, handle}` or `null`), `subject_type` (`funnel`) and
-`subject_id` (the funnel's id). Then:
+A payment whose brand no longer exists sends nothing (logged), rather than reaching the hooks of
+whichever brand is current. A moment is sent after its database transaction commits, and not at all
+if it is rolled back. **Order is not guaranteed** (retries, queues): sort by `occurred_at` and
+deduplicate on `event_id`.
+
+Every payload starts with the frame the suite addons share: `event` (the handle), `event_id`
+(`<handle>:<funnel id>:visit-<id>:<step>…`, the same for the same moment however often it is sent),
+`occurred_at` (when the moment happened, ISO 8601 with offset), `brand` (`{id, handle}` or `null`),
+`subject_type` (`funnel`) and `subject_id` (the funnel's id). Then:
 
 - `funnel`: `{id, handle, title}`
 - `step`: `{key, type, label, slug}`

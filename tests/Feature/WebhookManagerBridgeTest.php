@@ -4,10 +4,12 @@ namespace Goldnead\StatamicFunnels\Tests\Feature;
 
 use Goldnead\BrandContext\Models\Brand;
 use Goldnead\StatamicFunnels\Events\FunnelOfferAccepted;
+use Goldnead\StatamicFunnels\Events\FunnelSaved;
 use Goldnead\StatamicFunnels\Integrations\WebhookManager\FunnelsTrigger;
 use Goldnead\StatamicFunnels\Integrations\WebhookManager\WebhookManagerBridge;
 use Goldnead\StatamicFunnels\Listeners\AdvanceOnPayment;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicFunnels\Support\GraphWriter;
 use Goldnead\StatamicFunnels\Tests\Support\WalksAFunnel;
 use Goldnead\StatamicFunnels\Tests\TestCase;
 use Goldnead\StatamicOffers\Models\Offer;
@@ -21,6 +23,7 @@ use Goldnead\WebhookManager\ValueObjects\TriggerEvent;
 use Goldnead\WebhookManager\WebhookManagerServiceProvider;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
@@ -151,7 +154,7 @@ class WebhookManagerBridgeTest extends TestCase
         $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/', $form->payload['occurred_at']);
 
         $accepted = $events['funnels.offer_accepted'][0]->payload;
-        $this->assertSame(['event', 'occurred_at', 'brand', 'subject_type', 'subject_id', 'funnel', 'step', 'visit', 'offer', 'payment'], array_keys($accepted));
+        $this->assertSame(['event', 'event_id', 'occurred_at', 'brand', 'subject_type', 'subject_id', 'funnel', 'step', 'visit', 'offer', 'payment'], array_keys($accepted));
         $this->assertSame(['handle' => 'kurs'], $accepted['offer']);
 
         // Derselbe Zahlungsblock wie in den Webhooks von statamic-payments.
@@ -230,6 +233,74 @@ class WebhookManagerBridgeTest extends TestCase
         $delivery = DB::table('webhook_deliveries')->where('trigger_type', 'funnels.offer_accepted')->sole();
         $this->assertSame($akademie->id, (int) $delivery->brand_id);
         $this->assertSame(['id' => $akademie->id, 'handle' => 'akademie'], json_decode((string) $delivery->request_body, true)['payload']['brand']);
+    }
+
+    #[Test]
+    public function derselbe_moment_hat_bei_jeder_zustellung_dieselbe_event_id_und_seine_eigene_zeit(): void
+    {
+        $this->kasse();
+        Event::fake([TriggerDetected::class]);
+        $this->bisZurKasse();
+        $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1']);
+        $zahlung = $this->bezahlen(Payment::query()->firstOrFail());
+        $visit = FunnelVisit::query()->firstOrFail();
+
+        $this->travel(5)->minutes();
+
+        // Eine zweite Zustellung desselben Moments, wie ein erneutes „bezahlt".
+        $step = $visit->funnel->stepByKey('kasse');
+        $nochmal = WebhookManager::triggers()->get('funnels.offer_accepted')->build(new FunnelOfferAccepted($visit, $step, $zahlung));
+        $erst = $this->detected()['funnels.offer_accepted'][0];
+
+        $this->assertSame($erst->payload['event_id'], $nochmal->payload['event_id']);
+        $this->assertSame('funnels.offer_accepted:'.$visit->funnel_id.':visit-'.$visit->id.':kasse:payment-'.$zahlung->id, $erst->payload['event_id']);
+        $this->assertSame($zahlung->paid_at->format(\DATE_ATOM), $nochmal->eventAt->format(\DATE_ATOM));
+        $this->assertSame($zahlung->paid_at->format(\DATE_ATOM), $nochmal->payload['occurred_at']);
+    }
+
+    #[Test]
+    public function eine_zahlung_mit_unbekannter_marke_geht_an_niemanden(): void
+    {
+        Queue::fake();
+        Log::spy();
+        $this->hook('funnels.offer_accepted', 'aktuell');
+        $funnel = $this->kasse();
+        $visit = $funnel->visits()->create(['token' => Str::random(32), 'email' => 'k@example.com']);
+        $payment = Payment::create([
+            'provider' => 'mollie', 'provider_id' => 'tr_x', 'product' => 'kurs', 'amount_cent' => 9900,
+            'currency' => 'eur', 'status' => 'paid', 'email' => 'k@example.com',
+        ]);
+        $payment->forceFill(['brand_id' => 999])->save();
+
+        FunnelOfferAccepted::dispatch($visit, $funnel->steps->firstWhere('node_key', 'kasse'), $payment);
+
+        $this->assertSame(0, DB::table('webhook_deliveries')->count());
+        Log::shouldHaveReceived('warning')->withArgs(fn ($message) => str_contains($message, 'brand [999] does not exist'));
+    }
+
+    #[Test]
+    public function zugestellt_wird_erst_nach_dem_commit_und_nach_rollback_gar_nicht(): void
+    {
+        $funnel = $this->kasse();
+        Event::fake([TriggerDetected::class]);
+
+        try {
+            DB::transaction(function () use ($funnel) {
+                app(GraphWriter::class)->seed($funnel);
+                FunnelSaved::dispatch($funnel);
+                throw new \RuntimeException('rollback');
+            });
+        } catch (\RuntimeException) {
+        }
+
+        $this->assertSame([], $this->detected());
+
+        DB::transaction(function () use ($funnel) {
+            FunnelSaved::dispatch($funnel);
+            $this->assertSame([], $this->detected());
+        });
+
+        $this->assertArrayHasKey('funnels.funnel_saved', $this->detected());
     }
 
     #[Test]

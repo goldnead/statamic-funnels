@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $payment_id
  * @property Carbon|null $completed_at
  * @property array<string, mixed>|null $meta
+ * @property Carbon|null $updated_at
  */
 class FunnelVisit extends Model
 {

@@ -41,17 +41,64 @@ final class WebhookPayload
     public static function for(string $handle, object $event): array
     {
         $body = self::body($event);
+        $subject = $body['funnel']['id'] ?? null;
+        [$key, $at] = self::moment($event);
+        $at ??= now();
 
         return [
             'event' => $handle,
-            'occurred_at' => now()->format(\DATE_ATOM),
+            // The same moment always gets the same id, however often it is
+            // sent: `<handle>:<subject_id>:<key>`, formed as in the payments
+            // addon. A receiver deduplicates on it; order is not guaranteed.
+            'event_id' => $handle.':'.$subject.':'.$key,
+            'occurred_at' => $at->format(\DATE_ATOM),
             'brand' => self::brand(self::brandId($event)),
             // Named outright, as the payments addon does: without it the
             // manager files a `funnels.*` delivery by guessing.
             'subject_type' => 'funnel',
-            'subject_id' => $body['funnel']['id'] ?? null,
+            'subject_id' => $subject,
             ...$body,
         ];
+    }
+
+    /**
+     * What makes this moment this moment, and when it happened: the visit and
+     * the step, plus the row the moment wrote (arrival, decline, completion,
+     * the payment) for its time.
+     *
+     * @return array{0: string, 1: \DateTimeInterface|null}
+     */
+    public static function moment(object $event): array
+    {
+        $atom = fn (?\DateTimeInterface $at): string => ($at ?? now())->format(\DATE_ATOM);
+
+        if ($event instanceof FunnelSaved) {
+            return [$atom($event->funnel->updated_at), $event->funnel->updated_at];
+        }
+
+        $visit = $event->visit ?? null;
+
+        if (! $visit instanceof FunnelVisit) {
+            return [$atom(null), null];
+        }
+
+        $walk = 'visit-'.$visit->id;
+        $step = $event->step ?? null;
+        $node = $step instanceof FunnelStep ? $walk.':'.$step->node_key : $walk;
+        $row = fn (string $kind) => $step instanceof FunnelStep
+            ? $visit->events()->where('node_key', $step->node_key)->where('event', $kind)->oldest('id')->first()?->created_at
+            : null;
+
+        return match (true) {
+            $event instanceof FunnelCompleted => [$walk, $visit->completed_at],
+            $event instanceof FunnelStepEntered => [$node, $row('entered')],
+            $event instanceof FunnelOfferAccepted => [$node.':payment-'.$event->payment->id, $event->payment->paid_at],
+            $event instanceof FunnelOfferDeclined, $event instanceof UpsellDeclined => [$node, $row('declined')],
+            // Announced before the step writes its row; the visit was saved
+            // with the address a moment earlier.
+            $event instanceof FunnelFormSubmitted => [$node.':'.$atom($visit->updated_at), $visit->updated_at],
+            default => [$node.':'.$atom(null), null],
+        };
     }
 
     /**
