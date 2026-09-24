@@ -12,7 +12,8 @@
   README; the visit token never leaves the addon. A hook fires in the brand of the payment, else
   of the request. Optional: nothing of the webhook manager loads without it, proven by a boot test
   in its own process.
-- Config `statamic-funnels.integrations.webhook_manager` (default `true`).
+- Config `statamic-funnels.webhook_manager.enabled` (env `STATAMIC_FUNNELS_WEBHOOK_MANAGER`, default
+  `true`).
 
 ## 1.17.0 — 2026-09-23
 

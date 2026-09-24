@@ -142,24 +142,32 @@ class WebhookManagerBridgeTest extends TestCase
 
         $form = $events['funnels.form_submitted'][0];
         $this->assertSame('funnels', $form->sourceType);
-        $this->assertSame('funnel:kurs:visit:'.$visit->id, $form->sourceReference);
+        $this->assertSame((string) $visit->funnel_id, $form->sourceReference);
+        $this->assertSame('funnel', $form->payload['subject_type']);
+        $this->assertSame($visit->funnel_id, $form->payload['subject_id']);
         $this->assertSame(['id' => $visit->id, 'email' => 'k@example.com', 'name' => 'Kim Sopran'], $form->payload['visit']);
         $this->assertSame(['key' => 'capture_1', 'type' => 'capture', 'label' => 'Anmeldung', 'slug' => 'anmeldung'], $form->payload['step']);
         $this->assertSame('k@example.com', $form->payload['values']['email']);
         $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/', $form->payload['occurred_at']);
 
         $accepted = $events['funnels.offer_accepted'][0]->payload;
-        $this->assertSame(['event', 'occurred_at', 'brand', 'funnel', 'step', 'visit', 'offer', 'payment'], array_keys($accepted));
+        $this->assertSame(['event', 'occurred_at', 'brand', 'subject_type', 'subject_id', 'funnel', 'step', 'visit', 'offer', 'payment'], array_keys($accepted));
         $this->assertSame(['handle' => 'kurs'], $accepted['offer']);
+
+        // Derselbe Zahlungsblock wie in den Webhooks von statamic-payments.
         $this->assertSame([
-            'id' => $zahlung->id,
-            'product' => 'offer:kurs',
-            'amount_cent' => 9900,
-            'currency' => strtoupper($zahlung->currency),
-            'status' => $zahlung->status,
-            'provider' => $zahlung->provider,
-            'paid_at' => $zahlung->paid_at?->toIso8601String(),
-        ], $accepted['payment']);
+            'id', 'provider', 'provider_id', 'status', 'product', 'amount_cent', 'currency', 'discount_code',
+            'discount_cent', 'refunded_cent', 'email', 'name', 'country', 'subscription_id', 'parent_payment_id',
+            'items', 'attribution', 'created_at', 'paid_at', 'refunded_at', 'charged_back_at',
+        ], array_keys($accepted['payment']));
+        $this->assertSame($zahlung->id, $accepted['payment']['id']);
+        $this->assertSame('offer:kurs', $accepted['payment']['product']);
+        $this->assertSame(9900, $accepted['payment']['amount_cent']);
+        $this->assertSame($zahlung->currency, $accepted['payment']['currency']);
+        $this->assertSame($zahlung->paid_at?->format(\DATE_ATOM), $accepted['payment']['paid_at']);
+        $this->assertSame('offer:kurs', $accepted['payment']['items'][0]['product']);
+        $this->assertArrayNotHasKey('card_last4', $accepted['payment']);
+        $this->assertArrayNotHasKey('meta', $accepted['payment']);
         // Eine Marke nur, wenn es eine gibt: payments stempelt 0 für „keine".
         $this->assertTrue($accepted['brand'] === null || $accepted['brand']['id'] > 0);
 

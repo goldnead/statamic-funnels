@@ -51,7 +51,7 @@ class WebhookManagerBridge
 
     public static function available(): bool
     {
-        return (bool) config('statamic-funnels.integrations.webhook_manager', true)
+        return (bool) config('statamic-funnels.webhook_manager.enabled', true)
             && class_exists(self::FACADE)
             && interface_exists(self::TRIGGER_INTERFACE);
     }

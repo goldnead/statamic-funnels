@@ -581,18 +581,21 @@ funnel addon must not start writing into somebody's CRM.
 
 With [statamic-webhook-manager](https://github.com/goldnead/statamic-webhook-manager) installed,
 every funnel event is a trigger (source type `funnels`). Without it nothing is loaded;
-`statamic-funnels.integrations.webhook_manager` (default `true`) switches the bridge off. A hook
-fires in the brand of the payment, else in the brand of the request, so a purchase confirmed by the
-provider's webhook reaches the hooks of the brand that sold it.
+`statamic-funnels.webhook_manager.enabled` (env `STATAMIC_FUNNELS_WEBHOOK_MANAGER`, default `true`)
+switches the bridge off. A hook fires in the brand of the payment, else in the brand of the request,
+so a purchase confirmed by the provider's webhook reaches the hooks of the brand that sold it.
 
 Every payload starts with the frame the suite addons share: `event` (the handle), `occurred_at`
-(ISO 8601 with offset), `brand` (`{id, handle}` or `null`). Then:
+(ISO 8601 with offset), `brand` (`{id, handle}` or `null`), `subject_type` (`funnel`) and
+`subject_id` (the funnel's id). Then:
 
 - `funnel`: `{id, handle, title}`
 - `step`: `{key, type, label, slug}`
 - `visit`: `{id, email, name}`. **Never the visit token**: it is the visitor's cookie.
-- `payment`: `{id, product, amount_cent, currency, status, provider, paid_at}`. No provider ids,
-  no mandate, no card hint.
+- `payment`: the same block statamic-payments sends in its own webhooks (`id`, `provider`,
+  `provider_id`, `status`, `product`, `amount_cent`, `currency`, discount and refund in cent, buyer
+  `email` and `name`, `country`, `items[]`, `attribution{utm_*}`, timestamps). No card, mandate,
+  customer reference or meta.
 
 | Trigger | Fields after the frame |
 |---|---|

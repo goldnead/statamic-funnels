@@ -40,11 +40,17 @@ final class WebhookPayload
      */
     public static function for(string $handle, object $event): array
     {
+        $body = self::body($event);
+
         return [
             'event' => $handle,
-            'occurred_at' => now()->toIso8601String(),
+            'occurred_at' => now()->format(\DATE_ATOM),
             'brand' => self::brand(self::brandId($event)),
-            ...self::body($event),
+            // Named outright, as the payments addon does: without it the
+            // manager files a `funnels.*` delivery by guessing.
+            'subject_type' => 'funnel',
+            'subject_id' => $body['funnel']['id'] ?? null,
+            ...$body,
         ];
     }
 
@@ -172,18 +178,56 @@ final class WebhookPayload
     }
 
     /**
-     * @return array{id: int, product: string, amount_cent: int, currency: string, status: string, provider: string, paid_at: string|null}
+     * The payment block exactly as statamic-payments sends it in its own
+     * webhooks (`WebhookPayload::payment()` there, 1.26), so a receiver reads
+     * one shape from every addon. A copy, not a call: funnels runs on payments
+     * 1.25, which has no such class. The test pins the keys.
+     * Not: card digits or label, mandate, customer reference, meta, consent
+     * text, referrer, landing page.
+     *
+     * @return array<string, mixed>
      */
     public static function payment(Payment $payment): array
     {
+        $providerId = (string) $payment->provider_id;
+
         return [
-            'id' => (int) $payment->id,
-            'product' => (string) $payment->product,
+            'id' => $payment->getKey(),
+            'provider' => $payment->provider,
+            // Null while the provider has not answered: a placeholder nobody can look up.
+            'provider_id' => $providerId === '' || Payment::isPlaceholderProviderId($providerId) ? null : $providerId,
+            'status' => $payment->status,
+            'product' => $payment->product,
             'amount_cent' => (int) $payment->amount_cent,
-            'currency' => strtoupper((string) $payment->currency),
-            'status' => (string) $payment->status,
-            'provider' => (string) $payment->provider,
-            'paid_at' => $payment->paid_at?->toIso8601String(),
+            'currency' => $payment->currency,
+            'discount_code' => $payment->discount_code,
+            'discount_cent' => $payment->discount_cent === null ? null : (int) $payment->discount_cent,
+            'refunded_cent' => (int) ($payment->refunded_cent ?? 0),
+            'email' => $payment->email,
+            'name' => $payment->name,
+            'country' => $payment->country,
+            'subscription_id' => $payment->subscription_id,
+            'parent_payment_id' => $payment->parent_payment_id,
+            'items' => $payment->exists ? $payment->items()->orderBy('id')->get()->map(fn ($item): array => [
+                'product' => $item->product,
+                'offer' => $item->offer,
+                'name' => $item->name,
+                'kind' => $item->kind,
+                'quantity' => (int) $item->quantity,
+                'amount_cent' => (int) $item->amount_cent,
+                'discount_cent' => (int) ($item->discount_cent ?? 0),
+            ])->values()->all() : [],
+            'attribution' => [
+                'utm_source' => $payment->utm_source,
+                'utm_medium' => $payment->utm_medium,
+                'utm_campaign' => $payment->utm_campaign,
+                'utm_term' => $payment->utm_term,
+                'utm_content' => $payment->utm_content,
+            ],
+            'created_at' => $payment->created_at?->format(\DATE_ATOM),
+            'paid_at' => $payment->paid_at?->format(\DATE_ATOM),
+            'refunded_at' => $payment->refunded_at?->format(\DATE_ATOM),
+            'charged_back_at' => $payment->charged_back_at?->format(\DATE_ATOM),
         ];
     }
 

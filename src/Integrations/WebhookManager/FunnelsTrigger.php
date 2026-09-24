@@ -55,20 +55,14 @@ class FunnelsTrigger implements TriggerInterface
     }
 
     /**
-     * `funnel:<handle>:visit:<id>`, what a delivery can be found by in the log.
+     * The funnel's id, the same object the payload names as its subject.
      *
      * @param  array<string, mixed>  $payload
      */
     protected static function reference(array $payload): ?string
     {
-        $funnel = $payload['funnel']['handle'] ?? null;
+        $funnel = $payload['subject_id'] ?? null;
 
-        if (! is_string($funnel) || $funnel === '') {
-            return null;
-        }
-
-        $visit = $payload['visit']['id'] ?? null;
-
-        return 'funnel:'.$funnel.(is_int($visit) ? ':visit:'.$visit : '');
+        return is_int($funnel) || (is_string($funnel) && $funnel !== '') ? (string) $funnel : null;
     }
 }
