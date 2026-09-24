@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased (1.18.0)
+## 1.18.0 — 2026-09-24
+
+### Upgrading
+
+- No migration, no new permission.
+- **With statamic-webhook-manager 2.10 the seven funnel events appear there as triggers.** Nothing
+  to do if you want that. To switch it off, set `statamic-funnels.webhook_manager.enabled` to
+  `false` (env `STATAMIC_FUNNELS_WEBHOOK_MANAGER`). Without the webhook manager nothing changes.
+- `funnels.form_submitted` sends what the visitor typed to the receiving service. Before you
+  point a hook at it, make sure you have a data processing agreement with that service (see
+  Added).
 
 ### Added
 
