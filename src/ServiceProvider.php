@@ -13,6 +13,7 @@ use Goldnead\StatamicFunnels\Integrations\Insights\StepEvents;
 use Goldnead\StatamicFunnels\Integrations\Insights\Visits;
 use Goldnead\StatamicFunnels\Integrations\LeadHubBridge;
 use Goldnead\StatamicFunnels\Integrations\MetaConversions;
+use Goldnead\StatamicFunnels\Integrations\WebhookManager\WebhookManagerBridge;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\PaymentsDoor;
@@ -59,6 +60,9 @@ class ServiceProvider extends AddonServiceProvider
 
         $this->app->singleton(StepRegistry::class);
 
+        // Singleton, damit die Boot-Sperre der Brücke auch für den Retry gilt.
+        $this->app->singleton(WebhookManagerBridge::class);
+
         // Decided once per process, and lazily: the search for a browser is a
         // handful of stats, but there is no reason to pay for it on a request
         // that never renders anything. A test swaps the binding for a double.
@@ -88,6 +92,30 @@ class ServiceProvider extends AddonServiceProvider
         parent::boot();
 
         app(SettingsRegistry::class)->register(Settings::class);
+
+        // Aus boot() eingereiht, nicht aus bootAddon(): dort feuerte ein
+        // verschachteltes `booted()` sofort, womöglich vor dem bootAddon()
+        // des Webhook-Managers.
+        $this->registerWebhookManagerBridge();
+    }
+
+    /**
+     * Funnel-Ereignisse als Auslöser im Webhook-Manager, wenn der installiert
+     * ist. Ein Versuch nach dem Booten und einer ganz am Ende der Schlange,
+     * für Installationen, auf denen der erste noch zu früh kommt.
+     */
+    protected function registerWebhookManagerBridge(): self
+    {
+        $boot = function (): void {
+            $this->app->make(WebhookManagerBridge::class)->boot($this->app->make('events'));
+        };
+
+        $this->app->booted(function () use ($boot): void {
+            $boot();
+            $this->app->booted($boot);
+        });
+
+        return $this;
     }
 
     public function bootAddon()

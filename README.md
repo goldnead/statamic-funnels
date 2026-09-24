@@ -575,6 +575,34 @@ funnel addon must not start writing into somebody's CRM.
 | `statamic-email-templates` | renders the template a mail node names; without it a mail node saves but every send is recorded as failed |
 | `statamic-automations` | four trigger nodes: step entered, form submitted, offer accepted, funnel completed. `UpsellDeclined` (visit, step, offer handle, the paid payment before it) fires on a "no" after a purchase in the same walk, for a trigger there |
 | Statamic forms | are the form; this addon never grew its own |
+| `statamic-webhook-manager` | every funnel event is a trigger an outbound webhook can listen to, see below |
+
+### Webhooks
+
+With [statamic-webhook-manager](https://github.com/goldnead/statamic-webhook-manager) installed,
+every funnel event is a trigger (source type `funnels`). Without it nothing is loaded;
+`statamic-funnels.integrations.webhook_manager` (default `true`) switches the bridge off. A hook
+fires in the brand of the payment, else in the brand of the request, so a purchase confirmed by the
+provider's webhook reaches the hooks of the brand that sold it.
+
+Every payload starts with the frame the suite addons share: `event` (the handle), `occurred_at`
+(ISO 8601 with offset), `brand` (`{id, handle}` or `null`). Then:
+
+- `funnel`: `{id, handle, title}`
+- `step`: `{key, type, label, slug}`
+- `visit`: `{id, email, name}`. **Never the visit token**: it is the visitor's cookie.
+- `payment`: `{id, product, amount_cent, currency, status, provider, paid_at}`. No provider ids,
+  no mandate, no card hint.
+
+| Trigger | Fields after the frame |
+|---|---|
+| `funnels.step_entered` | `funnel`, `step`, `visit` |
+| `funnels.form_submitted` | `funnel`, `step`, `visit`, `form` (handle or null), `values` (what was typed, without `_`-fields or anything named like a password, token, secret or IBAN) |
+| `funnels.offer_accepted` | `funnel`, `step`, `visit`, `offer {handle}`, `payment` |
+| `funnels.offer_declined` | `funnel`, `step`, `visit`, `offer {handle}` (every "no") |
+| `funnels.upsell_declined` | `funnel`, `step`, `visit`, `offer {handle}` (the one declined), `bought` (the payment before it, or null). Fires together with `offer_declined` |
+| `funnels.completed` | `funnel`, `visit`, `completed_at` |
+| `funnels.funnel_saved` | `funnel` with `published`, `steps` (count) |
 
 ## Configuration
 

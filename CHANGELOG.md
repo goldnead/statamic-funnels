@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased (1.18.0)
+
+### Added
+
+- **Webhook Manager triggers.** With goldnead/statamic-webhook-manager installed, all seven funnel
+  events are triggers an outbound webhook can listen to: `funnels.step_entered`,
+  `funnels.form_submitted`, `funnels.offer_accepted`, `funnels.offer_declined`,
+  `funnels.upsell_declined`, `funnels.completed`, `funnels.funnel_saved` (source type `funnels`,
+  labels in German and English). The payload is chosen field by field and documented in the
+  README; the visit token never leaves the addon. A hook fires in the brand of the payment, else
+  of the request. Optional: nothing of the webhook manager loads without it, proven by a boot test
+  in its own process.
+- Config `statamic-funnels.integrations.webhook_manager` (default `true`).
+
 ## 1.17.0 — 2026-09-23
 
 ### Upgrading

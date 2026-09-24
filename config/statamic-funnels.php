@@ -188,5 +188,9 @@ return [
         // because the payment addon already offers the same bridge, and two
         // addons granting the same thing is worse than neither.
         'entitlements' => false,
+
+        // With goldnead/statamic-webhook-manager installed, every funnel event
+        // is a trigger an outbound webhook can listen to. Nothing without it.
+        'webhook_manager' => true,
     ],
 ];
