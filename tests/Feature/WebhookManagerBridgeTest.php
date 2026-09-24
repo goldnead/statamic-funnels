@@ -3,11 +3,14 @@
 namespace Goldnead\StatamicFunnels\Tests\Feature;
 
 use Goldnead\BrandContext\Models\Brand;
+use Goldnead\StatamicFunnels\Events\FunnelFormSubmitted;
 use Goldnead\StatamicFunnels\Events\FunnelOfferAccepted;
 use Goldnead\StatamicFunnels\Events\FunnelSaved;
 use Goldnead\StatamicFunnels\Integrations\WebhookManager\FunnelsTrigger;
 use Goldnead\StatamicFunnels\Integrations\WebhookManager\WebhookManagerBridge;
+use Goldnead\StatamicFunnels\Integrations\WebhookManager\WebhookPayload;
 use Goldnead\StatamicFunnels\Listeners\AdvanceOnPayment;
+use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Support\GraphWriter;
 use Goldnead\StatamicFunnels\Tests\Support\WalksAFunnel;
@@ -253,9 +256,53 @@ class WebhookManagerBridgeTest extends TestCase
         $erst = $this->detected()['funnels.offer_accepted'][0];
 
         $this->assertSame($erst->payload['event_id'], $nochmal->payload['event_id']);
-        $this->assertSame('funnels.offer_accepted:'.$visit->funnel_id.':visit-'.$visit->id.':kasse:payment-'.$zahlung->id, $erst->payload['event_id']);
+        // Das Rezept der Suite: sha1(handle|<typ>:<id>|…|<Zeitpunkt der Zeile>).
+        $this->assertSame(
+            sha1('funnels.offer_accepted|visit:'.$visit->id.'|step:kasse|payment:'.$zahlung->id.'|'.$zahlung->paid_at->format(\DATE_ATOM)),
+            $erst->payload['event_id'],
+        );
         $this->assertSame($zahlung->paid_at->format(\DATE_ATOM), $nochmal->eventAt->format(\DATE_ATOM));
         $this->assertSame($zahlung->paid_at->format(\DATE_ATOM), $nochmal->payload['occurred_at']);
+    }
+
+    #[Test]
+    public function zwei_absendungen_in_derselben_sekunde_sind_zwei_momente(): void
+    {
+        $this->kasse();
+        Event::fake([TriggerDetected::class]);
+        $this->freezeSecond();
+
+        $this->bisZurKasse();
+        $this->asVisitor()->get('/f/kurs/anmeldung');
+        $this->asVisitor()->post('/f/kurs/capture_1/advance', ['email' => 'k@example.com']);
+
+        $ids = collect($this->detected()['funnels.form_submitted'])->map(fn ($e) => $e->payload['event_id']);
+
+        $this->assertCount(2, $ids);
+        $this->assertCount(2, $ids->unique());
+    }
+
+    #[Test]
+    public function kartendaten_und_geheimnisse_gehen_nie_mit_dem_formular(): void
+    {
+        $step = new FunnelStep(['node_key' => 'capture_1', 'type' => 'capture']);
+        $visit = new FunnelVisit(['email' => 'k@example.com']);
+        $visit->setRelation('funnel', null);
+
+        $payload = WebhookPayload::for('funnels.form_submitted', new FunnelFormSubmitted($visit, $step, [
+            'email' => 'k@example.com',
+            'phone' => '0171',
+            'card_number' => '4242',
+            'Kreditkarte' => '4242',
+            'cvc' => '123',
+            'cvv' => '123',
+            'bic' => 'DEUTDEFF',
+            'iban' => 'DE00',
+            'password' => 'x',
+            '_token' => 'x',
+        ]));
+
+        $this->assertSame(['email' => 'k@example.com', 'phone' => '0171'], $payload['values']);
     }
 
     #[Test]
@@ -275,7 +322,7 @@ class WebhookManagerBridgeTest extends TestCase
         FunnelOfferAccepted::dispatch($visit, $funnel->steps->firstWhere('node_key', 'kasse'), $payment);
 
         $this->assertSame(0, DB::table('webhook_deliveries')->count());
-        Log::shouldHaveReceived('warning')->withArgs(fn ($message) => str_contains($message, 'brand [999] does not exist'));
+        Log::shouldHaveReceived('warning')->withArgs(fn ($message, $context = []) => str_contains($message, 'brand that cannot be set') && ($context['brand_id'] ?? null) === 999);
     }
 
     #[Test]

@@ -591,7 +591,9 @@ if it is rolled back. **Order is not guaranteed** (retries, queues): sort by `oc
 deduplicate on `event_id`.
 
 Every payload starts with the frame the suite addons share: `event` (the handle), `event_id`
-(`<handle>:<funnel id>:visit-<id>:<step>…`, the same for the same moment however often it is sent),
+(`sha1(handle|visit:<id>|step:<key>|…|<time the row records>)`, the recipe of every suite addon; a
+form submission is counted, `submission:<n>`, so two in one second are two moments; the same for
+the same moment however often it is sent),
 `occurred_at` (when the moment happened, ISO 8601 with offset), `brand` (`{id, handle}` or `null`),
 `subject_type` (`funnel`) and `subject_id` (the funnel's id). Then:
 
@@ -606,12 +608,20 @@ Every payload starts with the frame the suite addons share: `event` (the handle)
 | Trigger | Fields after the frame |
 |---|---|
 | `funnels.step_entered` | `funnel`, `step`, `visit` |
-| `funnels.form_submitted` | `funnel`, `step`, `visit`, `form` (handle or null), `values` (what was typed, without `_`-fields or anything named like a password, token, secret or IBAN) |
+| `funnels.form_submitted` | `funnel`, `step`, `visit`, `form` (handle or null), `values` (what was typed, see below) |
 | `funnels.offer_accepted` | `funnel`, `step`, `visit`, `offer {handle}`, `payment` |
 | `funnels.offer_declined` | `funnel`, `step`, `visit`, `offer {handle}` (every "no") |
 | `funnels.upsell_declined` | `funnel`, `step`, `visit`, `offer {handle}` (the one declined), `bought` (the payment before it, or null). Fires together with `offer_declined` |
 | `funnels.completed` | `funnel`, `visit`, `completed_at` |
 | `funnels.funnel_saved` | `funnel` with `published`, `steps` (count) |
+
+**`values` is personal data.** It carries what the visitor typed on the capture step, under the
+field keys: `email`, `name`, the billing address (`street`, `postal_code`, `city`, `country`),
+`phone`, `company`, `vat_id`, the newsletter checkbox and every field the offer's checkout library
+defines. Held back are only framework fields (`_…`) and fields named like a secret or card data
+(password, token, secret, IBAN, BIC, card, Kredit(karte), CVC, CVV). Whoever points a hook at
+`funnels.form_submitted` hands this data to the receiver, which then processes it on your behalf:
+that needs a data processing agreement with the receiver, as with any other processor.
 
 ## Configuration
 

@@ -12,7 +12,11 @@
   README; the visit token never leaves the addon. A hook fires in the brand of the payment, else
   of the request. Optional: nothing of the webhook manager loads without it, proven by a boot test
   in its own process.
-- Every webhook payload carries a stable `event_id`, and `occurred_at` is the time of the moment.
+- `funnels.form_submitted` sends what the visitor typed (address, phone, VAT id, offer fields); the
+  README lists it and says the receiver needs a data processing agreement. Fields named like card
+  data or secrets (IBAN, BIC, card, Kredit, CVC, CVV, password, token) are held back.
+- Every webhook payload carries a stable `event_id` (`sha1(handle|visit:<id>|step:<key>|…)`, as in
+  every suite addon; form submissions counted, not timed), and `occurred_at` is the time of the moment.
   Sent after the transaction commits, never after a rollback; a payment whose brand does not exist
   sends nothing instead of reaching the current brand's hooks.
 - Config `statamic-funnels.webhook_manager.enabled` (env `STATAMIC_FUNNELS_WEBHOOK_MANAGER`, default

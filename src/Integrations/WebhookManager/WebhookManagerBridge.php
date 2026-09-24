@@ -103,6 +103,10 @@ class WebhookManagerBridge
         // is rolled back never happened. Outside a transaction this runs at
         // once.
         try {
+            // What makes the moment unique, read now: a form's count of
+            // earlier submissions changes as soon as the step writes its row.
+            WebhookPayload::remember($event);
+
             DB::afterCommit(fn () => $this->deliver($handle, $event));
         } catch (\Throwable $e) {
             Log::warning('Funnels → Webhook Manager: ['.$handle.'] not dispatched: '.$e->getMessage());
@@ -118,34 +122,15 @@ class WebhookManagerBridge
                 return;
             }
 
-            $fire = fn () => event(new TriggerDetected($trigger->build($event)));
-            $brandId = WebhookPayload::brandId($event);
-
-            if ($brandId === null || ! app()->bound('brand-context')) {
-                $fire();
-
-                return;
-            }
-
-            // A brand that cannot be made current is not replaced by the one
-            // that happens to be: that would hand this purchase to another
-            // brand's hooks. Not sent, and said so.
-            if (! self::brandExists($brandId)) {
-                Log::warning('Funnels → Webhook Manager: ['.$handle.'] not dispatched, its brand ['.$brandId.'] does not exist.');
-
-                return;
-            }
-
-            app('brand-context')->runFor($brandId, $fire);
+            // In the payment's brand, or not at all when that brand cannot be
+            // set: the only brand left would be whichever is current.
+            WebhookPayload::runForBrand(
+                WebhookPayload::brandId($event),
+                fn () => event(new TriggerDetected($trigger->build($event))),
+                $handle,
+            );
         } catch (\Throwable $e) {
             Log::warning('Funnels → Webhook Manager: ['.$handle.'] not dispatched: '.$e->getMessage());
         }
-    }
-
-    protected static function brandExists(int $brandId): bool
-    {
-        $model = 'Goldnead\\BrandContext\\Models\\Brand';
-
-        return class_exists($model) && $model::query()->whereKey($brandId)->exists();
     }
 }

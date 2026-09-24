@@ -13,21 +13,32 @@ use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicPayments\Models\Payment;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
  * What a webhook receiver gets for a funnel event.
  *
  * Chosen field by field. Never sent: the visit token (it is the visitor's
- * cookie, whoever holds it walks on as them), the visit's meta (billing
- * address, pending payments, consent records), a payment's provider ids,
- * mandate or card hint.
+ * cookie, whoever holds it walks on as them), the visit's meta (pending
+ * payments, consent records), a payment's mandate or card hint.
+ *
+ * **`form_submitted.values` is personal data.** It is what the visitor typed
+ * on the capture step: address, and whatever else the step asks (billing
+ * address, phone, company, VAT id, fields the offer defines). Only fields
+ * named like a secret or card data are held back (password, token, secret,
+ * IBAN, BIC, card, Kredit(karte), CVC, CVV) and framework fields (`_…`).
+ * Whoever points a hook at it hands that data to the receiver, which needs
+ * a data processing agreement like any other processor.
  *
  * Every payload has the frame its suite siblings share:
  *
- *     event        the trigger handle, e.g. funnels.upsell_declined
- *     occurred_at  ISO 8601 with offset
- *     brand        {id, handle} or null
+ *     event         the trigger handle, e.g. funnels.upsell_declined
+ *     event_id      sha1(handle|visit:<id>|step:<key>|…), stable per moment
+ *     occurred_at   the moment's own time, ISO 8601 with offset
+ *     brand         {id, handle} or null
+ *     subject_type  funnel
+ *     subject_id    the funnel's id
  *
  * Amounts are integer cents next to their currency.
  *
@@ -42,16 +53,14 @@ final class WebhookPayload
     {
         $body = self::body($event);
         $subject = $body['funnel']['id'] ?? null;
-        [$key, $at] = self::moment($event);
-        $at ??= now();
+        $parts = self::momentParts($event);
 
         return [
             'event' => $handle,
             // The same moment always gets the same id, however often it is
-            // sent: `<handle>:<subject_id>:<key>`, formed as in the payments
-            // addon. A receiver deduplicates on it; order is not guaranteed.
-            'event_id' => $handle.':'.$subject.':'.$key,
-            'occurred_at' => $at->format(\DATE_ATOM),
+            // sent. A receiver deduplicates on it; order is not guaranteed.
+            'event_id' => self::eventId($handle, $parts),
+            'occurred_at' => self::occurredAt($parts)->format(\DATE_ATOM),
             'brand' => self::brand(self::brandId($event)),
             // Named outright, as the payments addon does: without it the
             // manager files a `funnels.*` delivery by guessing.
@@ -62,43 +71,140 @@ final class WebhookPayload
     }
 
     /**
-     * What makes this moment this moment, and when it happened: the visit and
-     * the step, plus the row the moment wrote (arrival, decline, completion,
-     * the payment) for its time.
+     * Parts worked out when the event fired, for the moments whose parts
+     * depend on what is written afterwards (a form's count of earlier
+     * submissions). The bridge records them before it waits for the commit.
      *
-     * @return array{0: string, 1: \DateTimeInterface|null}
+     * @var \WeakMap<object, list<mixed>>|null
      */
-    public static function moment(object $event): array
+    protected static ?\WeakMap $remembered = null;
+
+    /** Work out and keep a moment's parts now, before anything else is written. */
+    public static function remember(object $event): void
     {
-        $atom = fn (?\DateTimeInterface $at): string => ($at ?? now())->format(\DATE_ATOM);
+        self::$remembered ??= new \WeakMap;
+        self::$remembered[$event] = self::momentParts($event);
+    }
+
+    /**
+     * `sha1(handle|part|part…)`, dates as DATE_ATOM: the same recipe in every
+     * addon of the suite.
+     *
+     * @param  list<mixed>  $parts
+     */
+    public static function eventId(string $handle, array $parts): string
+    {
+        return sha1(implode('|', array_map(
+            fn ($part) => $part instanceof \DateTimeInterface ? $part->format(\DATE_ATOM) : (string) $part,
+            [$handle, ...$parts],
+        )));
+    }
+
+    /**
+     * The first date among the parts, the moment's own time. The clock only
+     * where no row records one.
+     *
+     * @param  list<mixed>  $parts
+     */
+    public static function occurredAt(array $parts): \DateTimeInterface
+    {
+        foreach ($parts as $part) {
+            if ($part instanceof \DateTimeInterface) {
+                return $part;
+            }
+        }
+
+        return now();
+    }
+
+    /**
+     * What separates this moment from every other moment of the same kind:
+     * the visit and the step as `<type>:<id>`, then the time the row of the
+     * moment records (arrival, decline, completion, the payment). Never the
+     * time of sending.
+     *
+     * A form can be submitted twice within one second (a second capture step,
+     * a corrected address), so a submission is counted, not timed: the n-th
+     * submission of this step in this walk.
+     *
+     * @return list<mixed>
+     */
+    public static function momentParts(object $event): array
+    {
+        if (self::$remembered !== null && isset(self::$remembered[$event])) {
+            return self::$remembered[$event];
+        }
 
         if ($event instanceof FunnelSaved) {
-            return [$atom($event->funnel->updated_at), $event->funnel->updated_at];
+            return ['funnel:'.$event->funnel->id, $event->funnel->updated_at ?? ''];
         }
 
         $visit = $event->visit ?? null;
 
         if (! $visit instanceof FunnelVisit) {
-            return [$atom(null), null];
+            return [$event::class];
         }
 
-        $walk = 'visit-'.$visit->id;
+        $walk = 'visit:'.$visit->id;
         $step = $event->step ?? null;
-        $node = $step instanceof FunnelStep ? $walk.':'.$step->node_key : $walk;
-        $row = fn (string $kind) => $step instanceof FunnelStep
-            ? $visit->events()->where('node_key', $step->node_key)->where('event', $kind)->oldest('id')->first()?->created_at
+        $node = $step instanceof FunnelStep ? 'step:'.$step->node_key : 'step:';
+        $rows = fn (string $kind) => $step instanceof FunnelStep && $visit->exists
+            ? $visit->events()->where('node_key', $step->node_key)->where('event', $kind)
             : null;
 
         return match (true) {
-            $event instanceof FunnelCompleted => [$walk, $visit->completed_at],
-            $event instanceof FunnelStepEntered => [$node, $row('entered')],
-            $event instanceof FunnelOfferAccepted => [$node.':payment-'.$event->payment->id, $event->payment->paid_at],
-            $event instanceof FunnelOfferDeclined, $event instanceof UpsellDeclined => [$node, $row('declined')],
-            // Announced before the step writes its row; the visit was saved
-            // with the address a moment earlier.
-            $event instanceof FunnelFormSubmitted => [$node.':'.$atom($visit->updated_at), $visit->updated_at],
-            default => [$node.':'.$atom(null), null],
+            $event instanceof FunnelCompleted => [$walk, $visit->completed_at ?? 'completed'],
+            $event instanceof FunnelStepEntered => [$walk, $node, $rows('entered')?->oldest('id')->first()->created_at ?? 'entered'],
+            $event instanceof FunnelOfferAccepted => [$walk, $node, 'payment:'.$event->payment->id, $event->payment->paid_at ?? 'paid'],
+            $event instanceof FunnelOfferDeclined, $event instanceof UpsellDeclined => [$walk, $node, $rows('declined')?->oldest('id')->first()->created_at ?? 'declined'],
+            // Announced before the step writes its own row: the ones already
+            // there are the earlier submissions.
+            $event instanceof FunnelFormSubmitted => [$walk, $node, 'submission:'.((int) $rows('submitted')?->count() + 1), $visit->updated_at ?? ''],
+            default => [$walk, $node, $event::class],
         };
+    }
+
+    /**
+     * Run the hand-over as the brand the moment names, or not at all.
+     *
+     * A brand that cannot be made current (a payment stamped with a brand
+     * since deleted) is not replaced by whichever brand is current: its hooks
+     * belong to another tenant. Logged, not delivered. No brand named, or no
+     * brand-context installed: runs as it is. The same rule as the payments
+     * addon's `WebhookPayload::runForBrand()`.
+     *
+     * @param  \Closure(): void  $callback
+     */
+    public static function runForBrand(?int $brand, \Closure $callback, string $handle): bool
+    {
+        if (! $brand || ! app()->bound('brand-context')) {
+            $callback();
+
+            return true;
+        }
+
+        $ran = false;
+
+        try {
+            app('brand-context')->runFor($brand, function () use ($callback, &$ran): void {
+                $ran = true;
+                $callback();
+            });
+
+            return true;
+        } catch (Throwable $e) {
+            if ($ran) {
+                throw $e;
+            }
+
+            Log::warning('statamic-funnels: the moment names a brand that cannot be set; the webhook was not delivered rather than sent through another brand\'s hooks.', [
+                'trigger' => $handle,
+                'brand_id' => $brand,
+                'exception' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 
     /**
@@ -290,7 +396,7 @@ final class WebhookPayload
         return array_filter(
             $values,
             static fn (string $key): bool => ! str_starts_with($key, '_')
-                && preg_match('/password|passwort|token|secret|iban/i', $key) !== 1,
+                && preg_match('/password|passwort|token|secret|iban|bic|card|kredit|karte|cvc|cvv/i', $key) !== 1,
             ARRAY_FILTER_USE_KEY,
         );
     }
