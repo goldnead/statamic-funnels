@@ -39,7 +39,12 @@ return [
     'field_country' => 'Country (two letters, e.g. DE)',
     'continue' => 'Continue',
     'decline' => 'No thanks',
-    'order_button' => 'Order with payment obligation',
+    // Beschriftung des Knopfes, der eine Zahlung ausloest. Rechtlich
+    // vorgeschrieben (§ 312j Abs. 3 BGB), deshalb kein Werbetext: das
+    // `button_label` eines Angebots erreicht diesen Knopf nie. Im Projekt
+    // ueberschreibbar, aber nur mit gleich eindeutigem Wortlaut.
+    'order_button' => 'Order with obligation to pay',
+    'order_button_subscription' => 'Subscribe with obligation to pay',
     'order_confirmation' => 'I am placing a binding order and agree that delivery begins at once, which ends my right of withdrawal.',
 
     // Directly above the order button whenever the charge happens without new

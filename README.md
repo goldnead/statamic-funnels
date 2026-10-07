@@ -147,6 +147,19 @@ German law (§ 356 Abs. 5 BGB) lets the right of withdrawal lapse for digital co
 explicit agreement, and an agreement without a timestamp and the wording that was agreed to is
 worthless the moment the wording changes. The order button therefore records both.
 
+#### The button label is not the offer's to choose
+
+§ 312j Abs. 3 BGB requires the button that triggers a paid order to say, unambiguously, that the
+order obliges the buyer to pay. "Book package", "Sign up now" or "Add to my order" do not. The
+checkout button and the button that accepts an upsell or downsell (which charges the saved card
+with one click) therefore **always** print the translation `statamic-funnels::messages.order_button`
+("Zahlungspflichtig bestellen" / "Order with obligation to pay"), or `order_button_subscription`
+("Zahlungspflichtig abonnieren" / "Subscribe with obligation to pay") when every way to pay is an
+open-ended subscription. The offer's `button_label` is ignored on those buttons; it is still
+yours for buttons that pay nothing (a "continue to checkout" link, an offer card). You can override
+the translation in your project, but only with wording that is just as unambiguous. A custom
+template that prints its own button carries that responsibility itself.
+
 The wording comes from the offer's withdrawal terms (`Offer::withdrawalTerms()` in
 `statamic-offers`, when the installed version has them) with its version appended in brackets,
 or from this addon's language file otherwise. A buyer with a VAT id in their billing details gets
