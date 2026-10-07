@@ -119,6 +119,103 @@ class EditorTest extends TestCase
         $this->assertFalse($frisch->published, 'Der Rest des Graphen darf auch nicht durchgerutscht sein.');
     }
 
+    /**
+     * Ein Funnel mit Kasse, vor der niemand seine Adresse angibt, verkauft
+     * anonym (Staging, Zahlung 99). Live schalten geht dann nicht.
+     *
+     * @return array<string, mixed>
+     */
+    protected function graphOhneFormular(array $overrides = []): array
+    {
+        return $this->graph(array_merge([
+            'nodes' => [
+                ['node_key' => 'entry_1', 'type' => 'entry', 'label' => 'Start', 'config' => []],
+                ['node_key' => 'offer_1', 'type' => 'offer', 'label' => 'Angebot', 'config' => ['offer' => 'kurs-angebot']],
+                ['node_key' => 'finish_1', 'type' => 'finish', 'label' => 'Danke', 'config' => []],
+            ],
+            'edges' => [
+                ['from_node_key' => 'entry_1', 'to_node_key' => 'offer_1', 'from_output' => 'default'],
+                ['from_node_key' => 'offer_1', 'to_node_key' => 'finish_1', 'from_output' => 'accepted'],
+            ],
+        ], $overrides));
+    }
+
+    #[Test]
+    public function going_live_with_a_checkout_and_no_form_before_it_is_refused(): void
+    {
+        $funnel = $this->funnel();
+
+        $this->actingAs($this->user())
+            ->patchJson('/cp/utilities/funnels/'.$funnel->id, $this->graphOhneFormular())
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('published');
+
+        $frisch = $funnel->fresh(['steps']);
+        $this->assertFalse($frisch->published);
+        $this->assertNull($frisch->steps->firstWhere('node_key', 'offer_1'), 'Abgelehnt heisst: nichts gespeichert.');
+    }
+
+    #[Test]
+    public function a_draft_without_a_form_may_still_be_saved(): void
+    {
+        $funnel = $this->funnel();
+
+        $this->actingAs($this->user())
+            ->patch('/cp/utilities/funnels/'.$funnel->id, $this->graphOhneFormular(['published' => false]))
+            ->assertRedirect();
+
+        $this->assertFalse($funnel->fresh()->published);
+        $this->assertNotNull($funnel->fresh('steps')->steps->firstWhere('node_key', 'offer_1'));
+    }
+
+    #[Test]
+    public function a_form_after_the_checkout_does_not_count(): void
+    {
+        $funnel = $this->funnel();
+
+        $graph = $this->graphOhneFormular();
+        $graph['nodes'][] = ['node_key' => 'capture_1', 'type' => 'capture', 'label' => 'Anmeldung', 'config' => ['form' => 'kontakt']];
+        $graph['edges'][] = ['from_node_key' => 'offer_1', 'to_node_key' => 'capture_1', 'from_output' => 'declined'];
+
+        $this->actingAs($this->user())
+            ->patchJson('/cp/utilities/funnels/'.$funnel->id, $graph)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('published');
+    }
+
+    #[Test]
+    public function a_switched_off_form_does_not_count(): void
+    {
+        $funnel = $this->funnel();
+
+        $graph = $this->graph();
+        $graph['nodes'][1]['disabled'] = true;
+
+        $this->actingAs($this->user())
+            ->patchJson('/cp/utilities/funnels/'.$funnel->id, $graph)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('published');
+    }
+
+    #[Test]
+    public function a_funnel_without_any_checkout_needs_no_form(): void
+    {
+        $funnel = $this->funnel();
+
+        $graph = $this->graphOhneFormular();
+        $graph['nodes'] = [
+            ['node_key' => 'entry_1', 'type' => 'entry', 'label' => 'Start', 'config' => []],
+            ['node_key' => 'finish_1', 'type' => 'finish', 'label' => 'Danke', 'config' => []],
+        ];
+        $graph['edges'] = [['from_node_key' => 'entry_1', 'to_node_key' => 'finish_1', 'from_output' => 'default']];
+
+        $this->actingAs($this->user())
+            ->patch('/cp/utilities/funnels/'.$funnel->id, $graph)
+            ->assertRedirect();
+
+        $this->assertTrue($funnel->fresh()->published);
+    }
+
     #[Test]
     public function it_saves_the_whole_graph(): void
     {

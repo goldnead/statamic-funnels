@@ -163,6 +163,7 @@ class WalkTest extends TestCase
         $this->asVisitor()->get('/f/fruehlingskurs/angebot');
         $this->asVisitor()->post('/f/fruehlingskurs/capture_1/advance', ['email' => 'maria@example.com']);
 
+        $this->withBuyerAddress();
         $response = $this->asVisitor()->post('/f/fruehlingskurs/offer_1/advance', ['accept' => '1', 'confirmed' => '1']);
 
         $response->assertRedirectContains('checkout.example');
@@ -186,6 +187,7 @@ class WalkTest extends TestCase
 
         // The order button's own checkbox. Without it there is no record that
         // somebody clicked something labelled as an order.
+        $this->withBuyerAddress();
         $this->asVisitor()->post('/f/fruehlingskurs/offer_1/advance', ['accept' => '1'])
             ->assertSessionHasErrors('confirmed');
 
@@ -221,6 +223,7 @@ class WalkTest extends TestCase
         $this->offer();
         $this->asVisitor()->get('/f/fruehlingskurs/angebot');
 
+        $this->withBuyerAddress();
         $this->asVisitor()->post('/f/fruehlingskurs/offer_1/advance', ['accept' => '1', 'confirmed' => '1']);
 
         // Not the site's configured thank-you page: a buyer who returns outside
@@ -238,6 +241,7 @@ class WalkTest extends TestCase
         $this->funnel();
         $this->offer();
         $this->asVisitor()->get('/f/fruehlingskurs/angebot');
+        $this->withBuyerAddress();
         $this->asVisitor()->post('/f/fruehlingskurs/offer_1/advance', ['accept' => '1', 'confirmed' => '1']);
 
         $visit = FunnelVisit::first();

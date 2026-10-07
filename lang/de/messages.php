@@ -17,6 +17,7 @@ return [
     'draft' => 'Entwurf',
     'live' => 'Live',
     'saved' => 'Gespeichert.',
+    'checkout_needs_form' => 'Dieser Funnel kann nicht live gehen: Vor der Kasse (:steps) fehlt ein Formular-Schritt, der die E-Mail-Adresse erfragt. Ohne sie gäbe es keinen Käufer, keinen Zugang und keine Rechnung. Füge einen Formular-Schritt vor der Kasse ein oder speichere den Funnel als Entwurf.',
     'one_entry_only' => 'Ein Funnel hat genau einen Einstieg. Dieser hier hat :count. Entferne die überzähligen, bevor du speicherst.',
     'field_name' => 'Name',
     'field_email' => 'E-Mail',
@@ -54,6 +55,7 @@ return [
     'saved_card_digits' => 'Wird ohne erneute Karteneingabe von Ihrer Karte •••• :last4 abgebucht.',
     'saved_card_unnamed' => 'Wird ohne erneute Karteneingabe von dem Zahlungsmittel abgebucht, das Sie eben angegeben haben.',
     'offer_unavailable' => 'Dieses Angebot ist gerade nicht verfügbar.',
+    'buyer_email_missing' => 'Die Bestellung konnte nicht abgeschlossen werden, weil uns Ihre E-Mail-Adresse fehlt. Es wurde nichts abgebucht. Bitte versuchen Sie es später noch einmal oder melden Sie sich bei uns.',
 
     // Der Takt einer Ratenzahlung oder eines Abos, in Worten. Steht auf der
     // Kassenseite über dem Bestellknopf und ist dort eine Pflichtangabe

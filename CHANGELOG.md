@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.20.0 — 2026-10-07
+
+### Upgrading
+
+- No migration, no new permission.
+- **A funnel with a checkout can only go live when a form step sits before it.** The form step is
+  what asks for the email address; without it a payment went through with no buyer, no access grant
+  and an invoice with no recipient. Saving as a draft is still possible. A funnel that is already
+  live without such a step keeps running, but its checkout now refuses the payment (see Fixed), so
+  add a form step before the checkout.
+- New strings `checkout_needs_form` and `buyer_email_missing` in `messages.php` (de, en).
+
+### Fixed
+
+- The control panel refuses to publish a funnel whose checkout (offer step) has no enabled form step
+  on any path leading to it. Nothing is saved, and the editor shows the reason.
+- The checkout refuses to start a payment when the visit has no email address, before any payment is
+  created, and tells the visitor that nothing was charged. Declining an offer needs no address.
+- CI: the "Built assets are current" check was red on `main`. CI resolves the newest
+  `statamic-flow-canvas` (1.6.0), the committed `dist/` had been built against 1.5.0. Rebuilt.
+
 ## 1.19.0 — 2026-10-07
 
 ### Upgrading

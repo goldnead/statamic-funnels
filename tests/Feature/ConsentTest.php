@@ -150,6 +150,7 @@ class ConsentTest extends TestCase
         $expected = self::TERMS['waiver_text'].' [2026-09]';
 
         $this->asVisitor()->get('/f/kurs/angebot')->assertOk();
+        $this->withBuyerAddress();
         $this->asVisitor()->post('/f/kurs/offer_1/advance', [
             'accept' => '1', 'confirmed' => '1', 'consent_text' => $expected,
         ])->assertSessionHasNoErrors();
@@ -176,6 +177,7 @@ class ConsentTest extends TestCase
         $this->funnel();
 
         $this->asVisitor()->get('/f/kurs/angebot')->assertOk();
+        $this->withBuyerAddress();
         $this->asVisitor()->post('/f/kurs/offer_1/advance', [
             'accept' => '1', 'confirmed' => '1',
             // Die Fassung von gestern.
@@ -207,6 +209,7 @@ class ConsentTest extends TestCase
             ->assertSee('Ich bestelle als Unternehmer')
             ->assertDontSee('Ich verlange die sofortige Lieferung');
 
+        $this->withBuyerAddress();
         $this->asVisitor()->post('/f/kurs/offer_1/advance', [
             'accept' => '1', 'confirmed' => '1', 'consent_text' => self::TERMS['b2b_text'].' [2026-09]',
         ])->assertSessionHasNoErrors();
@@ -224,6 +227,7 @@ class ConsentTest extends TestCase
             ->assertOk()
             ->assertDontSee('name="confirmed"', false);
 
+        $this->withBuyerAddress();
         $this->asVisitor()->post('/f/kurs/offer_1/advance', ['accept' => '1'])->assertSessionHasNoErrors();
 
         $this->assertSame('Lieferung beginnt sofort. [1]', $this->consentOn(Payment::query()->sole())['text']);
@@ -237,6 +241,7 @@ class ConsentTest extends TestCase
         $this->funnel();
 
         $this->asVisitor()->get('/f/kurs/angebot')->assertOk();
+        $this->withBuyerAddress();
         $this->asVisitor()->post('/f/kurs/offer_1/advance', ['accept' => '1', 'confirmed' => '1'])->assertSessionHasNoErrors();
 
         $payment = Payment::query()->sole();
@@ -263,6 +268,7 @@ class ConsentTest extends TestCase
         $this->assertStringEndsWith('['.$terms['version'].']', $expected);
 
         $this->asVisitor()->get('/f/kurs/angebot')->assertOk()->assertSee($expected);
+        $this->withBuyerAddress();
         $this->asVisitor()->post('/f/kurs/offer_1/advance', [
             'accept' => '1', 'confirmed' => '1', 'consent_text' => $expected,
         ])->assertSessionHasNoErrors();
@@ -295,6 +301,7 @@ class ConsentTest extends TestCase
         $this->funnel();
 
         $this->asVisitor()->get('/f/kurs/angebot')->assertOk();
+        $this->withBuyerAddress();
         $this->asVisitor()->post('/f/kurs/offer_1/advance', ['accept' => '1', 'confirmed' => '1', 'consent_text' => self::TERMS['waiver_text'].' [2026-09]'])
             ->assertSessionHasNoErrors()
             ->assertRedirect();

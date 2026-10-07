@@ -393,6 +393,21 @@ class AdvanceController
             return back()->withErrors(['offer' => __('statamic-funnels::messages.offer_expired')]);
         }
 
+        // **Ohne Adresse wird nichts verkauft.** Ein Funnel ohne Formular-Schritt
+        // vor der Kasse (Staging, Zahlung 99) nahm Geld an, ohne Kaeufer,
+        // Zugang und Rechnungsempfaenger. Der Editor lehnt so einen Funnel beim
+        // Live-Schalten ab; das hier schuetzt den, der schon live ist. Vor
+        // jeder Zahlung, auch vor dem Ein-Klick-Kauf.
+        if (trim((string) $visit->email) === '') {
+            Log::error('statamic-funnels: eine Zahlung wurde verweigert, weil der Besuch keine E-Mail-Adresse hat (kein Formular-Schritt vor der Kasse?).', [
+                'funnel' => $funnel->handle,
+                'step' => $step->node_key,
+                'offer' => $step->config('offer'),
+            ]);
+
+            return back()->withErrors(['offer' => __('statamic-funnels::messages.buyer_email_missing')]);
+        }
+
         $offer = Offer::query()->where('handle', (string) $step->config('offer'))->first();
 
         if (! $offer || ! $offer->isSellable()) {

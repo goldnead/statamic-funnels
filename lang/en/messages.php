@@ -17,6 +17,7 @@ return [
     'draft' => 'Draft',
     'live' => 'Live',
     'saved' => 'Saved.',
+    'checkout_needs_form' => 'This funnel cannot go live: before the checkout (:steps) there is no form step that asks for the email address. Without it there would be no buyer, no access and no invoice. Add a form step before the checkout or save the funnel as a draft.',
     'one_entry_only' => 'A funnel has exactly one entry. This one has :count. Remove the extra ones before saving.',
     'field_name' => 'Name',
     'field_email' => 'Email',
@@ -54,6 +55,7 @@ return [
     'saved_card_digits' => 'Charged to your card •••• :last4, without entering card details again.',
     'saved_card_unnamed' => 'Charged to the payment method you just used, without entering card details again.',
     'offer_unavailable' => 'This offer is not available right now.',
+    'buyer_email_missing' => 'The order could not be completed because we do not have your email address. Nothing was charged. Please try again later or get in touch.',
 
     // The rhythm of an instalment plan or subscription, in words. Stands above
     // the order button, where it is a required statement rather than a label.

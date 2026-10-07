@@ -5,6 +5,7 @@ namespace Goldnead\StatamicFunnels\Http\Controllers\Cp;
 use Goldnead\StatamicFunnels\Contracts\ConversionSender;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
+use Goldnead\StatamicFunnels\Support\BuyerAddress;
 use Goldnead\StatamicFunnels\Support\FunnelSettings;
 use Goldnead\StatamicFunnels\Support\GraphWriter;
 use Goldnead\StatamicFunnels\Support\MailStats;
@@ -424,6 +425,7 @@ class FunnelsController extends CpController
         ]);
 
         $this->guardTracking($funnel, $data);
+        $this->guardBuyerAddress($data);
 
         if (array_key_exists('settings', $data)) {
             $this->saveSettings($funnel, (array) $data['settings']);
@@ -434,6 +436,30 @@ class FunnelsController extends CpController
         $this->writer->write($funnel, $data);
 
         return back()->with('message', __('statamic-funnels::messages.saved'));
+    }
+
+    /**
+     * Live geht nur, wer vor jeder Kasse seine Adresse erhebt.
+     *
+     * Ein Entwurf darf unfertig gespeichert werden, nur das Veroeffentlichen
+     * wird abgelehnt. Gespeichert wird dann nichts, weil das Schreiben ein
+     * Ersetzen ist und ein halber Graph schlimmer waere als keiner.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function guardBuyerAddress(array $data): void
+    {
+        if (empty($data['published'])) {
+            return;
+        }
+
+        $offen = BuyerAddress::checkoutsWithoutForm((array) ($data['nodes'] ?? []), (array) ($data['edges'] ?? []));
+
+        if ($offen !== []) {
+            throw ValidationException::withMessages([
+                'published' => __('statamic-funnels::messages.checkout_needs_form', ['steps' => implode(', ', $offen)]),
+            ]);
+        }
     }
 
     /**
