@@ -56,6 +56,7 @@ class WalkSecurityTest extends TestCase
     {
         $this->funnel();
         $this->asVisitor()->get('/f/kurs/angebot');
+        $this->withBuyerAddress();
 
         $this->asVisitor()->post('/f/kurs/offer_1/advance', ['accept' => '1', 'confirmed' => '1']);
         $this->asVisitor()->post('/f/kurs/offer_1/advance', ['accept' => '1', 'confirmed' => '1']);

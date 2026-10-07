@@ -2,6 +2,7 @@
 
 namespace Goldnead\StatamicFunnels\Tests;
 
+use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\ServiceProvider;
 use Goldnead\StatamicFunnels\Tests\Support\FakeGateway;
 use Goldnead\StatamicPayments\Contracts\PaymentGateway;
@@ -88,6 +89,16 @@ abstract class TestCase extends AddonTestCase
         // gets skipped.
         $this->gateway = new FakeGateway;
         $this->app->instance(PaymentGateway::class, $this->gateway);
+    }
+
+    /**
+     * Die Adresse, die ein Formular-Schritt vor der Kasse erhoben haette. Die
+     * Kasse verkauft nichts ohne sie; Tests, die nur den Kauf pruefen und den
+     * Formular-Schritt nicht durchlaufen, tragen sie hier nach.
+     */
+    protected function withBuyerAddress(string $email = 'kaeuferin@example.com'): void
+    {
+        FunnelVisit::query()->update(['email' => $email]);
     }
 
     protected function tearDown(): void

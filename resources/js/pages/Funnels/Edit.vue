@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { Head, router } from '@statamic/cms/inertia';
+import { toast } from '@statamic/cms/api';
 import {
     Header, Button, Badge, Field, Input, Select, Textarea, Switch, Heading,
     PublishContainer, PublishFields, PublishFieldsProvider,
@@ -367,6 +368,12 @@ function save() {
         onSuccess: () => {
             // Gespeichert und ohne Fehler: der Stack darf zu.
             if (!Object.keys(props.errors ?? {}).some((key) => key.startsWith('settings.'))) showSettings.value = false;
+        },
+        // Abgelehnt heisst: gespeichert ist nichts. Der Grund (zwei Einstiege,
+        // eine Kasse ohne Formular davor) steht sonst nirgends auf der Seite.
+        onError: (errors) => {
+            const first = Object.entries(errors ?? {}).find(([key]) => key === 'published' || key === 'nodes');
+            if (first) toast.error(Array.isArray(first[1]) ? first[1][0] : first[1]);
         },
         onFinish: () => { saving.value = false; },
     });
