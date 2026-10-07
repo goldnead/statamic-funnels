@@ -133,7 +133,7 @@
         </form>
     {{ /if }}
 
-    {{# An offer step. The order button carries its own wording and its own
+    {{# An offer step. The order button carries its own (legally fixed) wording and its own
         confirmation, because saving the card details does not save the consent. #}}
     {{ if step:type == "offer" }}
         {{ if offer }}
@@ -349,7 +349,11 @@
                         ist. Ohne es lehnt die Kasse ab. #}}
                     {{ funnel:captcha }}
 
-                    <button type="submit">{{ if offer:button_label }}{{ offer:button_label | sanitize }}{{ else }}{{ trans key="statamic-funnels::messages.order_button" }}{{ /if }}</button>
+                    {{# Immer die Uebersetzung, nie das `button_label` des Angebots: dieser Knopf
+                        loest eine Zahlung aus, und § 312j Abs. 3 BGB verlangt, dass er
+                        das unmissverstaendlich sagt. Gilt auch fuer die Annahme eines
+                        Upsells, der ohne weitere Eingabe abbucht. #}}
+                    <button type="submit">{{ if offer:order_kind == "subscription" }}{{ trans key="statamic-funnels::messages.order_button_subscription" }}{{ else }}{{ trans key="statamic-funnels::messages.order_button" }}{{ /if }}</button>
                 </form>
 
                 <form method="POST" action="{{ action }}" class="funnel-offer__decline">

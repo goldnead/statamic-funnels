@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.19.0 — 2026-10-07
+
+### Upgrading
+
+- No migration, no new permission.
+- **The order button no longer shows the offer's `button_label`.** If your offers carry wording such
+  as "Book package" or "Add to my order", the checkout and upsell buttons now read "Zahlungspflichtig
+  bestellen" (en: "Order with obligation to pay"). If you copied `step.antlers.html` into your
+  project, make the same change there: the button that pays must say so (§ 312j Abs. 3 BGB).
+- Override `order_button` / `order_button_subscription` in your project's language files only with
+  wording that is equally unambiguous.
+
+### Fixed
+
+- The checkout button and the upsell/downsell accept button printed the offer's free-text
+  `button_label`, which in practice is advertising copy. They now always print the translated,
+  legally clear wording. The English default changed from "Order with payment obligation" to
+  "Order with obligation to pay".
+
+### Added
+
+- `order_button_subscription` ("Zahlungspflichtig abonnieren" / "Subscribe with obligation to pay"),
+  used when every way to pay is an open-ended subscription. A mix of one-off and recurring options
+  keeps the general wording, because the radio changes without a reload and the button does not.
+- `offer:order_kind` (`order` or `subscription`) in the step context.
+
 ## 1.18.0 — 2026-09-24
 
 ### Upgrading

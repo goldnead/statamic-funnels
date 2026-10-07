@@ -39,7 +39,12 @@ return [
     'field_country' => 'Land (zwei Buchstaben, z. B. DE)',
     'continue' => 'Weiter',
     'decline' => 'Nein danke',
+    // Beschriftung des Knopfes, der eine Zahlung ausloest. Rechtlich
+    // vorgeschrieben (§ 312j Abs. 3 BGB), deshalb kein Werbetext: das
+    // `button_label` eines Angebots erreicht diesen Knopf nie. Im Projekt
+    // ueberschreibbar, aber nur mit gleich eindeutigem Wortlaut.
     'order_button' => 'Zahlungspflichtig bestellen',
+    'order_button_subscription' => 'Zahlungspflichtig abonnieren',
     'order_confirmation' => 'Ich bestelle kostenpflichtig und stimme zu, dass die Lieferung sofort beginnt. Damit erlischt mein Widerrufsrecht.',
 
     // Steht unmittelbar ueber dem Bestellknopf, wenn ohne erneute

@@ -57,14 +57,16 @@ class KassenAusgabeTest extends TestCase
     }
 
     #[Test]
-    public function der_knopftext_des_angebots_ist_maskiert(): void
+    public function der_knopftext_des_angebots_erreicht_den_bestellknopf_nicht(): void
     {
+        // Frueher maskiert ausgegeben, seit 1.19 gar nicht mehr: der Knopf, der
+        // eine Zahlung ausloest, traegt nur die Uebersetzung (§ 312j Abs. 3 BGB).
         $this->kasse(['button_label' => 'Kaufen <img src=x onerror=alert(3)>']);
         $this->bisZurKasse();
 
         $this->asVisitor()->get('/f/kurs/kasse')->assertOk()
             ->assertDontSee('<img src=x onerror', false)
-            ->assertSee('Kaufen &lt;img', false);
+            ->assertDontSee('Kaufen');
     }
 
     /** Markdown mit einem `javascript:`-Link, einem Zitat und einem Autolink. */

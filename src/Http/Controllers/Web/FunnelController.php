@@ -536,6 +536,24 @@ class FunnelController
     }
 
     /**
+     * `subscription` when the only way to pay is an open-ended subscription,
+     * otherwise `order`. A mix of one-off and recurring options keeps the
+     * general wording: the radio changes without a reload, the button does not.
+     */
+    protected function orderKind(Offer $offer): string
+    {
+        $options = $offer->pricingOptions();
+
+        if ($options !== []) {
+            $all = collect($options)->every(fn (array $option) => $option['type'] === Offer::PRICING_SUBSCRIPTION);
+
+            return $all ? 'subscription' : 'order';
+        }
+
+        return $offer->isRecurring() && ! ($offer->times > 0) ? 'subscription' : 'order';
+    }
+
+    /**
      * The template a step names, if it is allowed to name it.
      *
      * A step's `template` is typed in the Control Panel by somebody with the
@@ -872,6 +890,12 @@ class FunnelController
             'compare_at_local' => $offer->compareAtLocal(),
             'currency' => $offer->currency(),
             'button_label' => $offer->button_label,
+            // Which translated order button the page shows. The offer's own
+            // `button_label` is advertising copy and never reaches a button
+            // that triggers a payment (§ 312j Abs. 3 BGB). `subscription`
+            // only when every way to pay is an open-ended subscription, so the
+            // wording is never wrong whichever radio is ticked.
+            'order_kind' => $this->orderKind($offer),
             // The tick-boxes beside the order button. Named by the offer, not
             // by the page, so a template cannot add one — and a bump that has
             // been switched off simply stops appearing.
