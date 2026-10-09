@@ -113,7 +113,7 @@
 
         try { table = JSON.parse(box.getAttribute('data-funnel-due-table')); } catch (e) { return; }
 
-        var form = box.closest('form');
+        var form = document.querySelector('.funnel-offer__accept');
 
         if (!form) return;
 
@@ -126,8 +126,9 @@
 
             if (!row) return;
 
+            // A bump that is hidden is also unticked (see Bumps below), so the
+            // ticked ones are exactly the ones in the basket.
             var ticked = Array.prototype.slice.call(form.querySelectorAll('input[name="bumps[]"]:checked'))
-                .filter(function (box) { return !box.closest('[hidden]'); })
                 .map(function (box) { return box.value; })
                 .sort();
             var cent = row[ticked.join(',')];
