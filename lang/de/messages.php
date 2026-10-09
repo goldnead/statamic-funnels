@@ -102,6 +102,8 @@ return [
     'pricing_option_legend' => 'Zahlweise',
     'total_label' => 'Gesamtpreis',
     'trial_days_label' => 'Testphase in Tagen:',
+    'due_today' => 'Heute fällig',
+    'due_after' => 'Danach :amount :currency :interval, erstmals am :date.',
     'countdown_remaining' => 'Endet in',
     'countdown_over' => 'Dieses Angebot ist abgelaufen.',
     'stats_split' => 'A/B-Test',

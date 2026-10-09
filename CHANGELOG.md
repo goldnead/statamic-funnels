@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.21.0 — 2026-10-09
+
+### Fixed
+
+- **The checkout showed the offer price where the first payment books something else.** A subscription
+  with a paid first month showed "total today 65 EUR" while the provider took 45 EUR, and a 10 EUR coupon
+  on a 37 EUR offer showed 37 EUR while 27 EUR was booked (staging test purchase, 09.10.2026; § 312j BGB wants
+  the amount above the button to be the one charged). The offer array now carries `first_payment_cent`,
+  `first_payment`, `first_payment_local`, `first_payment_differs` and `first_payment_table`, worked out by
+  `Basket::firstPaymentCent()` (statamic-offers 1.15), the same calculation the order uses: paid trial,
+  prefilled coupon, setup fee and ticked bumps. The table holds the amount for every pricing option and every
+  set of bumps, so `funnels.js` looks the current choice up and does no sums. Each pricing option has
+  `first_payment_local`.
+- The default checkout shows "Due today" and, for a trial, what follows and from when ("Then 65.00 EUR monthly,
+  first charge on 08.11.2026"). A trial plan carries `starts_on_local`. Without a trial or coupon the line
+  stays hidden and the page is unchanged.
+
+### Upgrading
+
+- Requires `goldnead/statamic-offers` ^1.15. No migration. A custom checkout template should print
+  `offer:first_payment_local` instead of the offer price as "total today".
+- A code typed into the coupon field (not prefilled from a link) still comes off at payment; the page cannot
+  know it before the order is placed.
+
 ## 1.20.0 — 2026-10-07
 
 ### Upgrading
