@@ -97,6 +97,50 @@
         });
     })();
 
+    // ------------------------------------------------------------ Due today
+    //
+    // „Heute faellig" is what the first payment books. The server works it out
+    // for every pricing option and every set of ticked bumps and hands the
+    // table over; this only looks the current choice up. It does no sums, so it
+    // cannot disagree with what the checkout charges.
+    (function due() {
+        var box = document.querySelector('[data-funnel-due-table]');
+        var target = document.querySelector('[data-funnel-due-target]');
+
+        if (!box || !target) return;
+
+        var table;
+
+        try { table = JSON.parse(box.getAttribute('data-funnel-due-table')); } catch (e) { return; }
+
+        var form = box.closest('form');
+
+        if (!form) return;
+
+        var currency = (target.textContent.match(/\S+$/) || [''])[0];
+        var lang = document.documentElement.lang || undefined;
+
+        function lookup() {
+            var radio = form.querySelector('input[name="pricing_option"]:checked');
+            var row = table[radio ? radio.value : ''];
+
+            if (!row) return;
+
+            var ticked = Array.prototype.slice.call(form.querySelectorAll('input[name="bumps[]"]:checked'))
+                .filter(function (box) { return !box.closest('[hidden]'); })
+                .map(function (box) { return box.value; })
+                .sort();
+            var cent = row[ticked.join(',')];
+
+            if (typeof cent !== 'number') return;
+
+            target.textContent = (cent / 100).toLocaleString(lang, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + currency;
+        }
+
+        form.addEventListener('change', function () { window.setTimeout(lookup, 0); });
+        lookup();
+    })();
+
     // ---------------------------------------------------------------- Bumps
     //
     // A bump can belong to some pricing options only, or hang on another bump.

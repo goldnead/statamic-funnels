@@ -211,7 +211,7 @@
                                             noch einmal „520,00 EUR" liest sich wie ein zweiter
                                             Preis und nicht wie derselbe. #}}
                                         {{ if plan }}
-                                            <span class="funnel-pricing-option__plan">{{ if plan:times }}{{ plan:times | sanitize }} × {{ amount_local | sanitize }} {{ currency | sanitize }}, {{ plan:interval_label | sanitize }}{{ if plan:total_local }} · {{ trans key="statamic-funnels::messages.total_label" }} {{ plan:total_local | sanitize }} {{ currency | sanitize }}{{ /if }}{{ else }}{{ amount_local | sanitize }} {{ currency | sanitize }}, {{ plan:interval_label | sanitize }}{{ /if }}{{# Die Testphase gehoert zur Preisangabe, nicht daneben: § 312j Abs. 2 BGB will sie dort, wo bestellt wird. #}}{{ if plan:trial_days }} · {{ trans key="statamic-funnels::messages.trial_days_label" }} {{ plan:trial_days | sanitize }}{{ /if }}</span>
+                                            <span class="funnel-pricing-option__plan">{{ if plan:times }}{{ plan:times | sanitize }} × {{ amount_local | sanitize }} {{ currency | sanitize }}, {{ plan:interval_label | sanitize }}{{ if plan:total_local }} · {{ trans key="statamic-funnels::messages.total_label" }} {{ plan:total_local | sanitize }} {{ currency | sanitize }}{{ /if }}{{ else }}{{ amount_local | sanitize }} {{ currency | sanitize }}, {{ plan:interval_label | sanitize }}{{ /if }}{{# Die Testphase gehoert zur Preisangabe, nicht daneben: § 312j Abs. 2 BGB will sie dort, wo bestellt wird. #}}{{ if plan:trial_days }} · {{ trans key="statamic-funnels::messages.trial_days_label" }} {{ plan:trial_days | sanitize }}{{ /if }}{{ if plan:starts_on_local }} · {{ trans key="statamic-funnels::messages.due_after" amount="{amount_local}" currency="{currency}" interval="{plan:interval_label}" date="{plan:starts_on_local}" }}{{ /if }}</span>
                                         {{ else }}
                                             <span class="funnel-pricing-option__price">{{ amount_local | sanitize }} {{ currency | sanitize }}</span>
                                         {{ /if }}
@@ -283,6 +283,22 @@
                             <input type="text" name="coupon" value="{{ offer:coupon_code | sanitize }}" autocomplete="off" spellcheck="false"{{ if field_errors:coupon }} aria-invalid="true"{{ /if }}>
                         </label>
                         {{ if field_errors:coupon }}<p class="funnel-offer__field-error" role="alert">{{ field_errors:coupon | sanitize }}</p>{{ /if }}
+                    {{ /if }}
+
+                    {{# **Heute faellig: was die erste Zahlung bucht.** Nur da,
+                        wo sie vom Preis abweicht (bezahlter Testmonat, Gutschein);
+                        sonst bleibt die Seite, wie sie war. Die Zahl kommt vom
+                        Server (`Basket::firstPaymentCent()`), das Skript schlaegt
+                        sie je Zahlweise und Haekchen in der Tabelle nach.
+                        § 312j BGB: der Betrag ueber dem Knopf ist der, der
+                        abgebucht wird. #}}
+                    {{ if offer:first_payment_table }}
+                        <p class="funnel-offer__due"{{ unless offer:first_payment_differs }} hidden{{ /unless }} data-funnel-due="{{ offer:first_payment_cent | sanitize }}" data-funnel-due-table="{{ offer:first_payment_table | sanitize }}">
+                            {{ trans key="statamic-funnels::messages.due_today" }}: <strong data-funnel-due-target>{{ offer:first_payment_local | sanitize }} {{ offer:currency | sanitize }}</strong>
+                        </p>
+                        {{ if offer:plan:starts_on_local }}
+                            <p class="funnel-offer__due-after">{{ trans key="statamic-funnels::messages.due_after" amount="{offer:amount_local}" currency="{offer:currency}" interval="{offer:plan:interval_label}" date="{offer:plan:starts_on_local}" }}</p>
+                        {{ /if }}
                     {{ /if }}
 
                     {{# Womit abgebucht wird, unmittelbar ueber dem Knopf.

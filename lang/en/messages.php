@@ -100,6 +100,8 @@ return [
     'pricing_option_legend' => 'How you pay',
     'total_label' => 'Total',
     'trial_days_label' => 'Trial days:',
+    'due_today' => 'Due today',
+    'due_after' => 'Then :amount :currency :interval, first charge on :date.',
     'countdown_remaining' => 'Ends in',
     'countdown_over' => 'This offer has closed.',
     'stats_split' => 'Split test',

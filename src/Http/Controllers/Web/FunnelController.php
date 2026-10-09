@@ -22,6 +22,7 @@ use Goldnead\StatamicFunnels\Support\OrderSummary;
 use Goldnead\StatamicFunnels\Support\PaymentsDoor;
 use Goldnead\StatamicFunnels\Support\PreviewToken;
 use Goldnead\StatamicFunnels\Support\SavedCard;
+use Goldnead\StatamicFunnels\Support\Sibling;
 use Goldnead\StatamicFunnels\Support\Split;
 use Goldnead\StatamicFunnels\Support\SplitResults;
 use Goldnead\StatamicFunnels\Support\Tracking;
@@ -875,6 +876,12 @@ class FunnelController
         $gewaehlteOption = collect($optionen)->firstWhere('key', $gewaehlt);
         $gewaehltePreis = $gewaehlteOption ? Offer::localise($gewaehlteOption['amount_cent']).' '.$offer->currency() : null;
 
+        $bumps = $this->bumpsFor($step, $offer, $visit);
+        $code = config('statamic-funnels.coupons', true)
+            ? (is_string(old('coupon')) ? old('coupon') : CheckoutInputs::prefilledCoupon(request(), $visit, $offer))
+            : null;
+        $faellig = $this->firstPaymentFor($offer, $bumps, $code, $keys, $gewaehlt);
+
         return [
             'handle' => $offer->handle,
             'buy_handle' => $prefix.$offer->handle,
@@ -903,16 +910,34 @@ class FunnelController
             // Mit den Regeln des Kassenschritts (F1): wer den Bump nicht sehen
             // soll, bekommt ihn gar nicht erst; Zahlweise und Abhaengigkeit
             // reisen als Angaben fuer das Skript mit, das ein- und ausblendet.
-            'bumps' => $this->bumpsFor($step, $offer, $visit),
+            'bumps' => $bumps,
             // Whether the page should show a field for a code at all.
             'coupons' => (bool) config('statamic-funnels.coupons', true),
             // Was im Code-Feld steht: der Code aus dem Gutschein-Link, oder
             // einer, der seit einem frueheren Kauf fuer den ganzen Lauf gilt.
             // Vorbelegt, nicht eingeloest — das macht erst der Korb.
             // Nach einem Fehler steht das Getippte wieder da.
-            'coupon_code' => config('statamic-funnels.coupons', true)
-                ? (is_string(old('coupon')) ? old('coupon') : CheckoutInputs::prefilledCoupon(request(), $visit, $offer))
-                : null,
+            'coupon_code' => $code,
+            // **„Heute faellig": was die erste Zahlung bucht**, nicht der
+            // Angebotspreis. Ein Abo mit bezahltem Testmonat bucht den
+            // Testbetrag, ein Gutschein mindert die Zahlung; wer den
+            // Angebotspreis als „Gesamt heute" zeigt, nennt eine Zahl, die
+            // nicht abgebucht wird (Staging-Testkauf 09.10.2026: 65 statt 45,
+            // 37 statt 27 EUR; § 312j BGB). Die Zahl kommt aus
+            // `Basket::firstPaymentCent()`, derselben Rechnung wie die Kasse.
+            //
+            // Null, wenn das installierte offers sie nicht kennt oder der
+            // Betrag erst gewaehlt wird („Zahl, was du willst"): dann steht
+            // nichts da, statt einer erfundenen Zahl.
+            'first_payment_cent' => $faellig['cent'] ?? null,
+            'first_payment' => isset($faellig['cent']) ? number_format($faellig['cent'] / 100, 2, '.', '') : null,
+            'first_payment_local' => isset($faellig['cent']) ? Offer::localise($faellig['cent']) : null,
+            // Fuer das Skript: je Zahlweise und je Auswahl an Bumps die Zahl,
+            // als JSON. Das Skript rechnet nicht, es schlaegt nach.
+            'first_payment_table' => isset($faellig['table']) ? json_encode($faellig['table'], JSON_UNESCAPED_UNICODE | JSON_FORCE_OBJECT) : null,
+            // Weicht die erste Zahlung vom Preis ab? Dann braucht die Kasse
+            // die Zeile; sonst bleibt die Seite, wie sie war.
+            'first_payment_differs' => (bool) ($faellig['differs'] ?? false),
             // „Zahl, was du willst": Grenzen und Vorschlag fuer das Betragsfeld.
             // Null bei einem festen Preis.
             'pwyw' => CheckoutInputs::payWhatYouWant($offer),
@@ -953,6 +978,10 @@ class FunnelController
                 'amount_local' => Offer::localise($option['amount_cent']),
                 'currency' => $offer->currency(),
                 'plan' => $this->planFor($prefix.$offer->handle.':'.$option['key'], $offer->currency()),
+                // Was diese Zahlweise heute bucht (ohne Bumps), aus derselben Tabelle.
+                'first_payment_local' => isset($faellig['table'][$option['key']][''])
+                    ? Offer::localise($faellig['table'][$option['key']][''])
+                    : null,
                 // Vorausgewaehlt: nach einer Ablehnung die zuletzt gewaehlte,
                 // sonst die erste.
                 'checked' => $option['key'] === $gewaehlt,
@@ -960,6 +989,102 @@ class FunnelController
             // Der Preis oben: der der gewaehlten Zahlweise, sonst der des Angebots.
             'price_local' => $gewaehltePreis ?? trim(($offer->amountLocal() ?? '').' '.$offer->currency()),
         ];
+    }
+
+    /**
+     * Was die erste Zahlung bucht, fuer jede Auswahl, die die Kasse zulaesst.
+     *
+     * Gefragt wird der **Korb**, derselbe, den die Kasse beim Bestellen baut
+     * (`Basket::firstPaymentCent()`): Testmonat, Gutschein, Einrichtungsgebuehr
+     * und Bumps sind dort gerechnet, nicht hier ein zweites Mal. Hier wird nur
+     * jede Auswahl einmal durchgefragt, damit das Skript nachschlagen kann statt
+     * zu rechnen.
+     *
+     * Die Tabelle: Zahlweise (`''` bei einem Angebot ohne Zahlweisen) → die
+     * angekreuzten Bumps, sortiert und mit Komma verbunden (`''` fuer keinen)
+     * → Cent. Mehr als sechs Bumps ergeben keine Tabelle (64 Faelle und mehr
+     * sind keine Kasse mehr); dann zeigt die Seite keine Zeile statt einer
+     * halben.
+     *
+     * @param  list<array<string, mixed>>  $bumps  die Bumps, wie `bumpsFor()` sie liefert
+     * @param  list<string>  $optionKeys
+     * @return array{cent: int, table: array<string, array<string, int>>, differs: bool}|null
+     */
+    protected function firstPaymentFor(Offer $offer, array $bumps, ?string $code, array $optionKeys, ?string $gewaehlt): ?array
+    {
+        if (CheckoutInputs::isPayWhatYouWant($offer)) {
+            return null;
+        }
+
+        $handles = array_values(array_unique(array_column($bumps, 'handle')));
+
+        if (count($handles) > 6) {
+            return null;
+        }
+
+        // Alle Teilmengen der Bumps, als sortierte Listen.
+        $mengen = [[]];
+
+        foreach ($handles as $handle) {
+            foreach ($mengen as $menge) {
+                $mengen[] = array_merge($menge, [$handle]);
+            }
+        }
+
+        $zahlweisen = $optionKeys === [] ? [''] : $optionKeys;
+        $tabelle = [];
+        $differs = false;
+
+        try {
+            foreach ($zahlweisen as $zahlweise) {
+                foreach ($mengen as $menge) {
+                    sort($menge);
+                    $korb = CheckoutInputs::basket($offer, $menge, $code, $zahlweise === '' ? null : $zahlweise, null, null);
+                    $cent = Sibling::call($korb, 'firstPaymentCent');
+
+                    if (! is_int($cent)) {
+                        // Ein offers ohne `firstPaymentCent()`: keine halbe Tabelle.
+                        return null;
+                    }
+
+                    $tabelle[$zahlweise][implode(',', $menge)] = $cent;
+                }
+
+                $preis = $zahlweise === ''
+                    ? $offer->effectiveAmountCent()
+                    : ($offer->pricingOption($zahlweise)['amount_cent'] ?? null);
+
+                if (($tabelle[$zahlweise][''] ?? null) !== $preis) {
+                    $differs = true;
+                }
+            }
+        } catch (Throwable $e) {
+            // Ein Korb, der sich nicht bauen laesst (Land, Betrag): die Seite
+            // zeigt dann keine Zeile. Gebucht wird ohnehin erst, wenn der Korb
+            // beim Bestellen dieselbe Pruefung besteht.
+            Log::info('statamic-funnels: die erste Zahlung liess sich fuer die Kasse nicht ausrechnen.', [
+                'offer' => $offer->handle,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        $zeile = $tabelle[$gewaehlt ?? ''] ?? reset($tabelle);
+        $vorbelegt = array_values(array_filter($handles, function (string $handle) use ($bumps) {
+            foreach ($bumps as $bump) {
+                if ($bump['handle'] === $handle) {
+                    return ($bump['preselected'] ?? false) === true;
+                }
+            }
+
+            return false;
+        }));
+        sort($vorbelegt);
+
+        $cent = $zeile[implode(',', $vorbelegt)] ?? $zeile[''] ?? null;
+
+        return is_int($cent) ? ['cent' => $cent, 'table' => $tabelle, 'differs' => $differs] : null;
     }
 
     /**
@@ -1069,6 +1194,11 @@ class FunnelController
             // Test anfasst.
             'times_remaining' => is_int($times) ? max(0, $times - 1) : null,
             'trial_days' => $plan['trial_days'] ?: null,
+            // Der Tag der ersten regulaeren Abbuchung, wenn eine Testphase
+            // davorliegt: payments beginnt die Vereinbarung `trial_days` nach
+            // der ersten Zahlung. Zur Anzeige „danach 65 EUR ab dem ...";
+            // ohne Datum waere die Preisangabe unvollstaendig.
+            'starts_on_local' => $plan['trial_days'] ? now()->addDays((int) $plan['trial_days'])->isoFormat('L') : null,
             'total' => $gesamt === null ? null : number_format($gesamt / 100, 2, '.', ''),
             'total_local' => Offer::localise($gesamt),
             'currency' => $currency,
