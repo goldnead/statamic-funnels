@@ -5,6 +5,7 @@ namespace Goldnead\StatamicFunnels\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 
 /**
@@ -49,6 +50,31 @@ class FunnelVisit extends Model
             'event' => $event,
             'payload' => $payload === [] ? null : $payload,
         ]);
+    }
+
+    /**
+     * Record an event that may exist only once per visit and step.
+     *
+     * Returns whether this call wrote it. The unique index on `once_key`
+     * decides, not a read before the write: two requests that both looked and
+     * found nothing still produce one row, and the loser learns it lost.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function recordOnce(string $nodeKey, string $event, array $payload = []): bool
+    {
+        try {
+            $this->events()->create([
+                'node_key' => $nodeKey,
+                'event' => $event,
+                'payload' => $payload === [] ? null : $payload,
+                'once_key' => $this->getKey().':'.$nodeKey.':'.$event,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            return false;
+        }
+
+        return true;
     }
 
     /** Whether this visitor has already been through a step. */

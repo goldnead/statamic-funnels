@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### The lead magnet step
+
+A new step type **Lead magnet** delivers a free resource through `goldnead/statamic-lead-magnets` and
+carries on afterwards. It exists only when that addon is installed (a `suggest`, not a `require`).
+
+- With double opt-in the step waits ("check your inbox") and the confirmation link leads back into the
+  funnel, to the next step. The return link is signed, names the visit, and works in another browser;
+  the step asks lead-magnets whether the grant stands before moving anyone on. Without double opt-in the
+  visitor goes straight on.
+- The newsletter tick box of the form step is passed on only when it was ticked.
+- Two new step events, `lead_magnet_requested` and `lead_magnet_confirmed`. The step card, `StepStats`
+  (`requested`, `confirmed`, on this step type only) and the Insights step-events breakdown count them
+  apart.
+- New signed route `statamic-funnels.lead-magnet.resume` (`/f/{funnel}/_resume/{step}/{visit}`).
+- New config `integrations.lead_magnets` (default on). Needs a lead-magnets release with the return URL.
+- The return link expires (confirmation window plus one hour) and binds a browser once.
+- "Confirmed" is claimed with a unique index (`funnel_step_events.once_key`, **new migration, run
+  `php artisan migrate`**), so a mail scanner and the click together record and advance once.
+- **Saving no longer deletes steps the site cannot draw.** A step of a type that is not registered (an
+  addon removed or downgraded) used to disappear with its paths when the funnel was saved in the Control
+  Panel. It now stays untouched, and the editor lists it. Applies to every step type.
+- Rebuilt `dist/` (editor stats on the card, the notice).
+- CI: a job installs the real lead-magnets and runs the contract tests, failing on skips.
+
 ## 1.21.0 — 2026-10-09
 
 ### Fixed

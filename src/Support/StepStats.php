@@ -62,7 +62,18 @@ class StepStats
             $leadsOn = ($targets[$key] ?? []) !== [];
             $continued = self::continuedFrom($funnel, $key, $targets[$key] ?? []);
 
-            $out[$key] = [
+            // A lead magnet step has two moments that must not be one number:
+            // the funnel asked for the resource, and the address was proven.
+            // The gap between them is people who asked and never clicked. Only
+            // on that step type, so the shape of every other card is unchanged.
+            $leadMagnet = $step->type === 'lead_magnet'
+                ? [
+                    'requested' => $counts[$key][FunnelStepEvent::LEAD_MAGNET_REQUESTED] ?? 0,
+                    'confirmed' => $counts[$key][FunnelStepEvent::LEAD_MAGNET_CONFIRMED] ?? 0,
+                ]
+                : [];
+
+            $out[$key] = $leadMagnet + [
                 'visits' => $visits,
                 'continued' => $continued,
                 // Whether there is anywhere to continue *to*. A thank-you page

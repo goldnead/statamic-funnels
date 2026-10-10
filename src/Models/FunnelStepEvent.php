@@ -25,6 +25,12 @@ class FunnelStepEvent extends Model
 
     public const COMPLETED = 'completed';
 
+    /** The funnel asked lead-magnets for the resource. */
+    public const LEAD_MAGNET_REQUESTED = 'lead_magnet_requested';
+
+    /** The address was proven (or no proof was asked for) and the visitor went on. */
+    public const LEAD_MAGNET_CONFIRMED = 'lead_magnet_confirmed';
+
     protected $guarded = [];
 
     protected function casts(): array

@@ -456,6 +456,24 @@
         {{ /if }}
     {{ /if }}
 
+    {{# Der Lead-Magnet-Schritt: kein Knopf. Weiter geht es, wenn lead-magnets
+        den Zugang bestaetigt hat; dann leitet diese Adresse von selbst
+        weiter. #}}
+    {{ if step:type == "lead_magnet" && lead_magnet }}
+        <div class="funnel-lead-magnet" data-status="{{ lead_magnet:status | sanitize }}" role="status">
+            {{ if lead_magnet:status == "waiting" }}
+                <p>{{ trans key="statamic-funnels::messages.lead_magnet_waiting" }} <strong>{{ lead_magnet:email | sanitize }}</strong>.</p>
+                <p>{{ trans key="statamic-funnels::messages.lead_magnet_waiting_hint" }}</p>
+            {{ elseif lead_magnet:status == "no_email" }}
+                <p>{{ trans key="statamic-funnels::messages.lead_magnet_no_email" }}</p>
+            {{ elseif lead_magnet:status == "failed" }}
+                <p>{{ trans key="statamic-funnels::messages.lead_magnet_failed" }}</p>
+            {{ else }}
+                <p>{{ trans key="statamic-funnels::messages.lead_magnet_unavailable" }}</p>
+            {{ /if }}
+        </div>
+    {{ /if }}
+
     {{# Any other step just carries on. #}}
     {{ if step:type == "entry" || step:type == "page" }}
         <form method="POST" action="{{ action }}">

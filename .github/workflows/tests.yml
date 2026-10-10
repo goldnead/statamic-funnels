@@ -116,6 +116,45 @@ jobs:
 
       - run: ./vendor/bin/phpstan analyse --no-progress
 
+  # The lead magnet step against the REAL goldnead/statamic-lead-magnets.
+  #
+  # The main suite runs against a stand-in (the sibling is a `suggest`, not a
+  # `require`), and a stand-in can do less than what it stands for. This job
+  # installs the real package next to the addon and runs the contract test;
+  # --fail-on-skipped makes a test that silently skipped count as a failure,
+  # because a skipped contract proves nothing.
+  #
+  # Which lead-magnets: the branch `feat/funnel-return` while it exists (the
+  # return URL is not released yet), otherwise `main`. Once a release carries
+  # it, require that release here instead.
+  lead-magnets:
+    runs-on: ubuntu-latest
+    name: Real lead-magnets contract
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, intl, fileinfo
+          coverage: none
+
+      - run: composer install --prefer-dist --no-interaction
+
+      - name: Add the real lead-magnets
+        run: |
+          branch=main
+          if git ls-remote --exit-code --heads https://github.com/goldnead/statamic-lead-magnets.git feat/funnel-return >/dev/null; then
+            branch=feat/funnel-return
+          fi
+          composer config --no-plugins allow-plugins.pixelfear/composer-dist-plugin false
+          composer config repositories.lead-magnets vcs https://github.com/goldnead/statamic-lead-magnets
+          composer require --dev "goldnead/statamic-lead-magnets:dev-${branch}" --no-interaction
+
+      - name: Contract tests
+        run: vendor/bin/phpunit tests/Feature/LeadMagnetsRealPackageTest.php --fail-on-skipped
+
   dist:
     runs-on: ubuntu-latest
     name: Built assets are current

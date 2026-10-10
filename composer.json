@@ -24,6 +24,7 @@
     "goldnead/statamic-webhook-manager": "^2.9"
   },
   "suggest": {
+    "goldnead/statamic-lead-magnets": "Adds the \"Lead magnet\" step: a free resource delivered with double opt-in and a signed link, after which the funnel carries on",
     "goldnead/statamic-webhook-manager": "Send funnel events (step entered, offer accepted or declined, upsell declined, ...) to outbound webhooks",
     "goldnead/statamic-insights": "Show funnel visits, completions, the completion rate and step events on the Insights dashboard, split by funnel and by kind of step",
     "spatie/browsershot": "Photograph every page step after a save, so the editor's cards show a picture of the page (needs a Chromium on the host)"
