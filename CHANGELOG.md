@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.22.0 — 2026-10-10
 
 ### The lead magnet step
 
