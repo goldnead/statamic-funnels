@@ -35,10 +35,27 @@ class GraphWriter
 
             $keys = [];
 
+            // Steps this site cannot draw right now: their addon was removed
+            // or downgraded. They are not the editor's to delete. It has no
+            // form for them and cannot have changed them, and dropping them
+            // on a save would take the step and its paths with it, silently,
+            // for a site that only unplugged an addon for an afternoon.
+            $unavailable = $funnel->steps()->get()
+                ->reject(fn ($step) => $this->registry->has($step->type))
+                ->keyBy('node_key');
+
             foreach ($data['nodes'] ?? [] as $node) {
+                // A stored node of an unavailable type stays exactly as it is,
+                // whatever the payload says about it.
+                if ($unavailable->has($node['node_key'])) {
+                    $keys[] = $node['node_key'];
+
+                    continue;
+                }
+
                 // A type nobody registered is dropped rather than stored. A
                 // stored node the runtime cannot render is a page that 500s in
-                // the middle of somebody's purchase.
+                // the middle of somebody's purchase. (Only a *new* one: see above.)
                 if (! $this->registry->has($node['type'])) {
                     continue;
                 }
@@ -66,9 +83,27 @@ class GraphWriter
 
             // Gone from the canvas, gone from the table — one model at a time,
             // so the step's own `deleted` hook removes its picture with it.
+            // Except what the canvas could not show.
+            $keys = array_values(array_unique(array_merge($keys, $unavailable->keys()->all())));
+
             $funnel->steps()->whereNotIn('node_key', $keys ?: ['__none__'])->get()->each->delete();
 
+            // Paths of an unavailable step the payload did not carry stay.
+            // When the payload does carry the step, the canvas drew it and the
+            // payload's paths are the truth.
+            $drawn = collect($data['nodes'] ?? [])->pluck('node_key')->all();
+            $kept = $funnel->edges()->get()->filter(
+                fn ($edge) => (($unavailable->has($edge->from_node_key) && ! in_array($edge->from_node_key, $drawn, true))
+                    || ($unavailable->has($edge->to_node_key) && ! in_array($edge->to_node_key, $drawn, true)))
+                    && in_array($edge->from_node_key, $keys, true)
+                    && in_array($edge->to_node_key, $keys, true),
+            )->map(fn ($edge) => $edge->only(['from_node_key', 'to_node_key', 'from_output']));
+
             $funnel->edges()->delete();
+
+            foreach ($kept as $edge) {
+                $funnel->edges()->create($edge);
+            }
 
             foreach ($data['edges'] ?? [] as $edge) {
                 // An edge to or from a node that is not there any more would be
@@ -77,7 +112,7 @@ class GraphWriter
                     continue;
                 }
 
-                $funnel->edges()->create([
+                $funnel->edges()->firstOrCreate([
                     'from_node_key' => $edge['from_node_key'],
                     'to_node_key' => $edge['to_node_key'],
                     'from_output' => $edge['from_output'] ?? 'default',

@@ -196,7 +196,7 @@ class LeadMagnetsBridge
             'newsletter' => $this->newsletter($visit),
             // Only where there is a click to come back from.
             'return_url' => (bool) $resource->requires_confirmation
-                ? URL::signedRoute('statamic-funnels.lead-magnet.resume', [
+                ? URL::temporarySignedRoute('statamic-funnels.lead-magnet.resume', $this->linkLifetime(), [
                     'funnel' => $funnel->handle,
                     'nodeKey' => $step->node_key,
                     'visit' => $visit->getKey(),
@@ -232,9 +232,15 @@ class LeadMagnetsBridge
         $grant->refresh();
 
         if ($grant->isRedeemable()) {
-            $next = $this->walk->advance($visit, $step, 'default', FunnelStepEvent::LEAD_MAGNET_CONFIRMED, [
-                'grant' => $grant->id,
-            ]);
+            // Claimed in the database, not checked: a mail scanner and the
+            // reader's click can arrive together, and both would have looked
+            // before either wrote. Whoever loses the claim finds the way on
+            // and moves nothing, so mail nodes on this output fire once.
+            if (! $visit->recordOnce($step->node_key, FunnelStepEvent::LEAD_MAGNET_CONFIRMED, ['grant' => $grant->id])) {
+                return $this->outcome(self::STATUS_CONFIRMED, $email, $funnel->nextStep($step->node_key, 'default'));
+            }
+
+            $next = $this->walk->advance($visit, $step, 'default', FunnelStepEvent::LEAD_MAGNET_CONFIRMED, [], recorded: true);
 
             return $this->outcome(self::STATUS_CONFIRMED, $email, $next);
         }
@@ -246,6 +252,19 @@ class LeadMagnetsBridge
         // Revoked, scheduled, expired: the sibling will not deliver, and
         // waiting for a click that cannot succeed would be a lie.
         return $this->outcome(self::STATUS_UNAVAILABLE, $email);
+    }
+
+    /**
+     * How long the return link lives: the confirmation window of lead-magnets
+     * plus an hour, because the link is only ever followed after a click that
+     * lead-magnets accepted. A link that never expires is a standing key to a
+     * visit. Where lead-magnets has no window (0 = never), thirty days.
+     */
+    protected function linkLifetime(): \DateTimeInterface
+    {
+        $hours = (int) config('lead-magnets.requests.confirmation_ttl_hours', 72);
+
+        return now()->addHours($hours > 0 ? $hours + 1 : 24 * 30);
     }
 
     /** The visit's address, or null. Never taken from the request. */

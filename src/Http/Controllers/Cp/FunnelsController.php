@@ -122,6 +122,9 @@ class FunnelsController extends CpController
                 ])->values()->all(),
             ],
             'library' => $this->registry->library(),
+            // Stored steps whose type this site cannot draw (an addon removed
+            // or downgraded). They survive saving; the editor says they are there.
+            'unavailable' => $this->registry->unavailable($funnel->steps),
             // Where people stop. Passed with the page so the canvas can show it
             // on the cards themselves: a drop-off number in a report somewhere
             // else is a number nobody looks at.
@@ -624,6 +627,7 @@ class FunnelsController extends CpController
             ],
             'ui' => [
                 'preview' => __('statamic-funnels::messages.preview'),
+                'unavailable' => __('statamic-funnels::messages.steps_unavailable'),
                 'draft' => __('statamic-funnels::messages.draft'),
                 'live' => __('statamic-funnels::messages.live'),
                 'handle' => __('statamic-funnels::messages.field_handle'),

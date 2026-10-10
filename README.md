@@ -102,9 +102,18 @@ private disk, count.
   `lead_magnet_requested` and `lead_magnet_confirmed`, also split out in the Insights breakdown of
   step events.
 
-A saved lead magnet step on a site where lead-magnets is not installed does not break the walk: the page
-shows "not available" and stops. The editor drops nodes of an unknown type when the funnel is saved, as it
-does for every unregistered type, so **removing lead-magnets and then saving a funnel removes the step**.
+A saved lead magnet step on a site where lead-magnets is not installed (or too old) does not break the walk:
+the page shows "not available" and stops. Saving the funnel in the Control Panel **keeps** such a step
+and its paths untouched (this holds for every step type a site cannot draw, not only this one); the editor
+lists them in a notice above the canvas. Because the editor cannot show them, it cannot delete them either:
+remove the step by reinstalling the addon first.
+
+The return link expires with lead-magnets' confirmation window (`lead-magnets.requests.confirmation_ttl_hours`,
+72 hours, plus one; thirty days where that window is off). It also binds a browser **once**: the first browser
+that follows it takes the visit over (the cookie, or the single page after it if that browser already walks
+another visit); a later copy of the link moves the walk on but gives nobody the visit, with the address and
+billing data on it. The person who follows the link has just passed the confirmation, which rests on the same
+mailbox.
 
 Needs a lead-magnets release with the return URL (`Support\ReturnUrl`); an older one counts as not
 installed. In your own templates: `funnel:lead_magnet:status` is `waiting`, `no_email`, `unavailable` or

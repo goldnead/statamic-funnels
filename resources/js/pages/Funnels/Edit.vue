@@ -23,6 +23,8 @@ import FunnelSettingsStack from '../../components/FunnelSettingsStack.vue';
 const props = defineProps({
     funnel: { type: Object, required: true },
     library: { type: Object, required: true },
+    // Steps stored in the funnel whose type this site cannot draw right now.
+    unavailable: { type: Array, default: () => [] },
     saveUrl: { type: String, required: true },
     indexUrl: { type: String, required: true },
     publicUrl: { type: String, required: true },
@@ -581,6 +583,16 @@ function entryFieldsFor(handle) {
          Statamic puts around the page. -->
     <div class="flex h-[calc(100vh-4rem)] flex-col" data-funnel-editor data-flow-full-bleed>
         <Head :title="[funnel.title, __('statamic-funnels::messages.utility_title')]" />
+
+        <p
+            v-if="unavailable.length"
+            class="mx-4 mt-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+            role="status"
+            data-funnel-unavailable
+        >
+            {{ t('ui', 'unavailable', 'Not available on this site:') }}
+            {{ unavailable.map((step) => `${step.label || step.node_key} (${step.type})`).join(', ') }}
+        </p>
 
         <Header :title="funnel.title" icon="hierarchy">
             <Badge v-if="!graph.published" color="amber" :text="t('ui', 'draft', 'Draft')" />

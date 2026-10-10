@@ -190,9 +190,13 @@ class FunnelWalk
     }
 
     /** Move on, and say by which way out. */
-    public function advance(FunnelVisit $visit, FunnelStep $from, string $output, string $event, array $payload = []): ?FunnelStep
+    public function advance(FunnelVisit $visit, FunnelStep $from, string $output, string $event, array $payload = [], bool $recorded = false): ?FunnelStep
     {
-        $visit->record($from->node_key, $event, $payload);
+        // `$recorded`: the caller already wrote the event (atomically, with
+        // `FunnelVisit::recordOnce()`) and must not have it written twice.
+        if (! $recorded) {
+            $visit->record($from->node_key, $event, $payload);
+        }
 
         // Die Mails, die an diesem Ausgang haengen. **Der Ausgang wird genommen**
         // ist der eine Moment, an dem ein Mail-Knoten feuert — `weiter` auf

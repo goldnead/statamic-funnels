@@ -54,7 +54,7 @@ class LeadMagnetResumeController
 
         abort_unless($walk !== null, 404);
 
-        $this->bind($request, $walk);
+        $this->bind($request, $walk, $nodeKey);
 
         $outcome = $this->bridge->resume($model, $step, $walk);
 
@@ -71,17 +71,50 @@ class LeadMagnetResumeController
         return Embed::protect($response, $model, false);
     }
 
-    /** Let this browser continue the visit named in the link. */
-    protected function bind(Request $request, FunnelVisit $visit): void
+    /**
+     * Let this browser continue the visit named in the link, **once**.
+     *
+     * Whoever follows the link has just passed lead-magnets' confirmation, so
+     * they hold the reader's mailbox, which is the same authority that
+     * confirmation rests on. The first browser therefore takes the walk over,
+     * and the link is spent for that: a later copy (browser history, a proxy
+     * log, a mail forwarded after the reader clicked) moves the walk on but
+     * hands the visit, with the address and billing data on it, to nobody.
+     * It is the simplest rule that keeps the other-browser case working, which
+     * is the reason for the link to name a visit in the first place.
+     */
+    protected function bind(Request $request, FunnelVisit $visit, string $nodeKey): void
     {
+        $meta = (array) ($visit->meta ?? []);
+
+        if ($request->cookie(FunnelWalk::COOKIE) === $visit->token) {
+            // The browser that filled the form needs no cookie, but it was the first.
+            $this->spend($visit, $meta, $nodeKey);
+
+            return;
+        }
+
+        if (($meta['lead_magnet'][$nodeKey]['bound'] ?? false) === true) {
+            return;
+        }
+
+        $this->spend($visit, $meta, $nodeKey);
+
         if (! $this->walk->hasCookie()) {
             $this->walk->queueCookie((string) $visit->token);
 
             return;
         }
 
-        if ($request->cookie(FunnelWalk::COOKIE) !== $visit->token && $request->hasSession()) {
+        if ($request->hasSession()) {
             $request->session()->flash(FunnelWalk::RETURNED, $visit->token);
         }
+    }
+
+    /** @param  array<string, mixed>  $meta */
+    protected function spend(FunnelVisit $visit, array $meta, string $nodeKey): void
+    {
+        $meta['lead_magnet'][$nodeKey]['bound'] = true;
+        $visit->forceFill(['meta' => $meta])->save();
     }
 }

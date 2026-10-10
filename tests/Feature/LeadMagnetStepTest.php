@@ -7,6 +7,7 @@ use Goldnead\LeadMagnets\Models\Grant;
 use Goldnead\LeadMagnets\Models\Resource;
 use Goldnead\StatamicFunnels\Integrations\LeadMagnetsBridge;
 use Goldnead\StatamicFunnels\Models\Funnel;
+use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
@@ -123,6 +124,11 @@ class LeadMagnetStepTest extends TestCase
     {
         $this->defaultCookies = [];
         $this->unencryptedCookies = [];
+
+        // The test application outlives the request, and Laravel's cookie
+        // queue with it: what the last response queued would be sent to the
+        // next browser too. In production every request starts empty.
+        app('cookie')->flushQueuedCookies();
 
         return $this;
     }
@@ -545,6 +551,89 @@ class LeadMagnetStepTest extends TestCase
         $funnel->update(['published' => false]);
         $draft = URL::signedRoute('statamic-funnels.lead-magnet.resume', ['funnel' => 'kurs', 'nodeKey' => 'lm_1', 'visit' => $visit->id]);
         $this->get($draft)->assertNotFound();
+    }
+
+    // ---------------------------------------------------- Ablauf, Einmaligkeit, Atomares
+
+    #[Test]
+    public function the_resume_link_expires_with_the_confirmation_window(): void
+    {
+        $this->resource();
+        $this->funnelWithGift();
+        $this->submitForm();
+        $this->asVisitor()->get('/f/kurs/geschenk');
+
+        $url = Grant::query()->sole()->meta['return_url'];
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+        $this->assertArrayHasKey('expires', $query, 'a link that never expires is a standing key');
+
+        // 72 hours of confirmation plus an hour of slack, not a day and not a year.
+        $hours = ($query['expires'] - time()) / 3600;
+        $this->assertGreaterThan(72, $hours);
+        $this->assertLessThanOrEqual(73.01, $hours);
+
+        // And past it, the funnel refuses.
+        $this->travel(74)->hours();
+        $this->otherBrowser()->get($url)->assertForbidden();
+    }
+
+    #[Test]
+    public function the_confirmation_is_claimed_atomically_so_a_racing_second_request_changes_nothing(): void
+    {
+        $this->resource();
+        $funnel = $this->funnelWithGift();
+        $this->submitForm();
+        $this->asVisitor()->get('/f/kurs/geschenk');
+        LeadMagnets::confirm(Grant::query()->sole());
+
+        $visit = $this->visit();
+        $step = $funnel->stepByKey('lm_1');
+
+        // Two requests that both passed the "already confirmed?" check before
+        // either had written: the check is made blind here, the claim is not.
+        $bridge = new class(app(FunnelWalk::class)) extends LeadMagnetsBridge
+        {
+            protected function hasEvent(FunnelVisit $visit, FunnelStep $step, string $event): bool
+            {
+                return $event === FunnelStepEvent::LEAD_MAGNET_REQUESTED;
+            }
+        };
+
+        $first = $bridge->resume($funnel, $step, $visit);
+        $second = $bridge->resume($funnel, $step, $visit->fresh());
+
+        $this->assertSame('confirmed', $first['status']);
+        $this->assertSame('confirmed', $second['status']);
+        $this->assertSame(1, $visit->events()->where('event', FunnelStepEvent::LEAD_MAGNET_CONFIRMED)->count());
+        // The walk was advanced once: one arrival-free "submitted" would show twice otherwise.
+        $this->assertSame(1, FunnelStepEvent::query()
+            ->where('visit_id', $visit->id)->where('node_key', 'lm_1')->where('event', FunnelStepEvent::LEAD_MAGNET_CONFIRMED)->count());
+    }
+
+    #[Test]
+    public function the_resume_link_binds_a_browser_only_once(): void
+    {
+        $this->resource();
+        $this->funnelWithGift();
+        $this->submitForm();
+        $this->asVisitor()->get('/f/kurs/geschenk');
+        $grant = Grant::query()->sole();
+        LeadMagnets::confirm($grant);
+
+        // The first browser to follow it takes the walk over, as the reader's own.
+        $first = $this->otherBrowser()->get($grant->meta['return_url']);
+        $first->assertRedirect('/f/kurs/danke');
+        $this->assertNotNull($first->getCookie(FunnelWalk::COOKIE, false));
+
+        // A copy of the link (history, a log, a forwarded mail opened later)
+        // moves the walk on at most; it does not hand the visit to a new browser.
+        $second = $this->otherBrowser()->get($grant->meta['return_url']);
+        $second->assertRedirect('/f/kurs/danke');
+        $this->assertNull($second->getCookie(FunnelWalk::COOKIE, false));
+
+        // That browser has no visit: the page after is a fresh walk, with none of the data.
+        $this->get('/f/kurs/danke')->assertOk()->assertDontSee('maria@example.com');
     }
 
     #[Test]

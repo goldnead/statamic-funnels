@@ -186,6 +186,26 @@ class LeadMagnetsRealPackageTest extends TestCase
     }
 
     #[Test]
+    public function the_return_link_expires_and_a_second_click_changes_nothing(): void
+    {
+        $this->gift(true);
+        $this->submit();
+        $this->asVisitor()->get('/f/kurs/geschenk');
+
+        $grant = Grant::query()->sole();
+
+        // The sibling accepted a link with an expiry (its own signature check ran).
+        $this->assertStringContainsString('expires=', $grant->meta['return_url']);
+
+        $this->get(route('lead-magnets.confirm', ['token' => $this->tokenFromMail()]))->assertStatus(303);
+
+        $this->get($grant->meta['return_url'])->assertRedirect('/f/kurs/danke');
+        $this->get($grant->meta['return_url'])->assertRedirect('/f/kurs/danke');
+
+        $this->assertSame(1, FunnelVisit::query()->sole()->events()->where('event', FunnelStepEvent::LEAD_MAGNET_CONFIRMED)->count());
+    }
+
+    #[Test]
     public function a_resource_without_double_opt_in_goes_straight_on(): void
     {
         $this->gift(false);

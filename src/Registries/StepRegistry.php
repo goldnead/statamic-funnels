@@ -3,6 +3,7 @@
 namespace Goldnead\StatamicFunnels\Registries;
 
 use Goldnead\StatamicFunnels\Integrations\LeadMagnetsBridge;
+use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Nodes\AccountStep;
 use Goldnead\StatamicFunnels\Nodes\CaptureStep;
 use Goldnead\StatamicFunnels\Nodes\EntryStep;
@@ -12,6 +13,7 @@ use Goldnead\StatamicFunnels\Nodes\MailStep;
 use Goldnead\StatamicFunnels\Nodes\OfferStep;
 use Goldnead\StatamicFunnels\Nodes\PageStep;
 use Goldnead\StatamicFunnels\Nodes\StepType;
+use Goldnead\StatamicFunnels\Support\GraphWriter;
 use InvalidArgumentException;
 
 /**
@@ -60,6 +62,31 @@ class StepRegistry
     public function has(string $handle): bool
     {
         return isset($this->types[$handle]);
+    }
+
+    /**
+     * Stored steps this site has no type for right now.
+     *
+     * A sibling that was removed or downgraded takes its step types with it.
+     * The steps stay in the database ({@see GraphWriter}),
+     * and the editor says so instead of drawing a card nobody can open.
+     *
+     * @param  iterable<FunnelStep>  $steps
+     * @return list<array{node_key: string, label: string|null, type: string}>
+     */
+    public function unavailable(iterable $steps): array
+    {
+        $out = [];
+
+        foreach ($steps as $step) {
+            if ($this->has($step->type)) {
+                continue;
+            }
+
+            $out[] = ['node_key' => $step->node_key, 'label' => $step->label, 'type' => $step->type];
+        }
+
+        return $out;
     }
 
     /** @return array<string, class-string<StepType>> */

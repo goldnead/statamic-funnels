@@ -81,13 +81,18 @@ namespace Goldnead\LeadMagnets\Support {
         {
             public static function accept(mixed $url): ?string
             {
-                if (! is_string($url) || $url === '') {
+                if (! is_string($url) || $url === '' || strlen($url) > 2048) {
                     return null;
                 }
 
-                $host = parse_url($url, PHP_URL_HOST);
+                $parts = parse_url($url);
 
-                if (! is_string($host) || strcasecmp($host, request()->getHost()) !== 0) {
+                if ($parts === false
+                    || ! in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https'], true)
+                    || ! isset($parts['host'])
+                    || isset($parts['user'])
+                    || isset($parts['pass'])
+                    || strcasecmp($parts['host'], request()->getHost()) !== 0) {
                     return null;
                 }
 

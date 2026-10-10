@@ -94,6 +94,7 @@ return [
     'preview_responsive' => 'Frei',
     'stats_visits' => 'Besucher, die hier ankamen',
     'stats_continued' => 'Besucher, die von hier weitergingen',
+    'steps_unavailable' => 'Auf dieser Site nicht verfügbar (das Addon fehlt oder ist zu alt). Bleibt beim Speichern unverändert, ist aber nicht bearbeitbar:',
     'stats_requested' => 'Geschenk angefordert',
     'stats_confirmed' => 'Adresse bestätigt',
     'lead_magnet_waiting' => 'Schau in dein Postfach. Wir haben eine Nachricht geschickt an',

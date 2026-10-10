@@ -17,8 +17,14 @@ carries on afterwards. It exists only when that addon is installed (a `suggest`,
   apart.
 - New signed route `statamic-funnels.lead-magnet.resume` (`/f/{funnel}/_resume/{step}/{visit}`).
 - New config `integrations.lead_magnets` (default on). Needs a lead-magnets release with the return URL.
-- Removing lead-magnets and saving a funnel drops its lead magnet steps, like any unregistered type.
-- Rebuilt `dist/` (editor stats on the card).
+- The return link expires (confirmation window plus one hour) and binds a browser once.
+- "Confirmed" is claimed with a unique index (`funnel_step_events.once_key`, **new migration, run
+  `php artisan migrate`**), so a mail scanner and the click together record and advance once.
+- **Saving no longer deletes steps the site cannot draw.** A step of a type that is not registered (an
+  addon removed or downgraded) used to disappear with its paths when the funnel was saved in the Control
+  Panel. It now stays untouched, and the editor lists it. Applies to every step type.
+- Rebuilt `dist/` (editor stats on the card, the notice).
+- CI: a job installs the real lead-magnets and runs the contract tests, failing on skips.
 
 ## 1.21.0 — 2026-10-09
 

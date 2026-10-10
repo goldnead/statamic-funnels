@@ -93,6 +93,7 @@ return [
     'stats_visits' => 'Visitors who reached this step',
     'stats_continued' => 'Visitors who carried on from here',
     'stats_rate' => 'Share who carried on',
+    'steps_unavailable' => 'Not available on this site (the addon is missing or too old). Saved untouched, but not editable:',
     'stats_requested' => 'Asked for the resource',
     'stats_confirmed' => 'Confirmed the address',
     'lead_magnet_waiting' => 'Check your inbox. We sent a message to',
