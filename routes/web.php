@@ -2,6 +2,7 @@
 
 use Goldnead\StatamicFunnels\Http\Controllers\Web\AdvanceController;
 use Goldnead\StatamicFunnels\Http\Controllers\Web\FunnelController;
+use Goldnead\StatamicFunnels\Http\Controllers\Web\LeadMagnetResumeController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Support\Facades\Route;
@@ -39,6 +40,18 @@ Route::get($prefix.'/{funnel}/_preview/{nodeKey}', [FunnelController::class, 'pr
 Route::get($prefix.'/{funnel}/_preview-mail/{nodeKey}', [FunnelController::class, 'previewMail'])
     ->middleware('throttle:60,1')
     ->name('statamic-funnels.preview-mail');
+
+/*
+ * Back from the confirmation mail of a lead magnet step.
+ *
+ * `signed`: the link is the return URL this addon handed to lead-magnets and
+ * nothing a visitor can write. Above the `{slug}` route like `_preview`, so a
+ * step slugged `_resume` is not a puzzle either.
+ */
+Route::get($prefix.'/{funnel}/_resume/{nodeKey}/{visit}', LeadMagnetResumeController::class)
+    ->whereNumber('visit')
+    ->middleware(['signed', 'throttle:30,1'])
+    ->name('statamic-funnels.lead-magnet.resume');
 
 Route::get($prefix.'/{funnel}/{slug}', [FunnelController::class, 'step'])
     ->name('statamic-funnels.step');

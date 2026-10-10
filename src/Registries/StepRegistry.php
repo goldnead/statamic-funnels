@@ -2,10 +2,12 @@
 
 namespace Goldnead\StatamicFunnels\Registries;
 
+use Goldnead\StatamicFunnels\Integrations\LeadMagnetsBridge;
 use Goldnead\StatamicFunnels\Nodes\AccountStep;
 use Goldnead\StatamicFunnels\Nodes\CaptureStep;
 use Goldnead\StatamicFunnels\Nodes\EntryStep;
 use Goldnead\StatamicFunnels\Nodes\FinishStep;
+use Goldnead\StatamicFunnels\Nodes\LeadMagnetStep;
 use Goldnead\StatamicFunnels\Nodes\MailStep;
 use Goldnead\StatamicFunnels\Nodes\OfferStep;
 use Goldnead\StatamicFunnels\Nodes\PageStep;
@@ -28,6 +30,12 @@ class StepRegistry
     {
         foreach ([EntryStep::class, CaptureStep::class, PageStep::class, OfferStep::class, AccountStep::class, FinishStep::class, MailStep::class] as $class) {
             $this->register($class);
+        }
+
+        // Only where lead-magnets is installed. The step class is named here
+        // and not touched until the probe has said yes.
+        if (LeadMagnetsBridge::available()) {
+            $this->register(LeadMagnetStep::class);
         }
     }
 

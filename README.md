@@ -69,6 +69,47 @@ walked the path that gave it, and that path hangs on a cookie only your browser 
 that never reached the step gets a 403 like on every other step. No mail is sent from here; the
 access mail is the site's.
 
+### The lead magnet step
+
+A free resource that starts a funnel: opt-in, delivery, thank-you page with the offer. The step type
+**Lead magnet** exists only when [`goldnead/statamic-lead-magnets`](https://github.com/goldnead/statamic-lead-magnets)
+is installed (a `suggest`, never a `require`) and `integrations.lead_magnets` is on, which is the
+default. It takes the address the form step before it collected, asks lead-magnets for the chosen
+resource, and lets lead-magnets do what it does: confirmation mail, signed expiring download link,
+private disk, count.
+
+- **Resource.** Picked in the step's panel from the published resources of lead-magnets.
+- **With double opt-in** the step waits. The page says "check your inbox" with the address; there is no
+  button. The mail's confirmation link leads **back into the funnel, to the next step**, not to the
+  generic confirmation page of lead-magnets. The return link is signed, names the visit, and the
+  step asks lead-magnets again whether the grant stands before it lets anybody on, so a click is never
+  taken for a confirmation. Reloading the waiting page asks nothing twice; if the address was confirmed
+  in the meantime, the reload carries on by itself.
+- **Without double opt-in** the grant is active at once and the visitor goes straight on, in the same
+  request.
+- **The link works in another browser.** It names the visit, so a mail app's own browser picks the walk
+  up and receives its cookie. A browser that already carries a *different* walk keeps it and is lent the
+  visit for the one page that follows (the same rule as the return from the payment provider), so a
+  forwarded link cannot replace somebody's walk.
+- **Newsletter.** The tick box of the form step is passed to lead-magnets, with its time and wording, **only
+  when it was ticked**. An address left in a form is not a consent. Whether the confirmation also
+  subscribes a list is the resource's own setting in lead-magnets.
+- **No address, no resource, or a failing mailer** are shown on the page (`data-status="no_email"`,
+  `unavailable`, `failed`; `funnel:lead_magnet:status` in your own template) and logged. The walk does
+  not move, and nothing is counted as requested that never went out.
+- **Measured apart.** The step card shows *asked for the resource* and *confirmed the address* as two
+  figures; the gap is everybody who asked and never clicked. They are the step events
+  `lead_magnet_requested` and `lead_magnet_confirmed`, also split out in the Insights breakdown of
+  step events.
+
+A saved lead magnet step on a site where lead-magnets is not installed does not break the walk: the page
+shows "not available" and stops. The editor drops nodes of an unknown type when the funnel is saved, as it
+does for every unregistered type, so **removing lead-magnets and then saving a funnel removes the step**.
+
+Needs a lead-magnets release with the return URL (`Support\ReturnUrl`); an older one counts as not
+installed. In your own templates: `funnel:lead_magnet:status` is `waiting`, `no_email`, `unavailable` or
+`failed`; `funnel:lead_magnet:email` is the address the mail went to.
+
 ### Mail nodes
 
 A mail is drawn on the same canvas as the steps, as a branch beside the way on — and that is the
@@ -282,6 +323,8 @@ picture of the banner and the map shows the same card six times. Two knobs:
   !important`), for a banner no cookie silences. Empty by default.
 
 ### Where people stop
+
+A lead magnet step shows two more figures: asked for the resource and confirmed the address.
 
 Every step card in the editor carries three figures: how many visitors reached it, how many carried
 on from it, and the share. Counted **per visitor**, not per page load, so a reload does not flatter
@@ -509,6 +552,7 @@ shows up there **as one event**, not two.
 ```
 /f/{funnel}              the entry step
 /f/{funnel}/{slug}       every other step
+/f/{funnel}/_resume/{step}/{visit}   signed; the return from a lead magnet confirmation mail
 ```
 
 Real URLs, one per step, so a bookmark works, the back button works, and an email can link into the
@@ -585,6 +629,7 @@ funnel addon must not start writing into somebody's CRM.
 | `statamic-payments` | takes the money, decides what "paid" means |
 | `statamic-offers` | says what a thing costs *here* |
 | `statamic-leadhub` | receives a captured address as a contact |
+| `statamic-lead-magnets` | the **Lead magnet** step: delivers a free resource with double opt-in and a signed link, and brings the visitor back into the funnel after the confirmation click, see [The lead magnet step](#the-lead-magnet-step) |
 | `statamic-email-templates` | renders the template a mail node names; without it a mail node saves but every send is recorded as failed |
 | `statamic-automations` | four trigger nodes: step entered, form submitted, offer accepted, funnel completed. `UpsellDeclined` (visit, step, offer handle, the paid payment before it) fires on a "no" after a purchase in the same walk, for a trigger there |
 | Statamic forms | are the form; this addon never grew its own |

@@ -394,6 +394,14 @@ const nodeStats = computed(() => {
 
         out[key] = [
             { key: 'visits', icon: 'eye', value: row.visits, label: t('stats', 'visits', 'Visitors here') },
+            // A lead magnet step counts asking and confirming apart; the gap
+            // is everybody who asked and never clicked the link.
+            ...(row.requested === undefined
+                ? []
+                : [
+                      { key: 'requested', icon: 'mail', value: row.requested, label: t('stats', 'requested', 'Asked for the resource') },
+                      { key: 'confirmed', icon: 'mail-check', value: row.confirmed, tone: 'done', label: t('stats', 'confirmed', 'Confirmed the address') },
+                  ]),
             // The last step of a walk has nowhere to carry on to. Showing it a
             // "0 / 0 %" would say it is losing everybody, when in fact it is
             // where they were meant to end up.

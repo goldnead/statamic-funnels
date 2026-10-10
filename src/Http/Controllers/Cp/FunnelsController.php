@@ -606,6 +606,8 @@ class FunnelsController extends CpController
                 'visits' => __('statamic-funnels::messages.stats_visits'),
                 'continued' => __('statamic-funnels::messages.stats_continued'),
                 'rate' => __('statamic-funnels::messages.stats_rate'),
+                'requested' => __('statamic-funnels::messages.stats_requested'),
+                'confirmed' => __('statamic-funnels::messages.stats_confirmed'),
                 'split' => __('statamic-funnels::messages.stats_split'),
             ],
             'preview' => [

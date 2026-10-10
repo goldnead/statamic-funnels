@@ -3,6 +3,7 @@
 namespace Goldnead\StatamicFunnels\Http\Controllers\Web;
 
 use Goldnead\BrandContext\Facades\BrandContext;
+use Goldnead\StatamicFunnels\Integrations\LeadMagnetsBridge;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
@@ -240,6 +241,26 @@ class FunnelController
             }
         }
 
+        // A lead magnet step asks lead-magnets for the resource and either
+        // waits for the confirmation click or, when access already stands,
+        // goes straight on. In a preview nothing is asked: the editor sees the
+        // waiting page with an example address.
+        $leadMagnet = null;
+
+        if ($step->type === 'lead_magnet') {
+            $outcome = $preview
+                ? ['status' => LeadMagnetsBridge::STATUS_WAITING, 'email' => 'name@example.com', 'next' => null]
+                : app(LeadMagnetsBridge::class)->arrive($funnel, $step, $visit);
+
+            if ($outcome['status'] === LeadMagnetsBridge::STATUS_CONFIRMED) {
+                return $outcome['next']
+                    ? redirect()->route('statamic-funnels.step', [$funnel->handle, $outcome['next']->slug])
+                    : redirect()->route('statamic-funnels.entry', $funnel->handle);
+            }
+
+            $leadMagnet = ['status' => $outcome['status'], 'email' => $outcome['email']];
+        }
+
         // The funnel's context, in **one** bag under one key.
         //
         // It used to be spread flat across the view data, and that was a bug
@@ -364,6 +385,9 @@ class FunnelController
             'newsletter' => $step->type === 'capture'
                 ? self::newsletterForTemplate($step, $preview ? null : $visit)
                 : null,
+            // Der Lead-Magnet-Schritt: `waiting` (Mail unterwegs), `no_email`,
+            // `unavailable` oder `failed`. Null auf jedem anderen Schritt.
+            'lead_magnet' => $leadMagnet,
             // Der Konto-Schritt: ob „Spaeter" erlaubt ist.
             'account' => $step->type === 'account'
                 ? [
