@@ -15,7 +15,7 @@ use PHPUnit\Framework\Attributes\Test;
 /**
  * Die Einwilligung am Bestellknopf.
  *
- * § 356 Abs. 5 BGB verlangt eine ausdrueckliche Zustimmung, und ein Haken ohne
+ * § 356 Abs. 6 BGB verlangt eine ausdrueckliche Zustimmung, und ein Haken ohne
  * Zeitpunkt und Textfassung ist keine, sobald sich der Text aendert. Bisher
  * wurde `confirmed` geprueft und verworfen. Jetzt gehen Zeitpunkt und Wortlaut
  * **in** die Zahlung — und eine Seite, die einen anderen Wortlaut gezeigt hat

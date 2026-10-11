@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A second, empty required box for digital bumps** (§ 356 Abs. 6 BGB). When a bump is ticked and
+  its product is digital, the checkout shows its own waiver sentence for exactly that product and
+  refuses the order without it. `confirmed` keeps covering the order itself. "Digital" is read from
+  the catalogue entry (`digital`); when it is not known the box is shown for every bump. The proof
+  (time, wording, bump offer, products) is stored on the payment as `meta.bump_waivers`. Pages that
+  render their own form need `waiver` and `waiver_text` from `offer:bumps` and a `bump_waiver[]`
+  box per digital bump (see `step.antlers.html`).
+
+### Changed
+
+- References to the consent for digital content now cite § 356 Abs. 6 BGB (not Abs. 5, which is for
+  services).
+
 ## 1.20.0 — 2026-10-07
 
 ### Upgrading

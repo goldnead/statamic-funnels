@@ -68,6 +68,8 @@ return [
     // The wording sent back does not match the one in force: the page is
     // older than the text, or somebody edited the form.
     'consent_version' => 'Version :version',
+    'bump_waiver' => 'I expressly agree that the supply of “:product” begins before the withdrawal period has ended. I understand that my right of withdrawal for this digital product ends as a result (§ 356 (6) BGB).',
+    'bump_waiver_required' => 'Please confirm the waiver of the right of withdrawal for “:product” or deselect the offer.',
     'consent_stale' => 'The terms have changed. Please reload the page and confirm again.',
     // The funnel table's column headings.
     'column_title' => 'Title',

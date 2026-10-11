@@ -446,6 +446,35 @@
     display: none;
 }
 
+/* The waiver for a digital bump (§ 356 Abs. 6 BGB): its own empty box, read as
+   a sentence, shown only while its bump is ticked. Two classes deep for the
+   same reason as the bump above, and `hidden` has to beat `display`. */
+.funnel-offer__bumps .funnel-bump-waiver {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    font-size: 0.86rem;
+    line-height: 1.4;
+    margin: 0.2rem 0 0.9rem;
+    padding-left: 1.65rem;
+}
+
+.funnel-offer__bumps .funnel-bump-waiver[hidden] {
+    display: none;
+}
+
+.funnel-offer__bumps .funnel-bump-waiver > span {
+    display: block;
+    font-size: inherit;
+    font-weight: 400;
+    margin: 0;
+}
+
+.funnel-offer__bumps .funnel-bump-waiver input[type="checkbox"] {
+    margin-top: 0.2rem;
+    flex-shrink: 0;
+}
+
 /* Pay what you want: one field with the currency beside it, and the floor
    underneath. Stacked, not in the flex row the consent label uses. */
 .funnel-offer__accept > label.funnel-offer__amount,

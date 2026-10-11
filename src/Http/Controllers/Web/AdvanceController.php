@@ -539,6 +539,30 @@ class AdvanceController
             BumpRules::isReturning($visit),
         );
 
+        // **Der Verzicht je digitalem Bump (§ 356 Abs. 6 BGB).** Gewaehlt und
+        // digital (oder nicht erkennbar nicht digital) heisst: ein eigener,
+        // leerer Haken, nicht der der Bestellung. Ein Haken ohne gewaehlten
+        // Bump zaehlt nicht.
+        $verzichtBumps = array_values(array_filter(
+            $offer->bumpOffers(),
+            fn (Offer $bump) => in_array($bump->handle, $bumps, true) && Consent::bumpNeedsWaiver($bump),
+        ));
+
+        $request->validate([
+            'bump_waiver' => [$verzichtBumps === [] ? 'nullable' : 'required', 'array'],
+            'bump_waiver.*' => ['string'],
+        ]);
+
+        $erklaert = array_values(array_filter((array) $request->input('bump_waiver', []), 'is_string'));
+
+        foreach ($verzichtBumps as $bump) {
+            if (! in_array($bump->handle, $erklaert, true)) {
+                throw ValidationException::withMessages([
+                    'bump_waiver' => __('statamic-funnels::messages.bump_waiver_required', ['product' => (string) ($bump->headline ?: $bump->name)]),
+                ]);
+            }
+        }
+
         // Ein getippter Code, der nicht gilt, kauft nicht still zum vollen
         // Preis: wer einen Rabatt erwartet und ihn nicht bekommt, soll es vor
         // der Zahlung erfahren. Ein leeres Feld ist kein Code. Vor allem
@@ -699,6 +723,10 @@ class AdvanceController
         // eine Zahlung anlegen — ein Upsell ohne Beleg waere derselbe Fehler
         // wie ein Upsell ohne Anschrift.
         $angaben = self::mitEinwilligung($angaben, Consent::details($offer, $visit, $consentText));
+
+        if ($verzichtBumps !== []) {
+            $angaben = self::mitEinwilligung($angaben, ['meta' => ['bump_waivers' => Consent::bumpWaivers($verzichtBumps)]]);
+        }
 
         // Aus welchem Lauf die Zahlung kommt. `payment_id` am Besuch zeigt nur
         // auf die juengste; der Webhook eines frueheren Kaufs im selben Lauf

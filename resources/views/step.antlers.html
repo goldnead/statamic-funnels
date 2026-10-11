@@ -244,6 +244,18 @@
                                     </span>
                                 </label>
                             {{ /offer:bumps }}
+                            {{# Der Verzicht auf das Widerrufsrecht je digitalem Bump
+                                (§ 356 Abs. 6 BGB): ein eigener, leerer Haken, getrennt
+                                vom Haken der Bestellung. Das Skript zeigt ihn nur, solange
+                                der Bump gewaehlt ist; der Server verlangt ihn ohnehin. #}}
+                            {{ offer:bumps }}
+                                {{ if waiver }}
+                                    <label class="funnel-bump-waiver" data-funnel-bump-waiver="{{ handle | sanitize }}">
+                                        <input type="checkbox" name="bump_waiver[]" value="{{ handle | sanitize }}">
+                                        <span>{{ waiver_text | sanitize }}</span>
+                                    </label>
+                                {{ /if }}
+                            {{ /offer:bumps }}
                         </fieldset>
                     {{ /if }}
 

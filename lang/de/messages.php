@@ -70,6 +70,8 @@ return [
     // Der zurueckgeschickte Wortlaut passt nicht zum geltenden: die Seite ist
     // aelter als der Text, oder jemand hat am Formular gedreht.
     'consent_version' => 'Fassung :version',
+    'bump_waiver' => 'Ich stimme ausdrücklich zu, dass vor Ablauf der Widerrufsfrist mit der Bereitstellung von „:product“ begonnen wird. Mir ist bekannt, dass mein Widerrufsrecht für dieses digitale Produkt damit erlischt (§ 356 Abs. 6 BGB).',
+    'bump_waiver_required' => 'Bitte bestätigen Sie den Verzicht auf das Widerrufsrecht für „:product“ oder wählen Sie das Angebot ab.',
     'consent_stale' => 'Die Bedingungen haben sich geändert. Bitte laden Sie die Seite neu und bestätigen Sie erneut.',
     // Die Spaltenkoepfe der Funnel-Tabelle.
     'column_title' => 'Titel',
