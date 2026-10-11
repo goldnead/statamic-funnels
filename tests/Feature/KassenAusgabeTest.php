@@ -193,7 +193,7 @@ class KassenAusgabeTest extends TestCase
 
         $this->asVisitor()->from('/f/kurs/kasse')->post('/f/kurs/kasse/advance', [
             'accept' => '1', 'confirmed' => '1', 'pricing_option' => 'team',
-            'bumps' => ['cd'], 'country' => 'AT', 'coupon' => 'VERTIPPT',
+            'bumps' => ['cd'], 'bump_waiver' => ['cd'], 'country' => 'AT', 'coupon' => 'VERTIPPT',
         ])->assertSessionHasErrors('coupon');
 
         $seite = $this->asVisitor()->get('/f/kurs/kasse')->assertOk();

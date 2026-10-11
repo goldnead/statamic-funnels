@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.23.0 — 2026-10-11
+
+### Upgrading
+
+- No migration, no new permission.
+- **A bump that is ticked and digital now needs its own waiver box.** Orders that post a bump
+  without `bump_waiver[]` are refused. A page that renders its own form must show the box (see
+  `step.antlers.html`); the built-in step template already does.
+
+### Added
+
+- **A second, empty required box for digital bumps** (§ 356 Abs. 6 BGB). When a bump is ticked and
+  its product is digital, the checkout shows its own waiver sentence for exactly that product and
+  refuses the order without it. `confirmed` keeps covering the order itself. "Digital" is read from
+  the catalogue entry (`digital`); when it is not known the box is shown for every bump. The proof
+  (time, wording, bump offer, products) is stored on the payment as `meta.bump_waivers`. Pages that
+  render their own form need `waiver` and `waiver_text` from `offer:bumps` and a `bump_waiver[]`
+  box per digital bump (see `step.antlers.html`).
+
+### Changed
+
+- References to the consent for digital content now cite § 356 Abs. 6 BGB (not Abs. 5, which is for
+  services).
+
 ## 1.22.0 — 2026-10-10
 
 ### The lead magnet step

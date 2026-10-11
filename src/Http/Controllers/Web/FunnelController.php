@@ -1174,6 +1174,12 @@ class FunnelController
                 'options' => implode(',', $regel['options']),
                 'requires' => $regel['requires'],
                 'hidden' => ! $zeigen,
+                // Der eigene Verzicht fuer dieses Bump-Produkt (§ 356 Abs. 6 BGB):
+                // ein zweiter Haken, nur sichtbar, solange dieser Bump gewaehlt ist.
+                'waiver' => $waiver = Consent::bumpNeedsWaiver($bump),
+                'waiver_text' => $waiver ? Consent::bumpWaiverText($bump) : '',
+                // Nach einer Ablehnung bleibt der Haken, wie er war.
+                'waiver_checked' => $waiver && in_array($bump->handle, array_filter((array) old('bump_waiver', []), 'is_string'), true),
             ];
         }, $bumps);
     }

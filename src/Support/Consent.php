@@ -5,12 +5,13 @@ namespace Goldnead\StatamicFunnels\Support;
 use Closure;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicOffers\Models\Offer;
+use Goldnead\StatamicPayments\Support\Catalogue;
 use Goldnead\StatamicPayments\Support\PaymentDetails;
 
 /**
  * Die Einwilligung am Bestellknopf, und was davon an die Zahlung geht.
  *
- * § 356 Abs. 5 BGB: das Widerrufsrecht erlischt bei digitalen Inhalten erst,
+ * § 356 Abs. 6 BGB: das Widerrufsrecht erlischt bei digitalen Inhalten erst,
  * wenn der Verbraucher **ausdruecklich zugestimmt** hat und seine Kenntnis
  * bestaetigt. Bisher wurde `confirmed` validiert und verworfen — kein
  * Zeitpunkt, keine Textfassung. Ein Haken ohne Fassung ist wertlos, sobald
@@ -235,6 +236,53 @@ class Consent
         }
 
         return $details;
+    }
+
+    /**
+     * Ob fuer diesen Bump ein eigener Verzicht gebraucht wird.
+     *
+     * Aus dem Produktmodell: `digital` im Katalogeintrag (statamic-products).
+     * Eindeutig nicht digital heisst: jedes Produkt hinter dem Bump meldet
+     * ausdruecklich `digital = false`. In allen anderen Faellen, auch wenn das
+     * Produkt fehlt oder das Merkmal nicht fuehrt, wird der Haken verlangt.
+     * Ein Haken zu viel kostet einen Klick, ein fehlender das Widerrufsrecht.
+     */
+    public static function bumpNeedsWaiver(Offer $bump): bool
+    {
+        foreach ($bump->productHandles() as $handle) {
+            $entry = app(Catalogue::class)->find($handle);
+
+            if (! is_array($entry) || ($entry['digital'] ?? null) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Der Satz am zweiten Haken, nur fuer dieses eine Bump-Produkt (§ 356 Abs. 6 BGB). */
+    public static function bumpWaiverText(Offer $bump): string
+    {
+        return (string) __('statamic-funnels::messages.bump_waiver', ['product' => (string) ($bump->headline ?: $bump->name)]);
+    }
+
+    /**
+     * Die Nachweise fuer die gewaehlten Bumps, im Format von `meta['bump_waivers']`.
+     *
+     * @param  list<Offer>  $bumps
+     * @return list<array{offer: string, name: string, products: list<string>, at: string, text: string}>
+     */
+    public static function bumpWaivers(array $bumps): array
+    {
+        $at = now()->format(DATE_ATOM);
+
+        return array_values(array_map(fn (Offer $bump) => [
+            'offer' => (string) $bump->handle,
+            'name' => (string) ($bump->headline ?: $bump->name),
+            'products' => $bump->productHandles(),
+            'at' => $at,
+            'text' => self::bumpWaiverText($bump),
+        ], $bumps));
     }
 
     /** @var list<string>|null */

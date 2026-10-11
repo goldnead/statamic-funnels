@@ -193,7 +193,7 @@ without an offer behind the step, the step asks for the email only and the log s
 
 ### Consent at the order button
 
-German law (§ 356 Abs. 5 BGB) lets the right of withdrawal lapse for digital content only after an
+German law (§ 356 Abs. 6 BGB) lets the right of withdrawal lapse for digital content only after an
 explicit agreement, and an agreement without a timestamp and the wording that was agreed to is
 worthless the moment the wording changes. The order button therefore records both.
 

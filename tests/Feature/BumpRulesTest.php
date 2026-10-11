@@ -62,6 +62,8 @@ class BumpRulesTest extends TestCase
     {
         $this->asVisitor()->post('/f/kurs/kasse/advance', [
             'accept' => '1', 'confirmed' => '1', 'pricing_option' => $option, 'bumps' => $bumps,
+            // Der Verzicht je Bump (§ 356 Abs. 6 BGB); fuer einen verworfenen Bump zaehlt er nicht.
+            'bump_waiver' => $bumps,
         ])->assertRedirect();
     }
 

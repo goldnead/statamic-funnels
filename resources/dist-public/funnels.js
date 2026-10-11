@@ -197,7 +197,26 @@
                 });
             }
 
+            waivers();
+
             document.dispatchEvent(new Event('statamic-funnels:layout'));
+        }
+
+        // Der Verzicht je digitalem Bump (§ 356 Abs. 6 BGB): nur sichtbar und
+        // Pflicht, solange sein Bump gewaehlt ist. Ohne Skript bleibt er
+        // sichtbar, und der Server verlangt ihn.
+        function waivers() {
+            form.querySelectorAll('[data-funnel-bump-waiver]').forEach(function (label) {
+                var on = ticked(label.getAttribute('data-funnel-bump-waiver'));
+                var input = label.querySelector('input[type="checkbox"]');
+
+                label.hidden = !on;
+                if (input) {
+                    input.disabled = !on;
+                    input.required = on;
+                    if (!on) input.checked = false;
+                }
+            });
         }
 
         form.addEventListener('change', function (event) {
