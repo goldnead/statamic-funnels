@@ -16,6 +16,7 @@
 
 - References to the consent for digital content now cite § 356 Abs. 6 BGB (not Abs. 5, which is for
   services).
+
 ## 1.22.0 — 2026-10-10
 
 ### The lead magnet step
