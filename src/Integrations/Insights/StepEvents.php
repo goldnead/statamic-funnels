@@ -41,6 +41,8 @@ class StepEvents extends FunnelMetric implements HasBreakdowns
         FunnelStepEvent::ACCEPTED => 'metric_event_accepted',
         FunnelStepEvent::DECLINED => 'metric_event_declined',
         FunnelStepEvent::COMPLETED => 'metric_event_completed',
+        FunnelStepEvent::LEAD_MAGNET_REQUESTED => 'metric_event_lead_magnet_requested',
+        FunnelStepEvent::LEAD_MAGNET_CONFIRMED => 'metric_event_lead_magnet_confirmed',
     ];
 
     protected function table(): string

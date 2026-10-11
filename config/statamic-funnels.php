@@ -188,6 +188,11 @@ return [
         // because the payment addon already offers the same bridge, and two
         // addons granting the same thing is worse than neither.
         'entitlements' => false,
+
+        // The "Lead magnet" step, when goldnead/statamic-lead-magnets is
+        // installed. On by default: the step only appears in the editor with
+        // the sibling present, and nothing happens until a funnel uses it.
+        'lead_magnets' => true,
     ],
 
     // With goldnead/statamic-webhook-manager installed, every funnel event is
