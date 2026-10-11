@@ -251,7 +251,8 @@
                             {{ offer:bumps }}
                                 {{ if waiver }}
                                     <label class="funnel-bump-waiver" data-funnel-bump-waiver="{{ handle | sanitize }}">
-                                        <input type="checkbox" name="bump_waiver[]" value="{{ handle | sanitize }}">
+                                        <input type="hidden" name="bump_waiver_text[{{ handle | sanitize }}]" value="{{ waiver_text | sanitize }}">
+                                        <input type="checkbox" name="bump_waiver[]" value="{{ handle | sanitize }}"{{ if waiver_checked }} checked{{ /if }}>
                                         <span>{{ waiver_text | sanitize }}</span>
                                     </label>
                                 {{ /if }}

@@ -125,4 +125,61 @@ class BumpVerzichtTest extends TestCase
 
         $this->asVisitor()->get('/f/kurs/kasse')->assertOk()->assertDontSee('bump_waiver');
     }
+
+    #[Test]
+    public function ein_bump_im_korb_der_nicht_mehr_slot_bump_ist_braucht_trotzdem_den_haken(): void
+    {
+        $this->mitBump(true);
+        // Der Slot wechselt nach dem Laden der Seite; im Korb landet der Bump trotzdem.
+        Offer::query()->where('handle', 'toolkit-bump')->update(['slot' => Offer::SLOT_STANDALONE]);
+
+        $this->bestellen(['bumps' => ['toolkit-bump']])->assertSessionHasErrors('bump_waiver');
+
+        $this->assertSame(0, Payment::count());
+    }
+
+    #[Test]
+    public function ein_veralteter_wortlaut_des_verzichts_bestellt_nicht(): void
+    {
+        $this->mitBump(true);
+
+        $this->bestellen([
+            'bumps' => ['toolkit-bump'], 'bump_waiver' => ['toolkit-bump'],
+            'bump_waiver_text' => ['toolkit-bump' => 'Ein Wortlaut von gestern'],
+        ])->assertSessionHasErrors('bump_waiver');
+
+        $this->assertSame(0, Payment::count());
+    }
+
+    #[Test]
+    public function der_gezeigte_wortlaut_geht_versteckt_zurueck_und_wird_akzeptiert(): void
+    {
+        $this->mitBump(true);
+
+        $html = $this->asVisitor()->get('/f/kurs/kasse')->getContent();
+        $this->assertStringContainsString('name="bump_waiver_text[toolkit-bump]"', $html);
+
+        $text = html_entity_decode(\Illuminate\Support\Str::before(\Illuminate\Support\Str::after($html, 'name="bump_waiver_text[toolkit-bump]" value="'), '"'));
+
+        $this->bestellen([
+            'bumps' => ['toolkit-bump'], 'bump_waiver' => ['toolkit-bump'],
+            'bump_waiver_text' => ['toolkit-bump' => $text],
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $this->assertSame(1, Payment::count());
+    }
+
+    #[Test]
+    public function nach_einer_ablehnung_bleibt_der_verzichts_haken_angekreuzt(): void
+    {
+        $this->mitBump(true);
+
+        $this->asVisitor()->from('/f/kurs/kasse')->post('/f/kurs/kasse/advance', [
+            'accept' => '1', 'confirmed' => '1', 'bumps' => ['toolkit-bump'],
+            'bump_waiver' => ['toolkit-bump'], 'coupon' => 'VERTIPPT',
+        ])->assertSessionHasErrors('coupon');
+
+        $this->asVisitor()->get('/f/kurs/kasse')->assertOk()
+            ->assertSee('name="bump_waiver[]" value="toolkit-bump" checked', false);
+    }
 }

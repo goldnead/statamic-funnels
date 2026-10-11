@@ -539,30 +539,6 @@ class AdvanceController
             BumpRules::isReturning($visit),
         );
 
-        // **Der Verzicht je digitalem Bump (§ 356 Abs. 6 BGB).** Gewaehlt und
-        // digital (oder nicht erkennbar nicht digital) heisst: ein eigener,
-        // leerer Haken, nicht der der Bestellung. Ein Haken ohne gewaehlten
-        // Bump zaehlt nicht.
-        $verzichtBumps = array_values(array_filter(
-            $offer->bumpOffers(),
-            fn (Offer $bump) => in_array($bump->handle, $bumps, true) && Consent::bumpNeedsWaiver($bump),
-        ));
-
-        $request->validate([
-            'bump_waiver' => [$verzichtBumps === [] ? 'nullable' : 'required', 'array'],
-            'bump_waiver.*' => ['string'],
-        ]);
-
-        $erklaert = array_values(array_filter((array) $request->input('bump_waiver', []), 'is_string'));
-
-        foreach ($verzichtBumps as $bump) {
-            if (! in_array($bump->handle, $erklaert, true)) {
-                throw ValidationException::withMessages([
-                    'bump_waiver' => __('statamic-funnels::messages.bump_waiver_required', ['product' => (string) ($bump->headline ?: $bump->name)]),
-                ]);
-            }
-        }
-
         // Ein getippter Code, der nicht gilt, kauft nicht still zum vollen
         // Preis: wer einen Rabatt erwartet und ihn nicht bekommt, soll es vor
         // der Zahlung erfahren. Ein leeres Feld ist kein Code. Vor allem
@@ -650,6 +626,46 @@ class AdvanceController
             return CheckoutInputs::isPayWhatYouWant($offer)
                 ? back()->withInput()->withErrors(['amount' => CheckoutInputs::amountRangeMessage($offer)])
                 : back()->withErrors(['offer' => __('statamic-funnels::messages.offer_unavailable')]);
+        }
+
+        // **Der Verzicht je digitalem Bump (§ 356 Abs. 6 BGB).** Aus dem Korb
+        // abgeleitet, nicht aus der Liste der Bump-Angebote: was im Korb liegt,
+        // wird bezahlt, auch wenn ein Angebot inzwischen den Slot gewechselt hat.
+        // Digital (oder nicht erkennbar nicht digital) heisst: ein eigener,
+        // leerer Haken, nicht der der Bestellung. Ein Haken ohne Bump zaehlt nicht.
+        $verzichtBumps = array_values(array_filter(
+            $basket->bumps,
+            fn (Offer $bump) => Consent::bumpNeedsWaiver($bump),
+        ));
+
+        $request->validate([
+            'bump_waiver' => [$verzichtBumps === [] ? 'nullable' : 'required', 'array'],
+            'bump_waiver.*' => ['string'],
+            'bump_waiver_text' => ['nullable', 'array'],
+        ]);
+
+        $erklaert = array_values(array_filter((array) $request->input('bump_waiver', []), 'is_string'));
+        $gezeigt = (array) $request->input('bump_waiver_text', []);
+
+        foreach ($verzichtBumps as $bump) {
+            $name = (string) ($bump->headline ?: $bump->name);
+
+            if (! in_array($bump->handle, $erklaert, true)) {
+                throw ValidationException::withMessages([
+                    'bump_waiver' => __('statamic-funnels::messages.bump_waiver_required', ['product' => $name]),
+                ]);
+            }
+
+            // Der gezeigte Wortlaut wird geprueft, nicht neu gerendert: wie bei
+            // `consent_text` ist eine Zustimmung zu einem anderen Text als dem
+            // geltenden keine. Eine Vorlage ohne das Feld bleibt bestellbar.
+            $text = $gezeigt[$bump->handle] ?? null;
+
+            if (is_string($text) && $text !== '' && $text !== Consent::bumpWaiverText($bump)) {
+                throw ValidationException::withMessages([
+                    'bump_waiver' => __('statamic-funnels::messages.consent_stale'),
+                ]);
+            }
         }
 
         // Ein funnelweiter Code gilt fuer die weiteren Angebote dieses Laufs.
