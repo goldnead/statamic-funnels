@@ -7,6 +7,8 @@ use Goldnead\StatamicFunnels\Tests\TestCase;
 use Goldnead\StatamicOffers\Models\Offer;
 use Goldnead\StatamicPayments\Models\Payment;
 use Goldnead\StatamicPayments\Support\Catalogue;
+use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 
 /**
@@ -34,7 +36,7 @@ class BumpVerzichtTest extends TestCase
         $this->bisZurKasse();
     }
 
-    protected function bestellen(array $extra): \Illuminate\Testing\TestResponse
+    protected function bestellen(array $extra): TestResponse
     {
         return $this->asVisitor()->post('/f/kurs/kasse/advance', array_merge(['accept' => '1', 'confirmed' => '1'], $extra));
     }
@@ -159,7 +161,7 @@ class BumpVerzichtTest extends TestCase
         $html = $this->asVisitor()->get('/f/kurs/kasse')->getContent();
         $this->assertStringContainsString('name="bump_waiver_text[toolkit-bump]"', $html);
 
-        $text = html_entity_decode(\Illuminate\Support\Str::before(\Illuminate\Support\Str::after($html, 'name="bump_waiver_text[toolkit-bump]" value="'), '"'));
+        $text = html_entity_decode(Str::before(Str::after($html, 'name="bump_waiver_text[toolkit-bump]" value="'), '"'));
 
         $this->bestellen([
             'bumps' => ['toolkit-bump'], 'bump_waiver' => ['toolkit-bump'],

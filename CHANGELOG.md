@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 1.23.0 — 2026-10-11
+
+### Upgrading
+
+- No migration, no new permission.
+- **A bump that is ticked and digital now needs its own waiver box.** Orders that post a bump
+  without `bump_waiver[]` are refused. A page that renders its own form must show the box (see
+  `step.antlers.html`); the built-in step template already does.
 
 ### Added
 
