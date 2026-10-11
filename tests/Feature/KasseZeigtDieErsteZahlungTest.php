@@ -174,7 +174,7 @@ class KasseZeigtDieErsteZahlungTest extends TestCase
 
         $this->assertSame(9900, $ohne);
         $this->assertSame(11800, $mit);
-        $this->assertSame($mit, $this->gebucht(['bumps' => ['cd']]));
+        $this->assertSame($mit, $this->gebucht(['bumps' => ['cd'], 'bump_waiver' => ['cd']]));
     }
 
     #[Test]
@@ -187,7 +187,7 @@ class KasseZeigtDieErsteZahlungTest extends TestCase
         $mit = $this->angezeigt(['cd']);
 
         $this->assertSame(6400, $mit);
-        $this->assertSame($mit, $this->gebucht(['bumps' => ['cd']]));
+        $this->assertSame($mit, $this->gebucht(['bumps' => ['cd'], 'bump_waiver' => ['cd']]));
     }
 
     #[Test]
@@ -201,7 +201,7 @@ class KasseZeigtDieErsteZahlungTest extends TestCase
         $mit = $this->angezeigt(['cd'], '/f/kurs/kasse?coupon=CHOR');
 
         $this->assertSame(9440, $mit);
-        $this->assertSame($mit, $this->gebucht(['bumps' => ['cd'], 'coupon' => 'CHOR']));
+        $this->assertSame($mit, $this->gebucht(['bumps' => ['cd'], 'bump_waiver' => ['cd'], 'coupon' => 'CHOR']));
     }
 
     #[Test]
