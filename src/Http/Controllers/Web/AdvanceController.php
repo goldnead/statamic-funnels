@@ -639,7 +639,9 @@ class AdvanceController
         ));
 
         $request->validate([
-            'bump_waiver' => [$verzichtBumps === [] ? 'nullable' : 'required', 'array'],
+            // Kein `required`: das Fehlen meldet die Schleife unten mit dem Satz der
+            // Sprachdatei, nicht mit der Standardmeldung der Regel.
+            'bump_waiver' => ['nullable', 'array'],
             'bump_waiver.*' => ['string'],
             'bump_waiver_text' => ['nullable', 'array'],
         ]);

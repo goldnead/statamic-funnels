@@ -184,4 +184,16 @@ class BumpVerzichtTest extends TestCase
         $this->asVisitor()->get('/f/kurs/kasse')->assertOk()
             ->assertSee('name="bump_waiver[]" value="toolkit-bump" checked', false);
     }
+
+    #[Test]
+    public function die_ablehnung_nennt_den_satz_der_sprachdatei_und_behaelt_den_bump(): void
+    {
+        $this->mitBump(true);
+
+        $this->bestellen(['bumps' => ['toolkit-bump']])
+            ->assertSessionHasErrors(['bump_waiver' => __('statamic-funnels::messages.bump_waiver_required', ['product' => 'Selbstanalyse-Toolkit'])]);
+
+        $this->asVisitor()->get('/f/kurs/kasse')->assertOk()
+            ->assertSee('name="bumps[]" value="toolkit-bump" checked', false);
+    }
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.23.1 — 2026-10-11
+
+### Fixed
+
+- A missing waiver for a digital bump now shows the sentence from the language file
+  (`bump_waiver_required`) instead of the generic "bump waiver field is required" message.
+
 ## 1.23.0 — 2026-10-11
 
 ### Upgrading
