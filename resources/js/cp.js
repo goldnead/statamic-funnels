@@ -5,10 +5,12 @@
 
 import FunnelsIndex from './pages/Funnels/Index.vue';
 import FunnelsEdit from './pages/Funnels/Edit.vue';
+import FunnelsMap from './pages/Funnels/Map.vue';
 import SetupRequired from './pages/SetupRequired.vue';
 
 Statamic.booting(() => {
     Statamic.$inertia.register('statamic-funnels::Funnels/Index', FunnelsIndex);
     Statamic.$inertia.register('statamic-funnels::Funnels/Edit', FunnelsEdit);
+    Statamic.$inertia.register('statamic-funnels::Funnels/Map', FunnelsMap);
     Statamic.$inertia.register('statamic-funnels::SetupRequired', SetupRequired);
 });

@@ -34,6 +34,8 @@ const props = defineProps({
     // Knotenschluessel, `''` fuer einen Schritt, den es beim Laden noch nicht gab.
     entryField: { type: Object, default: null },
     previewUrl: { type: String, default: '' },
+    // Die Landkarte dieses Funnels: Phasen und Verweise auf Objekte anderer Addons.
+    mapUrl: { type: String, default: '' },
     devices: { type: Array, default: () => [] },
     stats: { type: Object, default: () => ({}) },
     splits: { type: Object, default: () => ({}) },
@@ -606,6 +608,7 @@ function entryFieldsFor(handle) {
                 :disabled="!previewUrl"
                 @click="showPreview = !showPreview"
             />
+            <Button v-if="mapUrl" icon="hierarchy" :text="t('ui', 'map', 'Map')" :href="mapUrl" />
             <Button
                 icon="cog"
                 :text="t('settings', 'open', 'Settings')"

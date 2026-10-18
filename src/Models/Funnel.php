@@ -36,7 +36,15 @@ class Funnel extends Model
      */
     protected static function booted(): void
     {
-        static::deleting(fn (Funnel $funnel) => Thumbnails::forgetFunnel($funnel));
+        static::deleting(function (Funnel $funnel) {
+            Thumbnails::forgetFunnel($funnel);
+
+            // The map goes with the funnel on every database. The foreign keys
+            // cascade on MySQL; SQLite does not enforce them unless asked to.
+            $stageIds = $funnel->stages()->pluck('id');
+            FunnelStageRef::query()->whereIn('funnel_stage_id', $stageIds)->delete();
+            FunnelStage::query()->whereIn('id', $stageIds)->delete();
+        });
     }
 
     /** @return HasMany<FunnelStep, $this> */
@@ -49,6 +57,12 @@ class Funnel extends Model
     public function edges(): HasMany
     {
         return $this->hasMany(FunnelEdge::class);
+    }
+
+    /** @return HasMany<FunnelStage, $this> */
+    public function stages(): HasMany
+    {
+        return $this->hasMany(FunnelStage::class)->orderBy('position')->orderBy('id');
     }
 
     /** @return HasMany<FunnelVisit, $this> */
