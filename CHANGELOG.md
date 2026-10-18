@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.25.1 — 2026-10-18
+
+### Changed: requires `goldnead/statamic-flow-canvas` ^1.6.1
+
+The shared canvas components (flow-canvas 1.6.1) now carry their own plain CSS instead of Tailwind utilities that only worked when a neighbouring addon happened to define them. The control bar divider, node actions, section headers and the adder icon are drawn the same on an installation that has this addon alone. The Control Panel bundle is rebuilt against it. No migration, no config.
+
 ## 1.25.0 — 2026-10-18
 
 ### Added: the map (Landkarte)
