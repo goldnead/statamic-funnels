@@ -690,6 +690,22 @@ defines. Held back are only framework fields (`_…`) and fields named like a se
 `funnels.form_submitted` hands this data to the receiver, which then processes it on your behalf:
 that needs a data processing agreement with the receiver, as with any other processor.
 
+## The map
+
+Open a funnel and press **Map** (or use the row action in the listing). Columns are phases, cards are
+references to objects that live in other addons: a page, a lead magnet, an automation, a course, an
+offer, a product, another funnel. Each card shows a label that links to the object in the Control Panel,
+whether it is on, and one number with what it counts and over which period.
+
+- Add a phase, then **Add reference**: pick the kind of object, search, add. Move cards with the arrow
+  buttons, save with **Save map**.
+- The steps of the funnel's graph appear on their own in the **Visitor path** strip, with the object each
+  step points at.
+- The map stores a type and an id and nothing else. It asks the addon that owns the object for the rest,
+  through `Goldnead\BrandContext\Contracts\ProvidesMapObjects` (statamic-brand-context 1.17). An addon
+  that registers a provider appears in the picker; one that is not installed leaves its cards marked
+  "Not available", and an object that was deleted leaves "Reference broken".
+
 ## Configuration
 
 | Key | Default | What happens when it is wrong |

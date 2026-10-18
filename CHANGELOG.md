@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.25.0 — 2026-10-18
+
+### Added: the map (Landkarte)
+
+A second view per funnel, next to the editor. The editor draws the path one visitor walks in a session; the map draws what a funnel is made of across days and addons.
+
+- **Phases are data, not graph.** New tables `funnel_stages` (name, position) and `funnel_stage_refs` (`type`, `ref_id`, position). Add, rename, reorder and remove phases; move cards between phases and within one; one save button.
+- **A card is a reference.** It stores a type and an id only. Label, Control Panel link, on/off, and one number are asked of the owning addon every time, through the new `ProvidesMapObjects` contract from statamic-brand-context 1.17. The number always says what is counted and over which period (one period picker for the whole map: 7, 30 or 90 days). An addon without a number gives a card without one.
+- **Broken and missing states.** "Reference broken" when the owner no longer knows the object, "Not available" when no addon provides that type or it failed. Neither costs the rest of the map.
+- **The graph appears by itself.** Every step of the funnel shows in a "Visitor path" strip in walking order, with the object it points at (lead magnet, offer, page) and its visits.
+- **Providers in this addon:** `funnel` (visits), `funnel_step` (visits) and `entry` (a Statamic page, no number). lead-magnets, automations, courses, offers and products register their own.
+- Entry points: a "Map" button in the editor and a "Map" row action in the listing.
+
+### Upgrading
+
+- Run `php artisan migrate` (two new tables). Requires statamic-brand-context `^1.17`.
+
 ## 1.24.0 — 2026-10-17
 
 ### Changed

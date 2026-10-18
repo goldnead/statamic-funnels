@@ -154,6 +154,7 @@ class FunnelsController extends CpController
             'labels' => $this->labels(),
             'saveUrl' => cp_route('utilities.funnels.update', $funnel->id),
             'indexUrl' => cp_route('utilities.funnels'),
+            'mapUrl' => cp_route('utilities.funnels.map', $funnel->id),
             'publicUrl' => route('statamic-funnels.entry', $funnel->handle),
             // Was ausser dem Graphen am Funnel haengt (F3, F4, F6, F7).
             'settings' => FunnelSettings::of($funnel),
@@ -630,6 +631,7 @@ class FunnelsController extends CpController
                 'unavailable' => __('statamic-funnels::messages.steps_unavailable'),
                 'draft' => __('statamic-funnels::messages.draft'),
                 'live' => __('statamic-funnels::messages.live'),
+                'map' => __('statamic-funnels::messages.map_open'),
                 'handle' => __('statamic-funnels::messages.field_handle'),
                 'published' => __('statamic-funnels::messages.field_published'),
                 'undo' => __('Undo'),
@@ -742,6 +744,7 @@ class FunnelsController extends CpController
             'steps_count' => $funnel->steps_count,
             'visits_count' => $funnel->visits_count,
             'edit_url' => cp_route('utilities.funnels.edit', $funnel->id),
+            'map_url' => cp_route('utilities.funnels.map', $funnel->id),
             'public_url' => route('statamic-funnels.entry', $funnel->handle),
             // Handed over rather than fetched: the row menu would otherwise ask
             // the server the moment it is opened.

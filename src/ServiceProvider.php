@@ -2,16 +2,21 @@
 
 namespace Goldnead\StatamicFunnels;
 
+use Goldnead\BrandContext\Map\MapObjectRegistry;
 use Goldnead\BrandContext\Settings\SettingsRegistry;
 use Goldnead\StatamicFunnels\Contracts\ConversionSender;
 use Goldnead\StatamicFunnels\Contracts\ThumbnailRenderer;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelActionsController;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelsController;
+use Goldnead\StatamicFunnels\Http\Controllers\Cp\MapController;
 use Goldnead\StatamicFunnels\Integrations\Insights\Completed;
 use Goldnead\StatamicFunnels\Integrations\Insights\CompletionRate;
 use Goldnead\StatamicFunnels\Integrations\Insights\StepEvents;
 use Goldnead\StatamicFunnels\Integrations\Insights\Visits;
 use Goldnead\StatamicFunnels\Integrations\LeadHubBridge;
+use Goldnead\StatamicFunnels\Integrations\Map\EntryMapObjects;
+use Goldnead\StatamicFunnels\Integrations\Map\FunnelMapObjects;
+use Goldnead\StatamicFunnels\Integrations\Map\FunnelStepMapObjects;
 use Goldnead\StatamicFunnels\Integrations\MetaConversions;
 use Goldnead\StatamicFunnels\Integrations\WebhookManager\WebhookManagerBridge;
 use Goldnead\StatamicFunnels\Registries\StepRegistry;
@@ -92,6 +97,13 @@ class ServiceProvider extends AddonServiceProvider
         parent::boot();
 
         app(SettingsRegistry::class)->register(Settings::class);
+
+        // What the funnel map can point at from here: funnels, their steps and
+        // Statamic entries. The other addons register their own.
+        $map = app(MapObjectRegistry::class);
+        $map->register(FunnelMapObjects::class);
+        $map->register(FunnelStepMapObjects::class);
+        $map->register(EntryMapObjects::class);
 
         // Aus boot() eingereiht, nicht aus bootAddon(): dort feuerte ein
         // verschachteltes `booted()` sofort, womöglich vor dem bootAddon()
@@ -345,6 +357,9 @@ class ServiceProvider extends AddonServiceProvider
                 $router->post('actions/list', [FunnelActionsController::class, 'bulkActions'])->name('actions.list');
                 $router->post('{funnel}/preview', [FunnelsController::class, 'preview'])->name('preview');
                 $router->get('{funnel}/edit', [FunnelsController::class, 'edit'])->name('edit');
+                $router->get('{funnel}/map', [MapController::class, 'show'])->name('map');
+                $router->put('{funnel}/map', [MapController::class, 'update'])->name('map.update');
+                $router->get('{funnel}/map/objects', [MapController::class, 'objects'])->name('map.objects');
                 $router->patch('{funnel}', [FunnelsController::class, 'update'])->name('update');
             });
     }
