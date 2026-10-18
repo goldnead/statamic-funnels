@@ -15,6 +15,7 @@ use Goldnead\StatamicFunnels\Models\FunnelStage;
 use Goldnead\StatamicFunnels\Models\FunnelStageRef;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicFunnels\Support\FunnelMap;
 use Goldnead\StatamicFunnels\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
 use Statamic\Facades\Collection;
@@ -103,9 +104,12 @@ class FunnelMapTest extends TestCase
         return json_decode(html_entity_decode($matches[1], ENT_QUOTES), true)['props'];
     }
 
-    protected function save(Funnel $funnel, array $stages)
+    protected function save(Funnel $funnel, array $stages, ?string $version = null)
     {
-        return $this->actingAs($this->user())->put("/cp/utilities/funnels/{$funnel->id}/map", ['stages' => $stages]);
+        return $this->actingAs($this->user())->put("/cp/utilities/funnels/{$funnel->id}/map", [
+            'version' => $version ?? app(FunnelMap::class)->version($funnel),
+            'stages' => $stages,
+        ]);
     }
 
     #[Test]
@@ -293,6 +297,49 @@ class FunnelMapTest extends TestCase
     }
 
     #[Test]
+    public function a_save_made_on_an_older_picture_is_refused(): void
+    {
+        $funnel = $this->funnel();
+        $old = app(FunnelMap::class)->version($funnel);
+
+        $this->save($funnel, [['name' => 'Tab zwei', 'refs' => []]])->assertRedirect();
+
+        $this->save($funnel, [['name' => 'Tab eins', 'refs' => []]], $old)->assertSessionHasErrors('stages');
+
+        $this->assertSame(['Tab zwei'], $funnel->stages()->pluck('name')->all(), 'the newer map survives');
+    }
+
+    #[Test]
+    public function removed_phases_leave_no_orphaned_cards(): void
+    {
+        $funnel = $this->funnel();
+        $this->save($funnel, [['name' => 'A', 'refs' => [['type' => 'lead_magnet', 'ref_id' => 'minikurs']]]]);
+
+        $this->save($funnel, [])->assertRedirect();
+
+        $this->assertSame(0, FunnelStage::count());
+        $this->assertSame(0, FunnelStageRef::count());
+    }
+
+    #[Test]
+    public function a_page_shown_by_a_step_of_this_funnel_takes_that_steps_visits_and_says_so(): void
+    {
+        $funnel = $this->funnel();
+        $entry = tap(Entry::make()->collection('pages')->slug('danke')->published(true)->data(['title' => 'Danke']))->save();
+        $funnel->steps()->create(['node_key' => 'page_1', 'type' => 'page', 'label' => 'Danke-Seite', 'config' => ['entry' => $entry->id()]]);
+        $visit = FunnelVisit::create(['funnel_id' => $funnel->id, 'token' => 'a']);
+        FunnelStepEvent::create(['visit_id' => $visit->id, 'node_key' => 'page_1', 'event' => FunnelStepEvent::ENTERED]);
+
+        $this->save($funnel, [['name' => 'Einstieg', 'refs' => [['type' => 'entry', 'ref_id' => $entry->id()]]]]);
+
+        $card = $this->props($funnel)['stages'][0]['refs'][0];
+
+        $this->assertSame(1, $card['metric']['value']);
+        $this->assertSame('Visits (Danke-Seite)', $card['metric']['what']);
+        $this->assertSame('last 30 days', $card['metric']['period']);
+    }
+
+    #[Test]
     public function the_layout_is_validated(): void
     {
         $funnel = $this->funnel();
@@ -333,7 +380,7 @@ class FunnelMapTest extends TestCase
         $plain = tap(User::make()->email('plain@example.com')->assignRole($role))->save();
 
         $this->actingAs($plain)->get("/cp/utilities/funnels/{$funnel->id}/map")->assertRedirect(cp_route('index'));
-        $this->assertContains($this->actingAs($plain)->put("/cp/utilities/funnels/{$funnel->id}/map", ['stages' => [['name' => 'X']]])->status(), [302, 403]);
+        $this->assertContains($this->actingAs($plain)->put("/cp/utilities/funnels/{$funnel->id}/map", ['version' => 'x', 'stages' => [['name' => 'X']]])->status(), [302, 403]);
         $this->assertContains($this->actingAs($plain)->getJson("/cp/utilities/funnels/{$funnel->id}/map/objects?type=entry")->status(), [302, 403]);
         $this->assertSame(0, $funnel->stages()->count());
     }

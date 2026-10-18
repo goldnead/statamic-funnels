@@ -8,6 +8,7 @@ use Goldnead\BrandContext\Map\MapObject;
 use Goldnead\BrandContext\Map\MapPeriod;
 use Statamic\Entries\Entry as StatamicEntry;
 use Statamic\Facades\Entry;
+use Statamic\Facades\Site;
 use Statamic\Stache\Query\EntryQueryBuilder;
 
 /**
@@ -34,6 +35,11 @@ class EntryMapObjects implements ProvidesMapObjects
     {
         /** @var EntryQueryBuilder $builder */
         $builder = Entry::query();
+
+        // The site the Control Panel is on: in a multi-site install each brand
+        // has its own, and a picker that listed every site's pages would offer
+        // another brand's.
+        $builder->where('site', Site::selected()->handle());
 
         if ($query !== null && $query !== '') {
             $builder->where('title', 'like', '%'.$query.'%');
@@ -67,7 +73,7 @@ class EntryMapObjects implements ProvidesMapObjects
             label: (string) ($entry->get('title') ?: $entry->slug() ?: $entry->id()),
             cpUrl: $entry->editUrl(),
             enabled: (bool) $entry->published(),
-            detail: trim(($entry->url() ?? '').' · '.$entry->collectionHandle(), ' ·'),
+            detail: trim(($entry->url() ?? '').' · '.($entry->collection()?->title() ?? $entry->collectionHandle()), ' ·'),
         );
     }
 }

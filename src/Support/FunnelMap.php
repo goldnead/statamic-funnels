@@ -8,6 +8,7 @@ use Goldnead\BrandContext\Map\MapPeriod;
 use Goldnead\StatamicFunnels\Integrations\Map\FunnelStepMapObjects;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStage;
+use Goldnead\StatamicFunnels\Models\FunnelStageRef;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -49,11 +50,27 @@ class FunnelMap
                 'id' => $stage->id,
                 'name' => $stage->name,
                 'refs' => $stage->refs
-                    ->map(fn ($ref) => $this->card($ref->type, $ref->ref_id, $period))
+                    ->map(fn ($ref) => $this->cardOf($funnel, $ref->type, $ref->ref_id, $period))
                     ->values()
                     ->all(),
             ])->values()->all(),
         ];
+    }
+
+    /**
+     * A fingerprint of what is stored. The page hands it back with a save, and a
+     * save made on an older picture is refused: the save replaces the whole map,
+     * so two open tabs would otherwise quietly erase each other.
+     */
+    public function version(Funnel $funnel): string
+    {
+        return md5(json_encode(
+            $funnel->stages()->with('refs')->get()->map(fn (FunnelStage $stage) => [
+                $stage->id,
+                $stage->name,
+                $stage->refs->map(fn ($ref) => [$ref->type, $ref->ref_id])->all(),
+            ])->all()
+        ));
     }
 
     /**
@@ -96,8 +113,41 @@ class FunnelMap
                 }
             }
 
-            $funnel->stages()->whereNotIn('id', $kept)->delete();
+            // Removed phases take their cards with them, here and not only through
+            // the foreign key: SQLite does not enforce it unless asked to.
+            $gone = $funnel->stages()->whereNotIn('id', $kept)->pluck('id');
+            FunnelStageRef::query()->whereIn('funnel_stage_id', $gone)->delete();
+            FunnelStage::query()->whereIn('id', $gone)->delete();
         });
+    }
+
+    /**
+     * A card on the board. A page has no number of its own, but when this
+     * funnel has a step that shows it, the visits of that step are the honest
+     * number for the page here, and the card says whose.
+     *
+     * @return array<string, mixed>
+     */
+    protected function cardOf(Funnel $funnel, string $type, string $id, MapPeriod $period): array
+    {
+        $card = $this->card($type, $id, $period);
+
+        if ($type !== 'entry' || $card['status'] !== MapLookup::FOUND || $card['metric'] !== null) {
+            return $card;
+        }
+
+        $step = $funnel->steps->first(fn ($s) => ($s->config['entry'] ?? null) === $id && $s->type !== 'mail');
+        $metric = $step ? $this->registry->metric('funnel_step', $funnel->handle.':'.$step->node_key, $period) : null;
+
+        if ($metric) {
+            $card['metric'] = [
+                'value' => $metric->value,
+                'what' => __('statamic-funnels::messages.map_metric_visits_of', ['step' => $step->label ?: $step->node_key]),
+                'period' => __('statamic-funnels::messages.map_period_label', ['days' => $period->days]),
+            ];
+        }
+
+        return $card;
     }
 
     /**

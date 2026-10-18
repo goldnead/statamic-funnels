@@ -59,6 +59,7 @@ class MapController extends CpController
                     'label' => __('statamic-funnels::messages.map_period', ['days' => $d]),
                 ])->all(),
             ],
+            'version' => $this->map->version($funnel),
             'saveUrl' => cp_route('utilities.funnels.map.update', $funnel->id),
             'objectsUrl' => cp_route('utilities.funnels.map.objects', $funnel->id),
             'mapUrl' => cp_route('utilities.funnels.map', $funnel->id),
@@ -73,6 +74,7 @@ class MapController extends CpController
         $this->authorizeAccess();
 
         $data = $request->validate([
+            'version' => ['required', 'string'],
             'stages' => ['present', 'array', 'max:20'],
             'stages.*.id' => ['nullable', 'integer'],
             'stages.*.name' => ['required', 'string', 'max:191'],
@@ -80,6 +82,12 @@ class MapController extends CpController
             'stages.*.refs.*.type' => ['required', 'string', 'max:64'],
             'stages.*.refs.*.ref_id' => ['required', 'string', 'max:191'],
         ]);
+
+        // Saved on an older picture than the stored one: another tab or another
+        // person changed the map since this page loaded. Refuse, say why.
+        if (! hash_equals($this->map->version($funnel), $data['version'])) {
+            return back()->withErrors(['stages' => __('statamic-funnels::messages.map_conflict')]);
+        }
 
         // A phase id that is not this funnel's is a stale or forged request.
         // Treating it as a new phase would quietly duplicate; refusing is cheaper.

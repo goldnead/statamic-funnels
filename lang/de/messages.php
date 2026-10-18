@@ -286,4 +286,6 @@ return [
     'map_metric_visits' => 'Besuche',
     'map_stage_foreign' => 'Diese Phase gehört nicht zu diesem Funnel. Lade die Seite neu.',
     'map_period_label' => 'letzte :days Tage',
+    'map_conflict' => 'Diese Landkarte wurde woanders geändert, seit du sie geöffnet hast. Lade die Seite neu und mache deine Änderungen noch einmal.',
+    'map_metric_visits_of' => 'Besuche (:step)',
 ];

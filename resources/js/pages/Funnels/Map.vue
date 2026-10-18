@@ -28,6 +28,8 @@ const props = defineProps({
     // Steps of the graph in walking order. Read-only: the graph owns them.
     path: { type: Array, default: () => [] },
     stages: { type: Array, default: () => [] },
+    // Fingerprint of the stored map. Sent back with a save so a stale page cannot overwrite a newer map.
+    version: { type: String, required: true },
     types: { type: Array, default: () => [] },
     period: { type: Object, required: true },
     saveUrl: { type: String, required: true },
@@ -57,17 +59,19 @@ function layout(stage) {
 
 const isDirty = computed(() => JSON.stringify(local.value.map(layout)) !== saved.value);
 
-// After a save Inertia hands back the stored map, with the numbers.
+// After a save Inertia hands back the stored map, with the numbers. The fresh
+// cards replace the local ones only when nothing was touched since the request
+// went out: edits made while the answer was on its way are not thrown away.
+let sent = null;
+
 watch(
     () => props.stages,
     (stages) => {
-        // Edits made while the answer was on its way are not thrown away: the
-        // fresh cards (with their numbers) replace the local ones only when
-        // nothing was touched since the last save.
-        const untouched = !isDirty.value;
+        const untouched = sent === null ? !isDirty.value : JSON.stringify(local.value.map(layout)) === sent;
 
         saved.value = JSON.stringify(stages.map(layout));
         if (untouched) local.value = clone(stages);
+        sent = null;
     },
 );
 
@@ -75,11 +79,12 @@ const metricText = (metric) => (metric ? `${metric.value.toLocaleString()} ${met
 
 function save() {
     saving.value = true;
+    sent = JSON.stringify(local.value.map(layout));
 
-    router.put(props.saveUrl, { stages: local.value.map(layout) }, {
+    router.put(props.saveUrl, { version: props.version, stages: local.value.map(layout) }, {
         preserveScroll: true,
         onSuccess: () => { toast.success(t('saved', 'Saved.'), {}); },
-        onError: (errors) => { toast.error(String(Object.values(errors ?? {})[0] ?? ''), {}); },
+        onError: (errors) => { sent = null; toast.error(String(Object.values(errors ?? {})[0] ?? ''), {}); },
         onFinish: () => { saving.value = false; },
     });
 }
@@ -244,43 +249,6 @@ const periodOptions = computed(() => props.period.options);
             {{ Object.values(errors)[0] }}
         </p>
 
-        <!-- The visitor path: what the graph already says, shown without being asked. -->
-        <Panel :heading="t('path', 'Visitor path')" :subheading="t('path_help')" class="mb-6">
-            <Card>
-                <p v-if="!path.length" class="text-sm text-gray-600 dark:text-gray-400">{{ t('path_empty') }}</p>
-                <ol v-else class="flex flex-wrap gap-3" data-funnel-map-path>
-                    <li
-                        v-for="(step, i) in path"
-                        :key="step.ref_id"
-                        class="min-w-48 max-w-64 flex-1 rounded-lg border border-content-border bg-content-bg p-3"
-                        :class="{ 'opacity-60': step.enabled === false }"
-                    >
-                        <div class="flex items-center justify-between gap-2 text-2xs uppercase tracking-wide text-gray-600 dark:text-gray-400">
-                            <span class="tabular-nums">{{ i + 1 }}</span>
-                            <span class="truncate">{{ step.detail }}</span>
-                        </div>
-                        <a :href="step.cp_url" class="mt-1 block truncate font-medium text-gray-900 hover:underline dark:text-gray-100">{{ step.label }}</a>
-                        <p v-if="step.metric" class="mt-1 text-sm tabular-nums text-gray-800 dark:text-gray-200">
-                            <strong>{{ metricText(step.metric) }}</strong>
-                            <span class="text-gray-600 dark:text-gray-400"> · {{ step.metric.period }}</span>
-                        </p>
-                        <p v-if="step.target" class="mt-2 border-t border-content-border pt-2 text-sm">
-                            <span class="text-gray-600 dark:text-gray-400">{{ t('points_to', 'Points to') }} · {{ step.target.type_label }}</span><br>
-                            <a v-if="step.target.cp_url" :href="step.target.cp_url" class="hover:underline">{{ step.target.label }}</a>
-                            <span v-else>{{ step.target.label }}</span>
-                            <Badge
-                                v-if="step.target.status !== 'found'"
-                                class="ml-1"
-                                color="red"
-                                pill
-                                :text="step.target.status === 'missing' ? t('broken') : t('unavailable')"
-                            />
-                        </p>
-                    </li>
-                </ol>
-            </Card>
-        </Panel>
-
         <EmptyStateMenu v-if="!local.length" :heading="t('empty', 'No phases yet')">
             <EmptyStateItem :heading="t('add_stage', 'Add phase')" :description="t('empty_help')" icon="plus" @click="openStage()" />
         </EmptyStateMenu>
@@ -357,6 +325,44 @@ const periodOptions = computed(() => props.period.options);
         </div>
 
         <p v-if="local.length" class="mt-2 max-w-prose text-sm text-gray-600 dark:text-gray-400">{{ t('hint_numbers') }}</p>
+
+        <!-- The visitor path: what the graph already says, shown without being asked. -->
+        <Panel :heading="t('path', 'Visitor path')" :subheading="t('path_help')" class="mt-6">
+            <Card>
+                <p v-if="!path.length" class="text-sm text-gray-600 dark:text-gray-400">{{ t('path_empty') }}</p>
+                <ol v-else class="flex gap-3 overflow-x-auto pb-1" data-funnel-map-path tabindex="0" :aria-label="t('path', 'Visitor path')">
+                    <li
+                        v-for="(step, i) in path"
+                        :key="step.ref_id"
+                        class="w-56 shrink-0 rounded-lg border border-content-border bg-content-bg p-3"
+                        :class="{ 'opacity-60': step.enabled === false }"
+                    >
+                        <div class="flex items-center justify-between gap-2 text-2xs uppercase tracking-wide text-gray-600 dark:text-gray-400">
+                            <span class="tabular-nums">{{ i + 1 }}</span>
+                            <span class="truncate">{{ step.detail }}</span>
+                        </div>
+                        <a :href="step.cp_url" class="mt-1 block truncate font-medium text-gray-900 hover:underline dark:text-gray-100">{{ step.label }}</a>
+                        <p v-if="step.metric" class="mt-1 text-sm tabular-nums text-gray-800 dark:text-gray-200">
+                            <strong>{{ metricText(step.metric) }}</strong>
+                            <span class="text-gray-600 dark:text-gray-400"> · {{ step.metric.period }}</span>
+                        </p>
+                        <p v-if="step.target" class="mt-2 border-t border-content-border pt-2 text-sm">
+                            <span class="text-gray-600 dark:text-gray-400">{{ t('points_to', 'Points to') }} · {{ step.target.type_label }}</span><br>
+                            <a v-if="step.target.cp_url" :href="step.target.cp_url" class="hover:underline">{{ step.target.label }}</a>
+                            <span v-else>{{ step.target.label }}</span>
+                            <Badge
+                                v-if="step.target.status !== 'found'"
+                                class="ml-1"
+                                color="red"
+                                pill
+                                :icon="step.target.status === 'missing' ? 'warning-diamond' : undefined"
+                                :text="step.target.status === 'missing' ? t('broken') : t('unavailable')"
+                            />
+                        </p>
+                    </li>
+                </ol>
+            </Card>
+        </Panel>
 
         <!-- Name a phase. -->
         <Stack v-model:open="stageDialog.open" size="narrow">

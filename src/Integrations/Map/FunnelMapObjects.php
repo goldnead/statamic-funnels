@@ -74,7 +74,7 @@ class FunnelMapObjects implements ProvidesMapObjects
             label: $funnel->title,
             cpUrl: cp_route('utilities.funnels.edit', $funnel->id),
             enabled: (bool) $funnel->published,
-            detail: '/f/'.$funnel->handle,
+            detail: parse_url(route('statamic-funnels.entry', $funnel->handle), PHP_URL_PATH) ?: null,
         );
     }
 }

@@ -284,4 +284,6 @@ return [
     'map_metric_visits' => 'Visits',
     'map_stage_foreign' => 'This phase does not belong to this funnel. Reload the page.',
     'map_period_label' => 'last :days days',
+    'map_conflict' => 'This map was changed elsewhere since you opened it. Reload the page and make your changes again.',
+    'map_metric_visits_of' => 'Visits (:step)',
 ];
