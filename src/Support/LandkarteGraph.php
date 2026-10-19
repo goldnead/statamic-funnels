@@ -34,6 +34,9 @@ class LandkarteGraph
     /** @var array<string, string>|null */
     protected ?array $types = null;
 
+    /** @var array<string, MapLookup> One answer per object per build: a card, its edges and a bridge all ask. */
+    protected array $lookups = [];
+
     public function __construct(protected MapObjectRegistry $registry) {}
 
     /**
@@ -69,6 +72,7 @@ class LandkarteGraph
     public function build(Landkarte $landkarte, MapPeriod $period, ?array $drill = null): array
     {
         $landkarte->loadMissing(['stages.refs', 'edges']);
+        $this->lookups = [];
 
         $lanes = [];
         $nodes = [];
@@ -138,14 +142,23 @@ class LandkarteGraph
 
     /**
      * Replace the Landkarte's lanes, their cards and the hand-drawn edges with
-     * the submitted layout, all or nothing.
+     * the submitted layout, all or nothing. False, and nothing written, when the
+     * stored map is no longer the one `$version` describes.
      *
      * @param  list<array{id?: int|null, name: string, purpose?: string|null, refs?: list<array{type: string, ref_id: string}>}>  $stages
      * @param  list<array{from_type: string, from_ref: string, to_type: string, to_ref: string, label?: string|null}>  $edges
      */
-    public function save(Landkarte $landkarte, string $name, array $stages, array $edges): void
+    public function save(Landkarte $landkarte, string $name, array $stages, array $edges, ?string $version = null): bool
     {
-        DB::transaction(function () use ($landkarte, $name, $stages, $edges) {
+        return DB::transaction(function () use ($landkarte, $name, $stages, $edges, $version) {
+            // Checked inside the transaction, on the row locked for it: two
+            // saves that both passed an outside check would overwrite each other.
+            Landkarte::query()->whereKey($landkarte->id)->lockForUpdate()->first();
+
+            if ($version !== null && ! hash_equals($this->version($landkarte->fresh()), $version)) {
+                return false;
+            }
+
             $landkarte->update(['name' => $name]);
 
             $existing = $landkarte->stages()->get()->keyBy('id');
@@ -209,6 +222,8 @@ class LandkarteGraph
                     'label' => ($edge['label'] ?? '') !== '' ? $edge['label'] : null,
                 ]);
             }
+
+            return true;
         });
     }
 
@@ -223,7 +238,7 @@ class LandkarteGraph
      */
     public function card(string $type, string $id, MapPeriod $period): array
     {
-        $lookup = $this->registry->lookup($type, $id);
+        $lookup = $this->lookup($type, $id);
 
         $card = [
             'type' => $type,
@@ -355,7 +370,7 @@ class LandkarteGraph
                 continue;
             }
 
-            $via = $this->registry->lookup($edge->fromType, $edge->fromId);
+            $via = $this->lookup($edge->fromType, $edge->fromId);
             $name = $via->status === MapLookup::FOUND && $via->object !== null ? $via->object->label : $edge->fromId;
 
             foreach ($incoming[$from] as $first) {
@@ -393,7 +408,7 @@ class LandkarteGraph
      */
     protected function ghostFor(string $type, string $id, ?string $written, array $near): ?array
     {
-        if ($this->registry->lookup($type, $id)->status !== MapLookup::MISSING) {
+        if ($this->lookup($type, $id)->status !== MapLookup::MISSING) {
             return null;
         }
 
@@ -486,6 +501,11 @@ class LandkarteGraph
             fn ($k) => ! isset($hasIncoming[$k]) || $real[$k]['lane'] === $firstLane,
         ));
 
+        // A goal that other entries lead to is reached from them, not from itself.
+        if (isset($hasIncoming[$goal]) && count($entries) > 1) {
+            $entries = array_values(array_filter($entries, fn ($k) => $k !== $goal));
+        }
+
         // Breadth first from every entry at once: the first to reach the goal is the shortest.
         $queue = [];
         $came = [];
@@ -547,6 +567,11 @@ class LandkarteGraph
             'lkm' => __('statamic-funnels::messages.map_return_map'),
             'lkz' => __('statamic-funnels::messages.map_return_back'),
         ]);
+    }
+
+    protected function lookup(string $type, string $id): MapLookup
+    {
+        return $this->lookups[$type."\0".$id] ??= $this->registry->lookup($type, $id);
     }
 
     /** @return array<string, string> */

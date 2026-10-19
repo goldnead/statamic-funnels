@@ -115,7 +115,7 @@ class LandkarteController extends CpController
             'version' => ['required', 'string'],
             'name' => ['required', 'string', 'max:191'],
             'stages' => ['present', 'array', 'max:20'],
-            'stages.*.id' => ['nullable', 'integer'],
+            'stages.*.id' => ['nullable', 'integer', 'distinct'],
             'stages.*.name' => ['required', 'string', 'max:191'],
             'stages.*.purpose' => ['nullable', 'string', 'max:191'],
             'stages.*.refs' => ['nullable', 'array', 'max:100'],
@@ -129,12 +129,6 @@ class LandkarteController extends CpController
             'edges.*.label' => ['nullable', 'string', 'max:191'],
         ]);
 
-        // Saved on an older picture than the stored one: another tab or another
-        // person changed the Landkarte since this page loaded. Refuse, say why.
-        if (! hash_equals($this->graph->version($landkarte), $data['version'])) {
-            return back()->withErrors(['stages' => __('statamic-funnels::messages.map_conflict')]);
-        }
-
         // A lane id that is not this Landkarte's is a stale or forged request.
         // Treating it as a new lane would quietly duplicate; refusing is cheaper.
         $own = $landkarte->stages()->pluck('id')->all();
@@ -145,7 +139,11 @@ class LandkarteController extends CpController
             }
         }
 
-        $this->graph->save($landkarte, trim($data['name']), $data['stages'], $data['edges']);
+        // Saved on an older picture than the stored one (another tab, another
+        // person): refused inside the save, on the locked row, with the reason.
+        if (! $this->graph->save($landkarte, trim($data['name']), $data['stages'], $data['edges'], $data['version'])) {
+            return back()->withErrors(['stages' => __('statamic-funnels::messages.map_conflict')]);
+        }
 
         return back();
     }

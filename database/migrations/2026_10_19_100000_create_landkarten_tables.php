@@ -25,6 +25,8 @@ return new class extends Migration
             Schema::create('funnel_landkarten', function (Blueprint $table) {
                 $table->id();
                 $table->string('name', 191);
+                // Set only on a map copied from a funnel's 1.25 map: how a second run knows it is done.
+                $table->unsignedBigInteger('source_funnel_id')->nullable()->index();
                 $table->timestamps();
             });
         }
@@ -97,34 +99,48 @@ return new class extends Migration
         $now = now();
 
         foreach ($funnelIds as $funnelId) {
-            $title = DB::table('funnels')->where('id', $funnelId)->value('title');
+            $funnel = DB::table('funnels')->where('id', $funnelId)->first();
 
-            if ($title === null || DB::table('funnel_landkarten')->where('name', $title)->exists()) {
+            if ($funnel === null) {
                 continue;
             }
 
-            $landkarteId = DB::table('funnel_landkarten')->insertGetId(['name' => $title, 'created_at' => $now, 'updated_at' => $now]);
+            // Named after the funnel; two funnels with one title get the handle
+            // added, so neither is lost. The name is also how a second run
+            // recognises what it already copied.
+            if (DB::table('funnel_landkarten')->where('source_funnel_id', $funnelId)->exists()) {
+                continue;
+            }
 
-            foreach (DB::table('funnel_stages')->where('funnel_id', $funnelId)->orderBy('position')->orderBy('id')->get() as $stage) {
-                $stageId = DB::table('funnel_landkarte_stages')->insertGetId([
-                    'landkarte_id' => $landkarteId,
-                    'name' => $stage->name,
-                    'position' => $stage->position,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
+            // Named after the funnel; a title that is taken gets the handle added, so no funnel is lost.
+            $name = DB::table('funnel_landkarten')->where('name', $funnel->title)->exists()
+                ? $funnel->title.' ('.$funnel->handle.')'
+                : $funnel->title;
 
-                foreach (DB::table('funnel_stage_refs')->where('funnel_stage_id', $stage->id)->orderBy('position')->orderBy('id')->get() as $ref) {
-                    DB::table('funnel_landkarte_refs')->insert([
-                        'stage_id' => $stageId,
-                        'type' => $ref->type,
-                        'ref_id' => $ref->ref_id,
-                        'position' => $ref->position,
+            DB::transaction(function () use ($funnelId, $name, $now) {
+                $landkarteId = DB::table('funnel_landkarten')->insertGetId(['name' => $name, 'source_funnel_id' => $funnelId, 'created_at' => $now, 'updated_at' => $now]);
+
+                foreach (DB::table('funnel_stages')->where('funnel_id', $funnelId)->orderBy('position')->orderBy('id')->get() as $stage) {
+                    $stageId = DB::table('funnel_landkarte_stages')->insertGetId([
+                        'landkarte_id' => $landkarteId,
+                        'name' => $stage->name,
+                        'position' => $stage->position,
                         'created_at' => $now,
                         'updated_at' => $now,
                     ]);
+
+                    foreach (DB::table('funnel_stage_refs')->where('funnel_stage_id', $stage->id)->orderBy('position')->orderBy('id')->get() as $ref) {
+                        DB::table('funnel_landkarte_refs')->insert([
+                            'stage_id' => $stageId,
+                            'type' => $ref->type,
+                            'ref_id' => $ref->ref_id,
+                            'position' => $ref->position,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ]);
+                    }
                 }
-            }
+            });
         }
     }
 };

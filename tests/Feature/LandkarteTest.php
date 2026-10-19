@@ -605,4 +605,21 @@ class LandkarteTest extends TestCase
         $this->assertSame('minikurs', $landkarte->first()->stages->first()->refs->first()->ref_id);
         $this->assertSame(1, DB::table('funnel_stages')->count(), 'the old rows stay where they are');
     }
+
+    #[Test]
+    public function two_funnels_with_one_title_both_arrive(): void
+    {
+        foreach (['eins', 'zwei'] as $handle) {
+            $funnel = Funnel::create(['handle' => $handle, 'title' => 'Gleicher Titel', 'published' => true]);
+            DB::table('funnel_stages')->insert(['funnel_id' => $funnel->id, 'name' => 'Phase '.$handle, 'position' => 0, 'created_at' => now(), 'updated_at' => now()]);
+        }
+
+        Landkarte::query()->delete();
+        $migration = require __DIR__.'/../../database/migrations/2026_10_19_100000_create_landkarten_tables.php';
+        $migration->up();
+        $migration->up();
+
+        $this->assertEqualsCanonicalizing(['Gleicher Titel', 'Gleicher Titel (zwei)'], Landkarte::query()->pluck('name')->all());
+        $this->assertSame(2, DB::table('funnel_landkarte_stages')->count());
+    }
 }
