@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.26.0 — 2026-10-19
+
+### Added: the Landkarte, a canvas map across addons
+
+- **Maps** (`Marketing › Landkarten`): named maps with phase lanes left to right, cards for objects of other addons, derived and hand-drawn lines, a side panel, a legend, a minimap, hover-free selection of the whole way before and after, red broken references with a counter, and a main path to the product with paid orders.
+- **Lines are computed by the owners** (statamic-brand-context 1.18 `ProvidesMapEdges`), not stored. This addon contributes funnel to page, offer and lead magnet. Hand-drawn lines are stored in `funnel_landkarte_edges`.
+- **Drill-down**: a double click on a checkout or an automation opens its editor with a return bar ("Map X › Name", "Back to the map").
+- **Navigation split**: the funnel list and editor are now "Checkouts & visitor paths" (route icon, one line "Analyse single visits (minutes)"); the maps get their own entry under Marketing.
+
+### Changed
+
+- The 1.25 per-funnel map is gone; `{funnel}/map` redirects to the maps. The migration copies each funnel's phases into a map named after the funnel and leaves the old tables. The funnel type is labelled "Checkout" ("Kasse").
+- Requires statamic-brand-context `^1.18`.
+
+### Upgrading
+
+- Run `php artisan migrate` (four new tables) and `php artisan vendor:publish --tag=statamic-funnels --force`.
+- Lines to lead magnets, courses, offers and products appear once those addons are on their releases with edges.
+
 ## 1.25.1 — 2026-10-18
 
 ### Changed: requires `goldnead/statamic-flow-canvas` ^1.6.1
