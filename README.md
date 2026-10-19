@@ -29,7 +29,7 @@ php artisan migrate
 php artisan vendor:publish --tag=statamic-funnels
 ```
 
-Funnels live under **Utilities → Funnels**.
+Funnels live under **Sales → Checkouts & visitor paths**, the maps under **Marketing → Maps**.
 
 ## Usage
 
@@ -690,21 +690,41 @@ defines. Held back are only framework fields (`_…`) and fields named like a se
 `funnels.form_submitted` hands this data to the receiver, which then processes it on your behalf:
 that needs a data processing agreement with the receiver, as with any other processor.
 
-## The map
+## The Landkarte (map)
 
-Open a funnel and press **Map** (or use the row action in the listing). Columns are phases, cards are
-references to objects that live in other addons: a page, a lead magnet, an automation, a course, an
-offer, a product, another funnel. Each card shows a label that links to the object in the Control Panel,
-whether it is on, and one number with what it counts and over which period.
+Two screens, two time scales, two navigation entries:
 
-- Add a phase, then **Add reference**: pick the kind of object, search, add. Move cards with the arrow
-  buttons, save with **Save map**.
-- The steps of the funnel's graph appear on their own in the **Visitor path** strip, with the object each
-  step points at.
-- The map stores a type and an id and nothing else. It asks the addon that owns the object for the rest,
-  through `Goldnead\BrandContext\Contracts\ProvidesMapObjects` (statamic-brand-context 1.17). An addon
-  that registers a provider appears in the picker; one that is not installed leaves its cards marked
-  "Not available", and an object that was deleted leaves "Reference broken".
+- **Marketing › Landkarten** (map icon): the strategic picture, weeks. A map has phase lanes from left to
+  right (a new one starts with Entry, Freebie, Course, Offer, After, each with a line saying what it is
+  for). Cards are objects that live in other addons: a page, a lead magnet, an automation, a course, a
+  checkout, a product. A card shows the kind, a label, on or off, and one number with what it counts.
+- **Sales › Checkouts & visitor paths** (route icon): the funnel editor, one visit, minutes, drawn
+  vertically.
+
+**Lines.** A connection is derived, never stored, wherever the owning addon can read it from its own
+data: an automation that waits for or starts another, a funnel that shows a page or makes an offer, an
+offer that sells a product, a course that unlocks as a product, a lead magnet that sits on a page, a
+lead magnet or product that triggers an automation. Two lines through an object that is not on the map
+become one line "via" it. What no addon can read you draw by hand in edit mode (stored here, and the
+only thing stored about a connection). Click a card or a line for the side panel: status, number with its
+counting rule, every connection, and where a line comes from. A selection lights up the whole way before
+and after it. The **main path** is drawn thick: the shortest walk from where people enter (nothing leads
+to it, or the first lane) to the product with the most paid orders in the period; with none, the map
+says so instead of guessing.
+
+**Broken references** are red: an object its owner no longer knows, a wait or call that names an
+automation nobody owns (drawn as a red card), a send step whose template does not exist. The badge on top
+counts them and jumps to the first.
+
+**Numbers.** Cards carry the number their addon gives. Lines carry none: how many people walked a
+connection is not counted anywhere yet, and the panel says so.
+
+**Drill-down.** Double-click a checkout or an automation: its editor opens with a bar "Map X › Name" and
+a way back. The bar is put on the page by this addon's script, so neither editor needs to know about it.
+
+Providers register through `Goldnead\BrandContext\Contracts\ProvidesMapObjects` and, for lines,
+`ProvidesMapEdges` (statamic-brand-context 1.18). Upgrading from 1.25: phases of each funnel's old map
+are copied into a map named after the funnel by the migration; the old tables stay.
 
 ## Configuration
 

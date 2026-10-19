@@ -8,7 +8,7 @@ use Goldnead\StatamicFunnels\Contracts\ConversionSender;
 use Goldnead\StatamicFunnels\Contracts\ThumbnailRenderer;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelActionsController;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelsController;
-use Goldnead\StatamicFunnels\Http\Controllers\Cp\MapController;
+use Goldnead\StatamicFunnels\Http\Controllers\Cp\LandkarteController;
 use Goldnead\StatamicFunnels\Integrations\Insights\Completed;
 use Goldnead\StatamicFunnels\Integrations\Insights\CompletionRate;
 use Goldnead\StatamicFunnels\Integrations\Insights\StepEvents;
@@ -329,10 +329,23 @@ class ServiceProvider extends AddonServiceProvider
                 ? SuiteNav::section()
                 : __('statamic-funnels::messages.utility_nav');
 
+            // Two entries, two time scales, two icons. The Landkarte is the
+            // weeks-long picture of a business, in the Marketing section; the
+            // Besucherweg is one visit in minutes, next to the checkout and the
+            // products it sells. The one line under each is drawn by
+            // `resources/js/support/navHints.js`.
+            $nav->create(__('statamic-funnels::messages.nav_landkarten'))
+                ->section(__('statamic-funnels::messages.nav_marketing'))
+                ->icon('travel-map')
+                ->route('utilities.funnels.maps')
+                ->attributes(['title' => __('statamic-funnels::messages.landkarten_description')])
+                ->can('access funnels utility');
+
             $nav->create(__('statamic-funnels::messages.utility_nav'))
                 ->section($section)
-                ->icon('hierarchy-vertical-nav-flow')
+                ->icon('timeline-roadmap-vertical')
                 ->route('utilities.funnels')
+                ->attributes(['title' => __('statamic-funnels::messages.utility_description')])
                 ->can('access funnels utility');
         });
 
@@ -345,7 +358,7 @@ class ServiceProvider extends AddonServiceProvider
             ->action([FunnelsController::class, 'index'])
             ->title(__('statamic-funnels::messages.utility_title'))
             ->navTitle(__('statamic-funnels::messages.utility_nav'))
-            ->icon('hierarchy')
+            ->icon('timeline-roadmap-vertical')
             ->description(__('statamic-funnels::messages.utility_description'))
             ->docsUrl('https://github.com/goldnead/statamic-funnels#readme')
             ->routes(function ($router) {
@@ -355,11 +368,17 @@ class ServiceProvider extends AddonServiceProvider
                 // funnel id.
                 $router->post('actions', [FunnelActionsController::class, 'run'])->name('actions');
                 $router->post('actions/list', [FunnelActionsController::class, 'bulkActions'])->name('actions.list');
+                // The Landkarten, above `{funnel}` so `maps` is never read as a funnel id.
+                $router->get('maps', [LandkarteController::class, 'index'])->name('maps');
+                $router->post('maps', [LandkarteController::class, 'store'])->name('maps.store');
+                $router->get('maps/{landkarte}', [LandkarteController::class, 'show'])->name('maps.show');
+                $router->put('maps/{landkarte}', [LandkarteController::class, 'update'])->name('maps.update');
+                $router->delete('maps/{landkarte}', [LandkarteController::class, 'destroy'])->name('maps.destroy');
+                $router->get('maps/{landkarte}/objects', [LandkarteController::class, 'objects'])->name('maps.objects');
                 $router->post('{funnel}/preview', [FunnelsController::class, 'preview'])->name('preview');
                 $router->get('{funnel}/edit', [FunnelsController::class, 'edit'])->name('edit');
-                $router->get('{funnel}/map', [MapController::class, 'show'])->name('map');
-                $router->put('{funnel}/map', [MapController::class, 'update'])->name('map.update');
-                $router->get('{funnel}/map/objects', [MapController::class, 'objects'])->name('map.objects');
+                // 1.25 had one map per funnel at this address; bookmarks land on the Landkarten.
+                $router->get('{funnel}/map', [LandkarteController::class, 'legacy'])->name('map');
                 $router->patch('{funnel}', [FunnelsController::class, 'update'])->name('update');
             });
     }

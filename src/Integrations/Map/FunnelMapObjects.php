@@ -2,7 +2,9 @@
 
 namespace Goldnead\StatamicFunnels\Integrations\Map;
 
+use Goldnead\BrandContext\Contracts\ProvidesMapEdges;
 use Goldnead\BrandContext\Contracts\ProvidesMapObjects;
+use Goldnead\BrandContext\Map\MapEdge;
 use Goldnead\BrandContext\Map\MapMetric;
 use Goldnead\BrandContext\Map\MapObject;
 use Goldnead\BrandContext\Map\MapPeriod;
@@ -16,7 +18,7 @@ use Goldnead\StatamicFunnels\Models\FunnelVisit;
  * The id is the handle, the same string the public URL carries, so a
  * reference survives an export and an import into another install.
  */
-class FunnelMapObjects implements ProvidesMapObjects
+class FunnelMapObjects implements ProvidesMapEdges, ProvidesMapObjects
 {
     public function type(): string
     {
@@ -64,6 +66,29 @@ class FunnelMapObjects implements ProvidesMapObjects
             ->count();
 
         return new MapMetric($count, __('statamic-funnels::messages.map_metric_visits'), $period);
+    }
+
+    /**
+     * What each funnel's steps point at: the pages it shows, the offers it
+     * makes, the lead magnet it hands out. Read from the steps, never stored.
+     */
+    public function edges(): iterable
+    {
+        foreach (Funnel::query()->with('steps')->orderBy('id')->get() as $funnel) {
+            foreach ($funnel->steps as $step) {
+                $config = $step->config ?? [];
+                $where = __('statamic-funnels::messages.edge_from_step', ['funnel' => $funnel->title, 'step' => $step->label ?: $step->node_key]);
+                $text = fn (string $key): ?string => is_string($config[$key] ?? null) && $config[$key] !== '' ? $config[$key] : null;
+
+                if ($step->type === 'lead_magnet' && $text('resource') !== null) {
+                    yield new MapEdge('funnel', $funnel->handle, 'lead_magnet', $text('resource'), 'hands_out', __('statamic-funnels::messages.edge_hands_out'), $where, false, $text('resource'));
+                } elseif ($step->type === 'offer' && $text('offer') !== null) {
+                    yield new MapEdge('funnel', $funnel->handle, 'offer', $text('offer'), 'offers', __('statamic-funnels::messages.edge_offers'), $where, false, $text('offer'));
+                } elseif ($step->type !== 'mail' && $text('entry') !== null) {
+                    yield new MapEdge('entry', $text('entry'), 'funnel', $funnel->handle, 'step_of', __('statamic-funnels::messages.edge_step_of'), $where);
+                }
+            }
+        }
     }
 
     protected function object(Funnel $funnel): MapObject

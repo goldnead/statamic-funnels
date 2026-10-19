@@ -126,7 +126,6 @@ function reload() {
                  whether one row or twenty are selected. -->
             <template #prepended-row-actions="{ row: funnel }">
                 <DropdownItem icon="edit" :text="__('Edit')" :href="funnel.edit_url" />
-                <DropdownItem icon="hierarchy" :text="__('statamic-funnels::messages.map_open')" :href="funnel.map_url" />
                 <DropdownItem
                     icon="external-link"
                     :text="__('statamic-funnels::messages.open_public')"
