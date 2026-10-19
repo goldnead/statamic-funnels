@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import { Head, Link, router } from '@statamic/cms/inertia';
 import {
-    Header, Button, Badge, EmptyStateMenu, EmptyStateItem, DocsCallout,
+    Header, Button, Badge, Description, EmptyStateMenu, EmptyStateItem, DocsCallout,
     CommandPaletteItem, Stack, Heading, Field, Input, Listing, DropdownItem,
 } from '@statamic/cms/ui';
 
@@ -64,14 +64,16 @@ function reload() {
     <div class="max-w-page mx-auto" data-max-width-wrapper>
         <Head :title="[__('statamic-funnels::messages.utility_title')]" />
 
-        <Header :title="__('statamic-funnels::messages.utility_title')" icon="hierarchy">
+        <Header :title="__('statamic-funnels::messages.utility_title')" icon="timeline-roadmap-vertical">
             <Button variant="primary" :text="__('statamic-funnels::messages.new_funnel')" @click="open = true" />
         </Header>
+
+        <Description :text="__('statamic-funnels::messages.utility_description')" class="mb-4" />
 
         <CommandPaletteItem
             :text="[__('Utilities'), __('statamic-funnels::messages.utility_title')]"
             :url="indexUrl"
-            icon="hierarchy"
+            icon="timeline-roadmap-vertical"
             prioritize
         />
 

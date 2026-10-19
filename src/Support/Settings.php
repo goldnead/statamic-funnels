@@ -120,8 +120,8 @@ class Settings implements ProvidesSettings
     public static function settingsNavParent(): array
     {
         return [
-            class_exists(SuiteNav::class) ? SuiteNav::section() : __('statamic-funnels::messages.utility_nav'),
-            __('statamic-funnels::messages.utility_nav'),
+            class_exists(SuiteNav::class) ? SuiteNav::section() : __('statamic-funnels::messages.nav_funnels'),
+            __('statamic-funnels::messages.nav_funnels'),
         ];
     }
 

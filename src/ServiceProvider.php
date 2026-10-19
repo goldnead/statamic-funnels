@@ -40,6 +40,7 @@ class ServiceProvider extends AddonServiceProvider
 
     protected $routes = [
         'web' => __DIR__.'/../routes/web.php',
+        'cp' => __DIR__.'/../routes/cp.php',
     ];
 
     /**
@@ -327,26 +328,27 @@ class ServiceProvider extends AddonServiceProvider
             // aelterem payments einen eigenen Abschnitt, wie booking es macht.
             $section = class_exists(SuiteNav::class)
                 ? SuiteNav::section()
-                : __('statamic-funnels::messages.utility_nav');
+                : __('statamic-funnels::messages.nav_funnels');
 
-            // Two entries, two time scales, two icons. The Landkarte is the
-            // weeks-long picture of a business, in the Marketing section; the
-            // Besucherweg is one visit in minutes, next to the checkout and the
-            // products it sells. The one line under each is drawn by
-            // `resources/js/support/navHints.js`.
-            $nav->create(__('statamic-funnels::messages.nav_landkarten'))
-                ->section(__('statamic-funnels::messages.nav_marketing'))
-                ->icon('travel-map')
-                ->route('utilities.funnels.maps')
-                ->attributes(['title' => __('statamic-funnels::messages.landkarten_description')])
-                ->can('access funnels utility');
-
-            $nav->create(__('statamic-funnels::messages.utility_nav'))
+            // One entry named after the addon, two children. "Landkarten" is the
+            // weeks-long picture of a business; "Kassen & Besucherwege" is one
+            // visit in minutes. The sentence that tells them apart is the
+            // subtitle of each page, not a line in the navigation. Core's
+            // `Settings` child is added under this entry by brand-context
+            // (`Settings::settingsNavParent()`).
+            $nav->create(__('statamic-funnels::messages.nav_funnels'))
                 ->section($section)
                 ->icon('timeline-roadmap-vertical')
-                ->route('utilities.funnels')
-                ->attributes(['title' => __('statamic-funnels::messages.utility_description')])
-                ->can('access funnels utility');
+                ->route('statamic-funnels.landkarten.index')
+                ->can('access funnels utility')
+                ->children([
+                    $nav->item(__('statamic-funnels::messages.nav_landkarten'))
+                        ->route('statamic-funnels.landkarten.index')
+                        ->can('access funnels utility'),
+                    $nav->item(__('statamic-funnels::messages.utility_nav'))
+                        ->route('utilities.funnels')
+                        ->can('access funnels utility'),
+                ]);
         });
 
         return $this;
@@ -368,13 +370,10 @@ class ServiceProvider extends AddonServiceProvider
                 // funnel id.
                 $router->post('actions', [FunnelActionsController::class, 'run'])->name('actions');
                 $router->post('actions/list', [FunnelActionsController::class, 'bulkActions'])->name('actions.list');
-                // The Landkarten, above `{funnel}` so `maps` is never read as a funnel id.
-                $router->get('maps', [LandkarteController::class, 'index'])->name('maps');
-                $router->post('maps', [LandkarteController::class, 'store'])->name('maps.store');
-                $router->get('maps/{landkarte}', [LandkarteController::class, 'show'])->name('maps.show');
-                $router->put('maps/{landkarte}', [LandkarteController::class, 'update'])->name('maps.update');
-                $router->delete('maps/{landkarte}', [LandkarteController::class, 'destroy'])->name('maps.destroy');
-                $router->get('maps/{landkarte}/objects', [LandkarteController::class, 'objects'])->name('maps.objects');
+                // 1.26 had the Landkarten here; the old addresses go to the new ones.
+                // Above `{funnel}`, so `maps` is never read as a funnel id.
+                $router->get('maps', [LandkarteController::class, 'legacyIndex'])->name('maps');
+                $router->get('maps/{landkarte}', [LandkarteController::class, 'legacyShow'])->name('maps.show');
                 $router->post('{funnel}/preview', [FunnelsController::class, 'preview'])->name('preview');
                 $router->get('{funnel}/edit', [FunnelsController::class, 'edit'])->name('edit');
                 // 1.25 had one map per funnel at this address; bookmarks land on the Landkarten.
