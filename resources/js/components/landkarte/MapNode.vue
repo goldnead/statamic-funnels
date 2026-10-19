@@ -103,7 +103,7 @@ const flawText = computed(() => {
     flex-direction: column;
     justify-content: space-between;
     box-sizing: border-box;
-    width: 232px;
+    width: 204px;
     height: 112px;
     padding: 0.65rem 0.75rem 0.55rem;
     --sa-chip-color: var(--color-gray-500);

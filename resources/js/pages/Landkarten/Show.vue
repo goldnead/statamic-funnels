@@ -772,7 +772,7 @@ const helpLines = computed(() => [
 .lk-key--hand { border-top: 2px dotted var(--color-gray-400); }
 
 .lk-adder {
-    display: flex; align-items: center; justify-content: center; gap: 0.4rem; width: 232px; padding: 0.6rem;
+    display: flex; align-items: center; justify-content: center; gap: 0.4rem; width: 204px; padding: 0.6rem;
     border: 1px dashed var(--color-gray-300); border-radius: 0.75rem; font-size: 0.8rem;
     color: var(--color-gray-600); background: transparent; cursor: pointer;
 }

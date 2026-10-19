@@ -11,8 +11,8 @@
  * which no card ever occupies, so a line never crosses a card.
  */
 
-export const LANE_W = 296;
-export const NODE_W = 232;
+export const LANE_W = 256;
+export const NODE_W = 204;
 export const NODE_H = 112;
 export const ROW_H = 148;
 export const HEAD_H = 68;
@@ -20,8 +20,8 @@ export const LANE_PAD = 26;
 export const LANE_MIN_H = 360;
 
 const GAP = ROW_H - NODE_H;
-const STEP = 12;
-const SPREAD = 26;
+const STEP = 9;
+const SPREAD = 18;
 const RADIUS = 8;
 
 /** The icon of each kind of object. Colour is not part of a kind: the card says what it is in words. */
