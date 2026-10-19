@@ -18,15 +18,27 @@
 const BAR_ID = 'lk-return-bar';
 const STORE = 'funnels.landkarte.drill';
 
-/** Only a path on this site: the parameter is user-controlled input in a URL. */
-export function safeBack(value) {
-    if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return null;
-    return value;
+/**
+ * Only somewhere on this site: the parameter is user-controlled input in a URL.
+ * A path, or an absolute address on this very origin (the server may send
+ * either); the answer is always the path and query alone.
+ */
+export function safeBack(value, origin = window.location.origin) {
+    if (typeof value !== 'string' || value.includes('\\') || value.startsWith('//')) return null;
+
+    try {
+        const url = new URL(value, origin);
+        if (url.origin !== origin) return null;
+
+        return url.pathname + url.search;
+    } catch {
+        return null;
+    }
 }
 
-export function readDrill(search, path = '', storage = window.sessionStorage) {
+export function readDrill(search, path = '', storage = window.sessionStorage, origin = window.location.origin) {
     const params = new URLSearchParams(search);
-    const back = safeBack(params.get('lkb'));
+    const back = safeBack(params.get('lkb'), origin);
 
     if (params.get('lk') && back) {
         const drill = {
@@ -45,7 +57,7 @@ export function readDrill(search, path = '', storage = window.sessionStorage) {
 
     try {
         const kept = JSON.parse(storage?.getItem(STORE) ?? 'null');
-        if (kept && kept.path === path && safeBack(kept.drill?.back)) return kept.drill;
+        if (kept && kept.path === path && safeBack(kept.drill?.back, origin)) return kept.drill;
     } catch { /* unreadable: no bar */ }
 
     return null;

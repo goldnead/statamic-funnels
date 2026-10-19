@@ -12,7 +12,7 @@ import {
 import MapNode from '../../components/landkarte/MapNode.vue';
 import MapLane from '../../components/landkarte/MapLane.vue';
 import MapEdge from '../../components/landkarte/MapEdge.vue';
-import { flowEdges, kindOf, layoutNodes, wayThrough } from '../../support/landkarteLayout.js';
+import { NODE_W, flowEdges, kindOf, layoutNodes, wayThrough } from '../../support/landkarteLayout.js';
 
 /**
  * A Landkarte.
@@ -195,8 +195,21 @@ const litEdges = computed(() => way.value.ids);
 const dimmed = computed(() => !!(selectedKey.value || selectedEdge.value));
 
 function select(key) {
+    const opening = !selectedKey.value && !selectedEdge.value;
     selectedEdge.value = null;
     selectedKey.value = key;
+    if (opening) keepInView(key);
+}
+
+// The panel is its own column, so the board gets narrower when it opens. A card
+// that was in the part now taken away would be out of reach for the double click
+// that follows the first click: bring it into the middle, at the zoom it has.
+async function keepInView(key) {
+    await nextTick();
+    const node = layout.value.flowNodes.find((n) => n.id === key);
+    if (!node) return;
+
+    setTimeout(() => setCenter(node.position.x + NODE_W / 2, node.position.y + 60, { zoom: getViewport().zoom, duration: 250 }), 60);
 }
 
 function selectEdge(id) {
@@ -517,7 +530,7 @@ const periodOptions = computed(() => props.period.options);
                     <template #edge-landkarte="slot"><MapEdge v-bind="slot" /></template>
 
                     <Background pattern-color="var(--color-gray-300)" :gap="20" :size="1.2" />
-                    <MiniMap pannable zoomable :node-class-name="minimapClass" />
+                    <MiniMap pannable zoomable :width="150" :height="96" :node-class-name="minimapClass" />
 
 
                     <Panel position="bottom-left" class="lk-legend-panel">

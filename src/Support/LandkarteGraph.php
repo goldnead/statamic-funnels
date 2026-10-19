@@ -563,7 +563,8 @@ class LandkarteGraph
             'lk' => $landkarte->id,
             'lkn' => $landkarte->name,
             'lkt' => $node['label'],
-            'lkb' => $drill['back'],
+            // A path, not an address: the bar leads back on this site and nowhere else.
+            'lkb' => (parse_url($drill['back'], PHP_URL_PATH) ?: '/').(($q = parse_url($drill['back'], PHP_URL_QUERY)) ? '?'.$q : ''),
             'lkm' => __('statamic-funnels::messages.map_return_map'),
             'lkz' => __('statamic-funnels::messages.map_return_back'),
         ]);

@@ -188,7 +188,7 @@ class LandkarteTest extends TestCase
 
     protected function graph(Landkarte $landkarte): array
     {
-        return app(LandkarteGraph::class)->build($landkarte, MapPeriod::lastDays(30), ['back' => '/cp/utilities/funnels/maps/'.$landkarte->id]);
+        return app(LandkarteGraph::class)->build($landkarte, MapPeriod::lastDays(30), ['back' => cp_route('utilities.funnels.maps.show', $landkarte->id)]);
     }
 
     /** @return array<string, mixed> */
