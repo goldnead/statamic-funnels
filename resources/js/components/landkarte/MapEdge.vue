@@ -90,7 +90,7 @@ const marker = computed(() => {
 .lk-edge__line { stroke: var(--color-gray-400); stroke-width: 1.6; fill: none; }
 .dark .lk-edge__line { stroke: var(--color-gray-500); }
 .lk-edge--dashed .lk-edge__line { stroke-dasharray: 6 5; }
-.lk-edge--main .lk-edge__line { stroke: var(--color-green-700); stroke-width: 4; }
+.lk-edge--main .lk-edge__line { stroke: var(--color-green-700); stroke-width: 5; }
 .dark .lk-edge--main .lk-edge__line { stroke: var(--color-green-400); }
 .lk-edge--on .lk-edge__line { stroke: var(--color-blue-500); stroke-width: 2.6; }
 .lk-edge--main.lk-edge--on .lk-edge__line { stroke-width: 4.4; }

@@ -260,7 +260,7 @@ const mainText = computed(() => {
     return t(props.mainPath.status === 'unreachable' ? 'map_main_path_unreachable' : 'map_main_path_no_revenue');
 });
 
-const legendOpen = ref(true);
+const legendOpen = ref(false);
 const legendKinds = computed(() => {
     const seen = new Map();
     displayNodes.value.forEach((n) => { if (!seen.has(n.type)) seen.set(n.type, n.type_label); });
@@ -431,15 +431,14 @@ provide('landkarte', {
     t, editing, lit, litEdges, dimmed, selectedEdge, select, selectEdge, openLane, moveLane, removeLane, openPicker,
 });
 
-// The side panel is its own column, so opening or closing it changes the width
-// of the board: fit again, once per toggle and not per selection.
-watch(
-    () => !!(selected.value || edge.value),
-    async () => {
-        await nextTick();
-        setTimeout(() => fitView({ duration: 250, padding: 0.08, maxZoom: 1 }), 60);
-    },
-);
+// Where the board opens: readable first, complete second. Fitting every card
+// on a tall board shrinks the type to nothing, so the view never starts below
+// 85 % and is centred on the main path (or on everything when there is none);
+// the rest is a pan away, and the minimap shows where it is.
+function settleView() {
+    const keys = props.mainPath.status === 'found' ? props.mainPath.node_keys : [];
+    nextTick(() => fitView({ nodes: keys.length ? keys : undefined, padding: 0.12, minZoom: 0.85, maxZoom: 1 }));
+}
 
 const periodOptions = computed(() => props.period.options);
 </script>
@@ -471,6 +470,22 @@ const periodOptions = computed(() => props.period.options);
 
         <p v-if="errors && Object.keys(errors).length" class="mb-3 text-sm text-red-600" role="alert">{{ Object.values(errors)[0] }}</p>
 
+            <div class="lk-strip" data-lk-strip>
+                <button
+                    v-if="problemTotal"
+                    type="button"
+                    class="lk-flag lk-flag--bad"
+                    data-lk-problems
+                    :title="t('map_problem_jump')"
+                    @click="jumpToProblem"
+                >
+                    <Icon name="warning-diamond" class="size-4" />
+                    {{ problemTotal === 1 ? t('map_problem_one') : t('map_problem_many').replace(':count', problemTotal) }}
+                </button>
+                <span class="lk-flag lk-flag--main" :class="{ 'lk-flag--muted': mainPath.status !== 'found' }" data-lk-main>
+                    <span class="lk-flag__swatch" /> {{ mainText }}
+                </span>
+            </div>
         <div class="lk-shell" :class="{ 'lk-shell--panel': selected || edge }">
             <div class="lk-board sa-canvas-frame" data-landkarte-board>
                 <VueFlow
@@ -485,7 +500,7 @@ const periodOptions = computed(() => props.period.options);
                     :pan-on-drag="true"
                     :min-zoom="0.2"
                     :max-zoom="1.5"
-                    :fit-view-on-init="true"
+                    @pane-ready="settleView"
                     :default-edge-options="{ type: 'landkarte' }"
                     class="fc-canvas"
                     @node-click="onNodeClick"
@@ -504,28 +519,12 @@ const periodOptions = computed(() => props.period.options);
                     <Background pattern-color="var(--color-gray-300)" :gap="20" :size="1.2" />
                     <MiniMap pannable zoomable :node-class-name="minimapClass" />
 
-                    <Panel position="top-left" class="lk-flags">
-                        <button
-                            v-if="problemTotal"
-                            type="button"
-                            class="lk-flag lk-flag--bad"
-                            data-lk-problems
-                            :title="t('map_problem_jump')"
-                            @click="jumpToProblem"
-                        >
-                            <Icon name="warning-diamond" class="size-4" />
-                            {{ problemTotal === 1 ? t('map_problem_one') : t('map_problem_many').replace(':count', problemTotal) }}
-                        </button>
-                        <span class="lk-flag lk-flag--main" :class="{ 'lk-flag--muted': mainPath.status !== 'found' }" data-lk-main>
-                            <span class="lk-flag__swatch" /> {{ mainText }}
-                        </span>
-                    </Panel>
 
                     <Panel position="bottom-left" class="lk-legend-panel">
                         <div class="lk-legend" data-lk-legend>
                             <button type="button" class="lk-legend__title" :aria-expanded="legendOpen" @click="legendOpen = !legendOpen">
                                 {{ t('map_legend') }}
-                                <Icon :name="legendOpen ? 'x' : 'plus'" class="size-3" />
+                                <Icon :name="legendOpen ? 'x' : 'plus'" class="size-3" style="margin-left: 0.6rem" />
                             </button>
                             <template v-if="legendOpen">
                                 <ul class="lk-legend__kinds">
@@ -750,11 +749,11 @@ const periodOptions = computed(() => props.period.options);
 .dark .lk-lede { color: var(--color-gray-300); }
 .lk-shell { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-items: stretch; }
 .lk-shell--panel { grid-template-columns: minmax(0, 1fr) 340px; }
-.lk-board { height: calc(100vh - 15rem); min-height: 560px; border: 1px solid var(--color-gray-200); border-radius: 0.75rem; }
+.lk-board { height: calc(100vh - 17rem); min-height: 520px; border: 1px solid var(--color-gray-200); border-radius: 0.75rem; }
 .dark .lk-board { border-color: var(--color-gray-700); }
 .lk-defs { position: absolute; }
 
-.lk-flags { display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-start; margin: 0.9rem 0 0 0.9rem; pointer-events: none; }
+.lk-strip { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0 0 0.75rem; }
 .lk-flag {
     display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.7rem; border-radius: 999px;
     font-size: 0.78rem; font-weight: 600; pointer-events: auto;
@@ -805,7 +804,7 @@ const periodOptions = computed(() => props.period.options);
 .lk-empty p { max-width: 44ch; color: var(--color-gray-700); font-size: 0.9rem; }
 
 .lk-panel {
-    height: calc(100vh - 15rem); min-height: 560px; overflow-y: auto; padding: 1rem 1.1rem 1.2rem; border-radius: 0.75rem;
+    height: calc(100vh - 17rem); min-height: 520px; overflow-y: auto; padding: 1rem 1.1rem 1.2rem; border-radius: 0.75rem;
     background: var(--color-white, #fff); border: 1px solid var(--color-gray-200); font-size: 0.85rem; color: var(--color-gray-800);
 }
 .dark .lk-panel { background: var(--color-gray-800); border-color: var(--color-gray-700); color: var(--color-gray-200); }
