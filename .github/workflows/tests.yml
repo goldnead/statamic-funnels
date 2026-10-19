@@ -177,6 +177,11 @@ jobs:
 
       - run: npm ci
 
+      # The Landkarte routes its own lines from a fixed grid; the test proves no
+      # line crosses a card.
+      - name: JavaScript unit tests
+        run: node --test "tests/js/*.test.mjs"
+
       - run: npm run build
 
       # The committed bundle is what every installed site loads. A source change

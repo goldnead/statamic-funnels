@@ -19,6 +19,7 @@ use Goldnead\StatamicFunnels\Models\Landkarte;
 use Goldnead\StatamicFunnels\Models\LandkarteEdge;
 use Goldnead\StatamicFunnels\Models\LandkarteRef;
 use Goldnead\StatamicFunnels\Support\LandkarteGraph;
+use Goldnead\StatamicFunnels\Support\Settings;
 use Goldnead\StatamicFunnels\Tests\TestCase;
 use Goldnead\StatamicOffers\Models\Offer;
 use Illuminate\Support\Facades\DB;
@@ -188,7 +189,7 @@ class LandkarteTest extends TestCase
 
     protected function graph(Landkarte $landkarte): array
     {
-        return app(LandkarteGraph::class)->build($landkarte, MapPeriod::lastDays(30), ['back' => cp_route('utilities.funnels.maps.show', $landkarte->id)]);
+        return app(LandkarteGraph::class)->build($landkarte, MapPeriod::lastDays(30), ['back' => cp_route('statamic-funnels.landkarten.show', $landkarte->id)]);
     }
 
     /** @return array<string, mixed> */
@@ -433,7 +434,7 @@ class LandkarteTest extends TestCase
             parse_str(parse_url($nodes[$key]['drill_url'], PHP_URL_QUERY), $query);
             $this->assertSame('CVT im Chor', $query['lkn']);
             $this->assertSame($nodes[$key]['label'], $query['lkt']);
-            $this->assertStringStartsWith('/cp/utilities/funnels/maps/', $query['lkb']);
+            $this->assertStringStartsWith('/cp/funnels/landkarten/', $query['lkb']);
         }
     }
 
@@ -442,7 +443,7 @@ class LandkarteTest extends TestCase
     #[Test]
     public function a_new_landkarte_starts_with_the_five_phases_and_their_purpose(): void
     {
-        $this->actingAs($this->user())->post('/cp/utilities/funnels/maps', ['name' => 'CVT im Chor'])->assertRedirect();
+        $this->actingAs($this->user())->post('/cp/funnels/landkarten', ['name' => 'CVT im Chor'])->assertRedirect();
 
         $landkarte = Landkarte::query()->where('name', 'CVT im Chor')->firstOrFail();
 
@@ -459,13 +460,13 @@ class LandkarteTest extends TestCase
     {
         $landkarte = $this->landkarte([[['lead_magnet', 'minikurs']], [['automation', 'welcome']]]);
 
-        $props = $this->props("/cp/utilities/funnels/maps/{$landkarte->id}");
+        $props = $this->props("/cp/funnels/landkarten/{$landkarte->id}");
 
         $this->assertCount(2, $props['lanes']);
         $this->assertCount(3, $props['nodes'], 'two placed and one broken reference');
         $this->assertNotEmpty($props['edges']);
         $this->assertSame(1, $props['problemCount']);
-        $this->assertArrayHasKey('map_legend', $props['labels']);
+        $this->assertArrayHasKey('map_help', $props['labels']);
         $this->assertSame(30, $props['period']['days']);
         $this->assertContains('lead_magnet', array_column($props['types'], 'value'));
         $this->assertNotContains('funnel_step', array_column($props['types'], 'value'));
@@ -489,7 +490,7 @@ class LandkarteTest extends TestCase
         ];
 
         $stale = $graph->version($landkarte);
-        $this->actingAs($this->user())->put("/cp/utilities/funnels/maps/{$landkarte->id}", $payload($stale))->assertSessionHasNoErrors();
+        $this->actingAs($this->user())->put("/cp/funnels/landkarten/{$landkarte->id}", $payload($stale))->assertSessionHasNoErrors();
 
         $landkarte = $landkarte->fresh();
         $this->assertSame('Umbenannt', $landkarte->name);
@@ -499,7 +500,7 @@ class LandkarteTest extends TestCase
         $this->assertSame(0, $landkarte->stages->last()->refs->count(), 'one object once per Landkarte');
         $this->assertSame(1, $landkarte->edges->count());
 
-        $this->actingAs($this->user())->put("/cp/utilities/funnels/maps/{$landkarte->id}", $payload($stale))
+        $this->actingAs($this->user())->put("/cp/funnels/landkarten/{$landkarte->id}", $payload($stale))
             ->assertSessionHasErrors('stages');
     }
 
@@ -509,7 +510,7 @@ class LandkarteTest extends TestCase
         $mine = $this->landkarte([[['lead_magnet', 'minikurs']]]);
         $other = $this->landkarte([[['lead_magnet', 'minikurs']]]);
 
-        $this->actingAs($this->user())->put("/cp/utilities/funnels/maps/{$mine->id}", [
+        $this->actingAs($this->user())->put("/cp/funnels/landkarten/{$mine->id}", [
             'version' => app(LandkarteGraph::class)->version($mine),
             'name' => 'x',
             'stages' => [['id' => $other->stages->first()->id, 'name' => 'x', 'refs' => []]],
@@ -523,7 +524,7 @@ class LandkarteTest extends TestCase
         $landkarte = $this->landkarte([[['lead_magnet', 'minikurs']]]);
         $landkarte->edges()->create(['from_type' => 'a', 'from_ref' => '1', 'to_type' => 'b', 'to_ref' => '2']);
 
-        $this->actingAs($this->user())->delete("/cp/utilities/funnels/maps/{$landkarte->id}")->assertRedirect();
+        $this->actingAs($this->user())->delete("/cp/funnels/landkarten/{$landkarte->id}")->assertRedirect();
 
         $this->assertSame(0, Landkarte::query()->count());
         $this->assertSame(0, LandkarteRef::query()->count());
@@ -535,10 +536,10 @@ class LandkarteTest extends TestCase
     {
         $landkarte = $this->landkarte([]);
 
-        $this->actingAs($this->user())->getJson("/cp/utilities/funnels/maps/{$landkarte->id}/objects?type=lead_magnet")
+        $this->actingAs($this->user())->getJson("/cp/funnels/landkarten/{$landkarte->id}/objects?type=lead_magnet")
             ->assertOk()->assertJsonPath('objects.0.id', 'minikurs');
 
-        $this->actingAs($this->user())->getJson("/cp/utilities/funnels/maps/{$landkarte->id}/objects?type=nope")->assertNotFound();
+        $this->actingAs($this->user())->getJson("/cp/funnels/landkarten/{$landkarte->id}/objects?type=nope")->assertNotFound();
     }
 
     #[Test]
@@ -548,9 +549,10 @@ class LandkarteTest extends TestCase
         $role = tap(Role::make('cp-only')->title('CP only')->addPermission('access cp'))->save();
         $nobody = tap(User::make()->email('nobody@example.com')->assignRole($role))->save();
 
-        $this->actingAs($nobody)->get('/cp/utilities/funnels/maps')->assertRedirect();
+        $this->actingAs($nobody)->get('/cp/funnels/landkarten')->assertForbidden();
+        $this->actingAs($nobody)->get("/cp/funnels/landkarten/{$landkarte->id}")->assertForbidden();
+        $this->actingAs($nobody)->post('/cp/funnels/landkarten', ['name' => 'x'])->assertForbidden();
         $this->actingAs($nobody)->get("/cp/utilities/funnels/maps/{$landkarte->id}")->assertRedirect();
-        $this->actingAs($nobody)->post('/cp/utilities/funnels/maps', ['name' => 'x'])->assertRedirect();
         $this->assertSame(1, Landkarte::query()->count(), 'nothing was created');
     }
 
@@ -559,7 +561,18 @@ class LandkarteTest extends TestCase
     {
         $funnel = $this->funnel();
 
-        $this->actingAs($this->user())->get("/cp/utilities/funnels/{$funnel->id}/map")->assertRedirect('/cp/utilities/funnels/maps');
+        $this->actingAs($this->user())->get("/cp/utilities/funnels/{$funnel->id}/map")->assertRedirect('/cp/funnels/landkarten');
+    }
+
+    #[Test]
+    public function the_1_26_addresses_under_the_utility_redirect_to_the_new_ones(): void
+    {
+        $landkarte = $this->landkarte([[['lead_magnet', 'minikurs']]]);
+
+        $this->actingAs($this->user())->get('/cp/utilities/funnels/maps')->assertRedirect('/cp/funnels/landkarten')->assertStatus(301);
+        $this->actingAs($this->user())->get("/cp/utilities/funnels/maps/{$landkarte->id}")
+            ->assertRedirect("/cp/funnels/landkarten/{$landkarte->id}")
+            ->assertStatus(301);
     }
 
     #[Test]
@@ -567,7 +580,7 @@ class LandkarteTest extends TestCase
     {
         // The navigation tree itself is not built in this test harness; what the
         // entries are made of is: two routes, two names that are not the same word.
-        $this->assertSame('/cp/utilities/funnels/maps', parse_url(cp_route('utilities.funnels.maps'), PHP_URL_PATH));
+        $this->assertSame('/cp/funnels/landkarten', parse_url(cp_route('statamic-funnels.landkarten.index'), PHP_URL_PATH));
         $this->assertSame('/cp/utilities/funnels', parse_url(cp_route('utilities.funnels'), PHP_URL_PATH));
 
         foreach (['de', 'en'] as $locale) {
@@ -581,6 +594,11 @@ class LandkarteTest extends TestCase
             );
         }
 
+        // One entry named after the addon owns both; the Settings child that
+        // brand-context adds hangs under that entry, not under a child.
+        $this->assertSame('Funnels', __('statamic-funnels::messages.nav_funnels', [], 'de'));
+        $this->assertSame('Funnels', __('statamic-funnels::messages.nav_funnels', [], 'en'));
+        $this->assertSame(__('statamic-funnels::messages.nav_funnels'), Settings::settingsNavParent()[1]);
         $this->assertSame('Kassen & Besucherwege', __('statamic-funnels::messages.utility_nav', [], 'de'));
         $this->assertSame('Landkarten', __('statamic-funnels::messages.nav_landkarten', [], 'de'));
     }

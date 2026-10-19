@@ -29,7 +29,7 @@ php artisan migrate
 php artisan vendor:publish --tag=statamic-funnels
 ```
 
-Funnels live under **Sales → Checkouts & visitor paths**, the maps under **Marketing → Maps**.
+One navigation entry, **Funnels**, with two children: **Landkarten** (the maps) and **Kassen & Besucherwege** (the funnel list and editor). With brand-context 1.16+ the settings hang under it as a third child.
 
 ## Usage
 
@@ -692,29 +692,33 @@ that needs a data processing agreement with the receiver, as with any other proc
 
 ## The Landkarte (map)
 
-Two screens, two time scales, two navigation entries:
+Two screens, two time scales, one navigation entry (**Funnels**) with two children:
 
-- **Marketing › Landkarten** (map icon): the strategic picture, weeks. A map has phase lanes from left to
-  right (a new one starts with Entry, Freebie, Course, Offer, After, each with a line saying what it is
-  for). Cards are objects that live in other addons: a page, a lead magnet, an automation, a course, a
-  checkout, a product. A card shows the kind, a label, on or off, and one number with what it counts.
-- **Sales › Checkouts & visitor paths** (route icon): the funnel editor, one visit, minutes, drawn
-  vertically.
+- **Funnels › Landkarten**: the strategic picture, weeks. A map has phase lanes left to right (a new one
+  starts with Entry, Freebie, Course, Offer, After, each with a line saying what it is for). The lanes are
+  quiet neutral columns with the name in plain text. Cards are objects that live in other addons: a page, a
+  lead magnet, an automation, a course, a checkout, a product. A card shows the kind as an outlined word,
+  a label, on or off, and one number with what it counts. The map opens fitted, so every phase is in view.
+- **Funnels › Kassen & Besucherwege**: the funnel editor, one visit, minutes, drawn vertically.
+
+Each page says in one line under its title which of the two it is. The Landkarten live at
+`/cp/funnels/landkarten`; the 1.26 addresses under `/cp/utilities/funnels/maps` redirect there.
 
 **Lines.** A connection is derived, never stored, wherever the owning addon can read it from its own
 data: an automation that waits for or starts another, a funnel that shows a page or makes an offer, an
 offer that sells a product, a course that unlocks as a product, a lead magnet that sits on a page, a
 lead magnet or product that triggers an automation. Two lines through an object that is not on the map
 become one line "via" it. What no addon can read you draw by hand in edit mode (stored here, and the
-only thing stored about a connection). Click a card or a line for the side panel: status, number with its
+only thing stored about a connection). Click a card or a line and a Statamic stack opens, the way an entry does: status, number with its
 counting rule, every connection, and where a line comes from. A selection lights up the whole way before
-and after it. The **main path** is drawn thick: the shortest walk from where people enter (nothing leads
+and after it, also after the stack is closed; a click on the empty board ends it. The name of a line shows
+while the pointer is on it. The **main path** is drawn in the Control Panel's primary colour, thin: the shortest walk from where people enter (nothing leads
 to it, or the first lane) to the product with the most paid orders in the period; with none, the map
 says so instead of guessing.
 
-**Broken references** are red: an object its owner no longer knows, a wait or call that names an
-automation nobody owns (drawn as a red card), a send step whose template does not exist. The badge on top
-counts them and jumps to the first.
+**Broken references** are red, and red is the only colour on a card: an object its owner no longer knows,
+a wait or call that names an automation nobody owns (drawn as a red card), a send step whose template does
+not exist. The small "i" next to the period picker explains how to read the lines.
 
 **Numbers.** Cards carry the number their addon gives. Lines carry none: how many people walked a
 connection is not counted anywhere yet, and the panel says so.

@@ -42,10 +42,10 @@ class LandkarteController extends CpController
                 'id' => $k->id,
                 'name' => $k->name,
                 'stages_count' => $k->stages_count,
-                'url' => cp_route('utilities.funnels.maps.show', $k->id),
-                'destroy_url' => cp_route('utilities.funnels.maps.destroy', $k->id),
+                'url' => cp_route('statamic-funnels.landkarten.show', $k->id),
+                'destroy_url' => cp_route('statamic-funnels.landkarten.destroy', $k->id),
             ])->all(),
-            'storeUrl' => cp_route('utilities.funnels.maps.store'),
+            'storeUrl' => cp_route('statamic-funnels.landkarten.store'),
             'labels' => $this->labels(),
         ]);
     }
@@ -62,7 +62,7 @@ class LandkarteController extends CpController
             $landkarte->stages()->create([...$lane, 'position' => $position]);
         }
 
-        return redirect(cp_route('utilities.funnels.maps.show', $landkarte->id));
+        return redirect(cp_route('statamic-funnels.landkarten.show', $landkarte->id));
     }
 
     public function show(Request $request, Landkarte $landkarte)
@@ -76,7 +76,7 @@ class LandkarteController extends CpController
         $days = (int) $request->query('days', 30);
         $days = in_array($days, self::PERIODS, true) ? $days : 30;
         $period = MapPeriod::lastDays($days);
-        $showUrl = cp_route('utilities.funnels.maps.show', $landkarte->id);
+        $showUrl = cp_route('statamic-funnels.landkarten.show', $landkarte->id);
 
         $built = $this->graph->build($landkarte, $period, ['back' => $showUrl]);
 
@@ -99,10 +99,10 @@ class LandkarteController extends CpController
                 ])->all(),
             ],
             'version' => $this->graph->version($landkarte),
-            'saveUrl' => cp_route('utilities.funnels.maps.update', $landkarte->id),
-            'objectsUrl' => cp_route('utilities.funnels.maps.objects', $landkarte->id),
+            'saveUrl' => cp_route('statamic-funnels.landkarten.update', $landkarte->id),
+            'objectsUrl' => cp_route('statamic-funnels.landkarten.objects', $landkarte->id),
             'showUrl' => $showUrl,
-            'indexUrl' => cp_route('utilities.funnels.maps'),
+            'indexUrl' => cp_route('statamic-funnels.landkarten.index'),
             'labels' => $this->labels(),
         ]);
     }
@@ -154,7 +154,7 @@ class LandkarteController extends CpController
 
         $landkarte->delete();
 
-        return redirect(cp_route('utilities.funnels.maps'));
+        return redirect(cp_route('statamic-funnels.landkarten.index'));
     }
 
     /** What the picker lists: objects of one type, optionally narrowed by a search. */
@@ -182,7 +182,22 @@ class LandkarteController extends CpController
     {
         $this->authorizeAccess();
 
-        return redirect(cp_route('utilities.funnels.maps'));
+        return redirect(cp_route('statamic-funnels.landkarten.index'));
+    }
+
+    /** 1.26 had the Landkarten under `utilities/funnels/maps`; those bookmarks land on the new address. */
+    public function legacyIndex()
+    {
+        $this->authorizeAccess();
+
+        return redirect(cp_route('statamic-funnels.landkarten.index'), 301);
+    }
+
+    public function legacyShow(Landkarte $landkarte)
+    {
+        $this->authorizeAccess();
+
+        return redirect(cp_route('statamic-funnels.landkarten.show', $landkarte->id), 301);
     }
 
     protected function authorizeAccess(): void
@@ -206,9 +221,9 @@ class LandkarteController extends CpController
             'map_move_up', 'map_move_down', 'map_stage_left', 'map_stage_right', 'map_on', 'map_off', 'map_no_switch', 'map_broken',
             'map_broken_help', 'map_unavailable', 'map_unavailable_help', 'map_no_number', 'map_save', 'map_saved', 'map_unsaved',
             'map_period', 'map_open_in_cp', 'map_cancel', 'map_add', 'map_edit', 'map_done', 'map_purpose', 'map_purpose_placeholder',
-            'map_legend', 'map_legend_main', 'map_legend_wait', 'map_legend_problem', 'map_legend_hand', 'map_problems', 'map_problem_one',
-            'map_problem_many', 'map_problem_jump', 'map_dead_reference', 'map_open_editor',
-            'map_open_inside', 'map_double_click_hint', 'map_panel_status', 'map_panel_number', 'map_panel_rule', 'map_panel_connections',
+            'map_help', 'map_help_click', 'map_legend_main', 'map_legend_wait', 'map_legend_problem', 'map_legend_hand', 'map_problem_one',
+            'map_problem_many', 'map_dead_reference', 'map_open_editor',
+            'map_open_inside', 'map_open_inside_funnel', 'map_open_inside_automation', 'map_double_click_hint', 'map_panel_status', 'map_panel_number', 'map_panel_rule', 'map_panel_connections',
             'map_panel_in', 'map_panel_out', 'map_panel_none', 'map_panel_problems', 'map_panel_close', 'map_edge_origin_derived',
             'map_edge_origin_hand', 'map_edge_number', 'map_edge_number_none', 'map_main_path_found', 'map_main_path_no_revenue',
             'map_main_path_unreachable', 'map_main_path_title', 'map_draw_edge', 'map_draw_edge_from', 'map_draw_edge_to', 'map_draw_edge_add',

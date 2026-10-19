@@ -1,14 +1,21 @@
 <script setup>
-import { computed, inject } from 'vue';
-import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath } from '@vue-flow/core';
+import { computed, inject, ref } from 'vue';
+import { BaseEdge, EdgeLabelRenderer } from '@vue-flow/core';
 
 /**
- * A connection between two cards: an orthogonal line with an arrow and the
- * name of the relation on it.
+ * A connection between two cards: a thin orthogonal line with an arrow. The
+ * route is worked out by the layout (`landkarteLayout.js`), which knows where
+ * every card and every gutter is, so the line is drawn from `data.path` and
+ * not from the canvas's own routing.
  *
- * Three looks beyond the plain grey, each one a statement. Thick and green: the
- * main path from the entry to the product that earned money. Dashed: a wait,
- * not a hand-over of people. Red: it ends at something that is gone.
+ * Grey by default. Three looks beyond it, each one a statement: the CP's
+ * primary colour for the main path from the entry to the product that earned
+ * money, dashed for a wait (not a hand-over of people), red for a connection
+ * that ends at something that is gone.
+ *
+ * The name of the connection is not on the line. It appears while the pointer
+ * is on the line, or when the line is the selection: one label at a time, so
+ * labels never lie on top of each other.
  *
  * There is no number on the line. How many people walked a connection needs
  * tracking nobody has built; the panel says so instead of showing a made-up
@@ -16,68 +23,53 @@ import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath } from '@vue-flow/core';
  */
 const props = defineProps({
     id: { type: String, required: true },
-    sourceX: { type: Number, required: true },
-    sourceY: { type: Number, required: true },
-    targetX: { type: Number, required: true },
-    targetY: { type: Number, required: true },
-    sourcePosition: { type: String, required: true },
-    targetPosition: { type: String, required: true },
     data: { type: Object, required: true },
 });
 
 const lk = inject('landkarte');
-
-const path = computed(() =>
-    getSmoothStepPath({
-        sourceX: props.sourceX,
-        sourceY: props.sourceY,
-        sourcePosition: props.sourcePosition,
-        targetX: props.targetX,
-        targetY: props.targetY,
-        targetPosition: props.targetPosition,
-        borderRadius: 14,
-        offset: 26,
-    }),
-);
+const hover = ref(false);
 
 const lit = computed(() => lk.lit.value.size > 0);
 const onWay = computed(() => lk.litEdges.value.has(props.id));
 const picked = computed(() => lk.selectedEdge.value === props.id);
-const dim = computed(() => (lit.value && !onWay.value && !picked.value) || (!lit.value && lk.selectedEdge.value && !picked.value));
+const dim = computed(() => (lit.value && !onWay.value && !picked.value) || (!lit.value && !!lk.selectedEdge.value && !picked.value));
+const showLabel = computed(() => !!props.data.label && (hover.value || picked.value));
 
 const classes = computed(() => ({
     'lk-edge--main': props.data.main,
-    'lk-edge--dashed': props.data.dashed,
+    'lk-edge--dashed': props.data.dashed && !props.data.hand,
     'lk-edge--bad': props.data.bad,
     'lk-edge--hand': props.data.hand,
-    'lk-edge--on': onWay.value || picked.value,
+    'lk-edge--on': (onWay.value || picked.value || hover.value) && !props.data.main && !props.data.bad,
     'lk-edge--dim': dim.value,
 }));
 
 // The arrow's colour follows the line, so each state needs its own marker.
 const marker = computed(() => {
     if (props.data.bad) return 'lk-arrow-bad';
-    if (onWay.value || picked.value) return 'lk-arrow-on';
     if (props.data.main) return 'lk-arrow-main';
+    if (onWay.value || picked.value || hover.value) return 'lk-arrow-on';
     return 'lk-arrow';
 });
 </script>
 
 <template>
     <g :class="classes" class="lk-edge" :data-lk-edge="id">
-        <BaseEdge :id="id" :path="path[0]" :marker-end="`url(#${marker})`" class="lk-edge__line" />
-        <path :d="path[0]" class="lk-edge__hit" fill="none" @click.stop="lk.selectEdge(id)" />
+        <BaseEdge :id="id" :path="data.path" :marker-end="`url(#${marker})`" class="lk-edge__line" />
+        <path
+            :d="data.path"
+            class="lk-edge__hit"
+            fill="none"
+            @click.stop="lk.selectEdge(id)"
+            @pointerenter="hover = true"
+            @pointerleave="hover = false"
+        />
         <EdgeLabelRenderer>
             <div
-                v-if="data.label"
+                v-if="showLabel"
                 class="lk-edge__label nodrag nopan"
-                :class="classes"
-                :style="{ transform: `translate(-50%, -50%) translate(${path[1]}px, ${path[2]}px)` }"
-                role="button"
-                tabindex="0"
-                :aria-label="data.label"
-                @click.stop="lk.selectEdge(id)"
-                @keydown.enter.prevent="lk.selectEdge(id)"
+                :style="{ transform: `translate(-50%, -50%) translate(${data.label_at[0]}px, ${data.label_at[1]}px)` }"
+                data-lk-edge-label
             >
                 {{ data.label }}
             </div>
@@ -87,39 +79,30 @@ const marker = computed(() => {
 
 <style>
 /* Not scoped: Vue Flow renders the path in its own tree. */
-.lk-edge__line { stroke: var(--color-gray-400); stroke-width: 1.6; fill: none; }
-.dark .lk-edge__line { stroke: var(--color-gray-500); }
-.lk-edge--dashed .lk-edge__line { stroke-dasharray: 6 5; }
-.lk-edge--main .lk-edge__line { stroke: var(--color-green-700); stroke-width: 5; }
-.dark .lk-edge--main .lk-edge__line { stroke: var(--color-green-400); }
-.lk-edge--on .lk-edge__line { stroke: var(--color-blue-500); stroke-width: 2.6; }
-.lk-edge--main.lk-edge--on .lk-edge__line { stroke-width: 4.4; }
-.lk-edge--bad .lk-edge__line { stroke: var(--color-red-500); stroke-width: 2.4; stroke-dasharray: 6 5; }
-.lk-edge--dim .lk-edge__line { opacity: 0.2; }
-.lk-edge__hit { stroke: transparent; stroke-width: 18; cursor: pointer; pointer-events: stroke; }
+.lk-edge__line { stroke: var(--color-gray-400); stroke-width: 1.5; fill: none; transition: opacity 0.15s; }
+.dark .lk-edge__line { stroke: var(--color-gray-600); }
+.lk-edge--dashed .lk-edge__line { stroke-dasharray: 5 4; }
+.lk-edge--hand .lk-edge__line { stroke-dasharray: 1.5 4; stroke-linecap: round; }
+.lk-edge--on .lk-edge__line { stroke: var(--color-gray-600); stroke-width: 2; }
+.dark .lk-edge--on .lk-edge__line { stroke: var(--color-gray-300); }
+.lk-edge--main .lk-edge__line { stroke: var(--color-primary); stroke-width: 2.25; }
+.lk-edge--bad .lk-edge__line { stroke: var(--color-red-500); stroke-width: 1.75; stroke-dasharray: 5 4; }
+.lk-edge--dim .lk-edge__line { opacity: 0.25; }
+.lk-edge__hit { stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
 
 .lk-edge__label {
     position: absolute;
-    pointer-events: all;
-    cursor: pointer;
-    padding: 0.12rem 0.5rem;
-    border-radius: 999px;
-    border: 1px solid var(--color-gray-300);
-    background: var(--color-white, #fff);
-    color: var(--color-gray-800);
+    pointer-events: none;
+    padding: 0.1rem 0.45rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--color-gray-200);
+    background: var(--color-content-bg, #fff);
+    color: var(--color-gray-700);
     font-size: 0.7rem;
-    font-weight: 600;
     line-height: 1.3;
     white-space: nowrap;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
     z-index: 4;
 }
-.dark .lk-edge__label { background: var(--color-gray-800); border-color: var(--color-gray-600); color: var(--color-gray-200); }
-.lk-edge__label.lk-edge--main { border-color: var(--color-green-600); color: var(--color-green-800); background: var(--color-green-50); }
-.dark .lk-edge__label.lk-edge--main { border-color: var(--color-green-500); color: var(--color-green-200); background: color-mix(in srgb, var(--color-green-500) 16%, var(--color-gray-900)); }
-.lk-edge__label.lk-edge--on { border-color: var(--color-blue-500); color: var(--color-blue-700); }
-.dark .lk-edge__label.lk-edge--on { color: var(--color-blue-300); }
-.lk-edge__label.lk-edge--bad { border-color: var(--color-red-400); color: var(--color-red-700); background: var(--color-red-50); }
-.dark .lk-edge__label.lk-edge--bad { color: var(--color-red-300); background: color-mix(in srgb, var(--color-red-500) 14%, var(--color-gray-900)); }
-.lk-edge__label.lk-edge--dim { opacity: 0.3; }
-.lk-edge__label:focus-visible { outline: 2px solid var(--color-blue-500); outline-offset: 2px; }
+.dark .lk-edge__label { border-color: var(--color-gray-700); color: var(--color-gray-300); }
 </style>

@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import { Head, router } from '@statamic/cms/inertia';
 import {
-    Header, Button, Card, Heading, Input, Stack, Field, EmptyStateMenu, EmptyStateItem, Icon,
+    Header, Button, Card, Description, Heading, Input, Stack, Field, EmptyStateMenu, EmptyStateItem, Icon,
 } from '@statamic/cms/ui';
 
 /**
@@ -43,7 +43,7 @@ function destroy(row) {
             <Button variant="primary" :text="t('landkarte_new', 'New map')" icon="plus" @click="open = true" />
         </Header>
 
-        <p class="mb-6 max-w-prose text-sm text-gray-900 dark:text-gray-100">{{ t('landkarten_description') }}</p>
+        <Description :text="t('landkarten_description')" class="mb-6" />
 
         <EmptyStateMenu v-if="!landkarten.length" :heading="t('landkarten_empty', 'No maps yet')">
             <EmptyStateItem :heading="t('landkarte_new', 'New map')" :description="t('landkarten_empty_help')" icon="travel-map" @click="open = true" />
@@ -53,7 +53,7 @@ function destroy(row) {
             <li v-for="row in landkarten" :key="row.id">
                 <Card class="flex h-full flex-col justify-between gap-4" data-landkarte-card>
                     <div class="flex items-start gap-3">
-                        <span class="sa-icon-chip"><Icon name="travel-map" class="size-4" /></span>
+                        <span class="sa-icon-chip" style="--sa-chip-color: var(--color-gray-600)"><Icon name="travel-map" class="size-4" /></span>
                         <div class="min-w-0">
                             <a :href="row.url" class="block truncate font-semibold text-gray-900 hover:underline dark:text-gray-100">{{ row.name }}</a>
                             <p class="text-sm text-gray-600 dark:text-gray-400">{{ row.stages_count }} {{ t('landkarte_lanes_count', 'phases') }}</p>

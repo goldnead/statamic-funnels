@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.27.0 — 2026-10-19
+
+### Changed: the Landkarte in the Control Panel's own look
+
+Feedback on 1.26: too much of its own, too loud. It now uses what the Control Panel has.
+
+- **One navigation entry, "Funnels"**, with two children: "Landkarten" (weeks) and "Kassen & Besucherwege" (one visit, minutes). The split across "Marketing" and "Verkauf" is gone, and so is the script that drew a line of text under each entry. What tells the two apart is the subtitle on each page.
+- **The side panel is a Statamic stack**, the component entries open in. It no longer takes a column away from the board; closing it keeps the selected way lit until a click on the empty board.
+- **Neutral colours.** Phase lanes are quiet grey columns with plain header text, cards are the editors' `sa-node` with an icon, an outlined type word and a status dot. Red marks a broken reference, the Control Panel's primary colour marks the main path (thin). Light and dark follow the Control Panel's own tokens.
+- **Less on the board.** No minimap, no legend (a small "i" popover explains the lines), no problem counter (the red mark sits on the card). The name of a line shows only while the pointer is on it or when it is selected. The map opens fitted to the board.
+- **Cleaner lines.** Routed on the grid: in the gutters between phases and in the gap between two rows, never across a card, side by side where several share a channel.
+
+### Upgrading
+
+- The Landkarten moved to `/cp/funnels/landkarten` (route names `statamic-funnels.landkarten.*`, no longer under the utility); the old addresses under `/cp/utilities/funnels/maps` redirect (301). Opening a map without the funnels permission is now a 403 instead of a redirect.
+- New strings `nav_funnels`, `map_help`, `map_help_click`, `map_open_inside_funnel`, `map_open_inside_automation`; removed `nav_marketing`, `map_legend`, `map_problems`, `map_problem_jump`. Re-publish the language files if you published them.
+- No migration. `php artisan vendor:publish --tag=statamic-funnels --force` for the rebuilt bundle.
+
 ## 1.26.0 — 2026-10-19
 
 ### Added: the Landkarte, a canvas map across addons
