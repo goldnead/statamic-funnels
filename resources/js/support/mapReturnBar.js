@@ -109,19 +109,18 @@ export function syncReturnBar(doc = document, location = window.location) {
  * every visit and whenever the page's frame is rebuilt.
  */
 export function watchReturnBar() {
-    let queued = false;
-    const sync = () => {
-        if (queued) return;
-        queued = true;
-        requestAnimationFrame(() => {
-            queued = false;
-            syncReturnBar();
-        });
-    };
-
     syncReturnBar();
-    window.addEventListener('popstate', sync);
-    document.addEventListener('inertia:navigate', sync);
-    document.addEventListener('inertia:success', sync);
-    new MutationObserver(sync).observe(document.body, { childList: true, subtree: true });
+
+    // The page frame may not be there when the bundle boots, and Inertia swaps
+    // pages without a reload: look again on every visit, and for a few seconds
+    // after boot. No observer on markup that is not this addon's.
+    let tries = 0;
+    const retry = setInterval(() => {
+        syncReturnBar();
+        if (++tries >= 20) clearInterval(retry);
+    }, 250);
+
+    window.addEventListener('popstate', () => syncReturnBar());
+    document.addEventListener('inertia:navigate', () => setTimeout(syncReturnBar, 50));
+    document.addEventListener('inertia:success', () => setTimeout(syncReturnBar, 50));
 }

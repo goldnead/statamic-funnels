@@ -49,16 +49,16 @@ export function applyNavHints(doc = document) {
 }
 
 export function watchNavHints() {
-    let queued = false;
-    const run = () => {
-        if (queued) return;
-        queued = true;
-        requestAnimationFrame(() => {
-            queued = false;
-            applyNavHints();
-        });
-    };
-
     applyNavHints();
-    new MutationObserver(run).observe(document.body, { childList: true, subtree: true });
+
+    // The navigation renders after the bundle boots, and is rebuilt when the
+    // brand changes: look again for a few seconds, then on every visit.
+    let tries = 0;
+    const retry = setInterval(() => {
+        applyNavHints();
+        if (++tries >= 20) clearInterval(retry);
+    }, 250);
+
+    document.addEventListener('inertia:navigate', () => setTimeout(applyNavHints, 50));
+    document.addEventListener('inertia:success', () => setTimeout(applyNavHints, 50));
 }

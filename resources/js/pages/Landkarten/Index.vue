@@ -43,7 +43,7 @@ function destroy(row) {
             <Button variant="primary" :text="t('landkarte_new', 'New map')" icon="plus" @click="open = true" />
         </Header>
 
-        <p class="mb-6 max-w-prose text-sm text-gray-700 dark:text-gray-300">{{ t('landkarten_description') }}</p>
+        <p class="mb-6 max-w-prose text-sm text-gray-900 dark:text-gray-100">{{ t('landkarten_description') }}</p>
 
         <EmptyStateMenu v-if="!landkarten.length" :heading="t('landkarten_empty', 'No maps yet')">
             <EmptyStateItem :heading="t('landkarte_new', 'New map')" :description="t('landkarten_empty_help')" icon="travel-map" @click="open = true" />
