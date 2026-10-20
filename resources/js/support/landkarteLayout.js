@@ -23,6 +23,8 @@ const GAP = ROW_H - NODE_H;
 const STEP = 9;
 const SPREAD = 18;
 const RADIUS = 8;
+const STUB = 44;
+const END_STEP = 9;
 
 /** The icon of each kind of object. Colour is not part of a kind: the card says what it is in words. */
 export const KINDS = {
@@ -67,9 +69,9 @@ const cardTop = (row) => HEAD_H + LANE_PAD + row * ROW_H;
 /**
  * @returns {{ flowNodes: object[], laneHeight: number, rows: Record<string, number> }}
  */
-export function layoutNodes(lanes, nodes, { editing = false } = {}) {
+export function layoutNodes(lanes, nodes, { editing = false, adders = editing, draggable = false } = {}) {
     const { rows, counts } = rowsOf(lanes, nodes);
-    const deepest = Math.max(0, ...counts) + (editing ? 1 : 0);
+    const deepest = Math.max(0, ...counts) + (adders ? 1 : 0);
     const laneHeight = Math.max(LANE_MIN_H, HEAD_H + LANE_PAD + deepest * ROW_H);
     const flowNodes = [];
 
@@ -92,12 +94,13 @@ export function layoutNodes(lanes, nodes, { editing = false } = {}) {
             type: 'landkarte',
             position: { x: cardLeft(node.lane), y: cardTop(rows[node.key]) },
             data: node,
-            draggable: false,
+            // A card the owner no longer knows has no place of its own to move to.
+            draggable: draggable && !node.ghost && node.row !== null && node.row !== undefined,
             zIndex: 2,
         });
     }
 
-    if (editing) {
+    if (adders) {
         lanes.forEach((lane, index) => {
             flowNodes.push({
                 id: `adder:${index}`,
@@ -112,6 +115,101 @@ export function layoutNodes(lanes, nodes, { editing = false } = {}) {
     }
 
     return { flowNodes, laneHeight, rows };
+}
+
+// --- moving a card by dragging it ---------------------------------------------
+
+const refKey = (ref) => `${ref.type}:${ref.ref_id}`;
+
+/**
+ * Where a card dropped at `topLeft` (the canvas position the drag ended on)
+ * lands: the lane under its middle, and the place in that lane's order, counted
+ * against the cards that stay where they are.
+ *
+ * @returns {{ lane: number, index: number } | null} null when there is no lane
+ */
+export function dropSlot(lanes, key, topLeft) {
+    if (!lanes.length) return null;
+
+    const cx = topLeft.x + NODE_W / 2;
+    const cy = topLeft.y + NODE_H / 2;
+    const lane = Math.max(0, Math.min(lanes.length - 1, Math.floor(cx / LANE_W)));
+
+    // The other cards keep their drawn rows while the dragged one is away, so it is
+    // measured against those rows, not against the rows they would have after it left.
+    const refs = lanes[lane].refs ?? [];
+    let index = 0;
+    let seen = 0;
+
+    refs.forEach((ref, row) => {
+        if (refKey(ref) === key) return;
+        seen += 1;
+        if (cardTop(row) + NODE_H / 2 < cy) index = seen;
+    });
+
+    return { lane, index };
+}
+
+/**
+ * The lanes after the card moved to `slot`, or null when that is where it
+ * already is. The lanes passed in are not touched.
+ */
+export function moveRef(lanes, key, slot) {
+    if (!slot) return null;
+
+    const from = lanes.findIndex((l) => (l.refs ?? []).some((r) => refKey(r) === key));
+    if (from === -1 || !lanes[slot.lane]) return null;
+
+    const at = lanes[from].refs.findIndex((r) => refKey(r) === key);
+    if (from === slot.lane && at === slot.index) return null;
+
+    const next = lanes.map((l) => ({ ...l, refs: [...(l.refs ?? [])] }));
+    const [ref] = next[from].refs.splice(at, 1);
+    next[slot.lane].refs.splice(slot.index, 0, ref);
+
+    return next;
+}
+
+// --- drawing a connection by dragging an arrow ----------------------------------
+
+/** The rule that lets an object of the first type be connected to one of the second, if any. */
+export function ruleBetween(rules, from, to) {
+    return (rules ?? []).find((r) => r.from_type === from.type && r.to_type === to.type) ?? null;
+}
+
+/**
+ * Whether a card may be dropped on another. When it may not, `reason` says why
+ * in a word the page turns into a sentence: `same` (itself), `gone` (a card of
+ * something that no longer exists), `none` (nothing leaves this kind of object)
+ * or `pair` (this kind does not lead to that kind); `allowed` lists the types it does lead to.
+ */
+export function connectOutcome(rules, from, to) {
+    if (!from || !to || from.key === to.key) return { ok: false, reason: 'same', allowed: [] };
+
+    const allowed = [...new Set((rules ?? []).filter((r) => r.from_type === from.type).map((r) => r.to_type))];
+
+    if (to.ghost || to.status === 'missing' || from.ghost || from.status === 'missing') return { ok: false, reason: 'gone', allowed };
+    if (!allowed.length) return { ok: false, reason: 'none', allowed };
+
+    const rule = ruleBetween(rules, from, to);
+    return rule ? { ok: true, rule, allowed } : { ok: false, reason: 'pair', allowed };
+}
+
+/** Keys of every card the card `fromKey` may be dropped on. */
+export function targetsFor(rules, nodes, fromKey) {
+    const from = nodes.find((n) => n.key === fromKey);
+    return new Set(nodes.filter((n) => connectOutcome(rules, from, n).ok).map((n) => n.key));
+}
+
+/**
+ * How a line is drawn: `real` is a connection an addon holds in its own data
+ * (solid), `wait` a wait (dotted, round and short), `note` an arrow somebody drew
+ * by hand that no addon knows about (dashed, long strokes).
+ */
+export function strokeOf(edge) {
+    if (edge.hand) return 'note';
+    if (edge.kind === 'waits_for' || edge.dashed) return 'wait';
+    return 'real';
 }
 
 /**
@@ -199,8 +297,8 @@ export function routeEdge(edge, a, b, rows, shift = {}) {
     const forward = a.lane < b.lane;
     const sx = forward ? right(a) : left(a);
     const tx = forward ? left(b) : right(b);
-    const sy = midY(ra);
-    const ty = midY(rb);
+    const sy = midY(ra) + (shift.sy ?? 0);
+    const ty = midY(rb) + (shift.ty ?? 0);
 
     switch (p.kind) {
         case 'straight':
@@ -257,18 +355,105 @@ export function pathThrough(points, radius = RADIUS) {
     return `${d} L ${lx} ${ly}`;
 }
 
-/** Middle of the longest straight piece: where the name of the connection sits when it is shown. */
-export function labelPoint(points) {
-    let best = { len: -1, x: points[0][0], y: points[0][1] };
+/**
+ * The longest straight piece: its middle, and whether it runs sideways. A
+ * label that must not lie on the line sits above a sideways piece and to the
+ * right of an upright one.
+ */
+export function labelSpot(points) {
+    let best = { len: -1, x: points[0][0], y: points[0][1], sideways: true };
 
     for (let i = 1; i < points.length; i++) {
         const [x1, y1] = points[i - 1];
         const [x2, y2] = points[i];
         const len = Math.abs(x2 - x1) + Math.abs(y2 - y1);
-        if (len > best.len) best = { len, x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+        if (len > best.len) best = { len, x: (x1 + x2) / 2, y: (y1 + y2) / 2, sideways: Math.abs(x2 - x1) >= Math.abs(y2 - y1) };
     }
 
-    return [best.x, best.y];
+    return best;
+}
+
+/** Middle of the longest straight piece: where the name of the connection sits when it is shown. */
+export function labelPoint(points) {
+    const { x, y } = labelSpot(points);
+    return [x, y];
+}
+
+/**
+ * The first `length` of a route, from its start. A line to something that is
+ * gone is not drawn across the board: it is a short piece off the card that
+ * ends in a mark, and says the rest in the panel.
+ */
+export function stubOf(points, length = STUB) {
+    const kept = [points[0]];
+    let left = length;
+
+    for (let i = 1; i < points.length && left > 0; i++) {
+        const [x1, y1] = points[i - 1];
+        const [x2, y2] = points[i];
+        const run = Math.hypot(x2 - x1, y2 - y1);
+
+        if (run >= left) {
+            kept.push([x1 + ((x2 - x1) / run) * left, y1 + ((y2 - y1) / run) * left]);
+            return kept;
+        }
+
+        kept.push([x2, y2]);
+        left -= run;
+    }
+
+    return kept;
+}
+
+/**
+ * Where a line leaves and arrives on a card's side. Several lines on one side
+ * would meet in one point and their arrowheads would pile up, so they take
+ * turns along the side. A straight line (same row) and a column line stay in
+ * the middle: bending them would make them slant.
+ *
+ * @returns {Record<string, { sy?: number, ty?: number }>}
+ */
+function endShifts(routable, byKey, rows) {
+    const groups = {};
+    const sides = (edge, a, b, p) => {
+        const forward = a.lane < b.lane;
+        return p.kind === 'around' ? ['r', 'r'] : forward ? ['r', 'l'] : ['l', 'r'];
+    };
+
+    routable.forEach((edge) => {
+        const a = byKey[edge.source];
+        const b = byKey[edge.target];
+        const p = plan(edge, a, b, rows);
+        if (p.kind === 'column') return;
+
+        const [from, to] = sides(edge, a, b, p);
+        const fixed = p.kind === 'straight';
+        (groups[`${edge.source}|${from}`] ??= []).push({ id: edge.id, end: 'sy', fixed });
+        (groups[`${edge.target}|${to}`] ??= []).push({ id: edge.id, end: 'ty', fixed });
+    });
+
+    const out = {};
+    const reach = NODE_H / 2 - 14;
+
+    for (const members of Object.values(groups)) {
+        if (members.length < 2) continue;
+
+        members.sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+        const half = (members.length - 1) / 2;
+        let slots = members.map((_, i) => (i - half) * END_STEP);
+
+        // The middle belongs to the straight lines.
+        members.filter((m) => m.fixed).forEach(() => {
+            const middle = slots.reduce((best, s, i) => (Math.abs(s) < Math.abs(slots[best]) ? i : best), 0);
+            slots = slots.filter((_, i) => i !== middle);
+        });
+
+        members.filter((m) => !m.fixed).forEach((m, i) => {
+            (out[m.id] ??= {})[m.end] = Math.max(-reach, Math.min(reach, slots[i] ?? 0));
+        });
+    }
+
+    return out;
 }
 
 export function flowEdges(edges, nodes, rows) {
@@ -281,9 +466,13 @@ export function flowEdges(edges, nodes, rows) {
         [p.out, p.into, p.gutter, p.gap].filter(Boolean).forEach((key) => channels.push({ id: edge.id, key }));
     });
     const shifts = spread(channels);
+    const ends = endShifts(routable, byKey, rows);
 
     return routable.map((edge) => {
-        const points = routeEdge(edge, byKey[edge.source], byKey[edge.target], rows, shifts[edge.id] ?? {});
+        const route = routeEdge(edge, byKey[edge.source], byKey[edge.target], rows, { ...(shifts[edge.id] ?? {}), ...(ends[edge.id] ?? {}) });
+        // A line to something that is gone: a short piece with a mark, not a line across the board.
+        const points = edge.bad ? stubOf(route) : route;
+        const spot = labelSpot(points);
 
         return {
             id: edge.id,
@@ -291,7 +480,13 @@ export function flowEdges(edges, nodes, rows) {
             target: edge.target,
             type: 'landkarte',
             ...handlesFor(edge, byKey, rows),
-            data: { ...edge, path: pathThrough(points), label_at: labelPoint(points) },
+            data: {
+                ...edge,
+                path: pathThrough(points),
+                label_at: [spot.x, spot.y],
+                label_sideways: spot.sideways,
+                stub_end: edge.bad ? points[points.length - 1] : null,
+            },
             // Lines run behind the cards.
             zIndex: 0,
         };

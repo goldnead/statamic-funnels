@@ -26,7 +26,13 @@ const broken = computed(() => props.data.status === 'missing');
 const unavailable = computed(() => props.data.status === 'unavailable');
 const problems = computed(() => props.data.problems ?? []);
 const flawed = computed(() => broken.value || problems.value.length > 0);
-const dimmed = computed(() => lk.dimmed.value && !lk.lit.value.has(props.id));
+// While an arrow is being drawn, the cards it may end on are marked and the rest are quiet.
+const drawing = computed(() => lk.connecting.value !== null);
+const isOrigin = computed(() => lk.connecting.value === props.id);
+const isTarget = computed(() => drawing.value && lk.targets.value.has(props.id));
+const dimmed = computed(() => (drawing.value ? !isOrigin.value && !isTarget.value : lk.dimmed.value && !lk.lit.value.has(props.id)));
+// The grip is for real objects: something the owner no longer knows has nothing to connect.
+const gripped = computed(() => lk.canConnect.value && lk.startsFrom(props.data.type) && props.data.status === 'found' && !props.data.ghost);
 const metric = computed(() => props.data.metric);
 const drills = computed(() => !!props.data.drill_url);
 
@@ -51,6 +57,8 @@ const flawText = computed(() => {
             flawed && 'lk-node--flawed',
             dimmed && 'lk-node--dim',
             broken && 'lk-node--dead',
+            isTarget && 'lk-node--target',
+            isOrigin && 'lk-node--origin',
         ]"
         :data-lk-node="id"
         :data-status="data.status"
@@ -85,14 +93,25 @@ const flawText = computed(() => {
             </template>
         </div>
 
-        <Handle id="tl" type="target" :position="Position.Left" />
-        <Handle id="tr" type="target" :position="Position.Right" />
-        <Handle id="tt" type="target" :position="Position.Top" />
-        <Handle id="tb" type="target" :position="Position.Bottom" />
-        <Handle id="sr" type="source" :position="Position.Right" />
-        <Handle id="sl" type="source" :position="Position.Left" />
-        <Handle id="sb" type="source" :position="Position.Bottom" />
-        <Handle id="st" type="source" :position="Position.Top" />
+        <Handle id="tl" type="target" :position="Position.Left" :connectable="false" />
+        <Handle id="tr" type="target" :position="Position.Right" :connectable="false" />
+        <Handle id="tt" type="target" :position="Position.Top" :connectable="false" />
+        <Handle id="tb" type="target" :position="Position.Bottom" :connectable="false" />
+        <Handle id="sr" type="source" :position="Position.Right" :connectable="false" />
+        <Handle id="sl" type="source" :position="Position.Left" :connectable="false" />
+        <Handle id="sb" type="source" :position="Position.Bottom" :connectable="false" />
+        <Handle id="st" type="source" :position="Position.Top" :connectable="false" />
+        <!-- The one handle that draws: drag it onto another card. The cards themselves are the targets. -->
+        <Handle
+            v-if="gripped"
+            id="grip"
+            type="source"
+            :position="Position.Right"
+            class="lk-grip nodrag nopan"
+            :title="lk.t('map_grip_hint')"
+            :aria-label="lk.t('map_grip_hint')"
+            data-lk-grip
+        />
     </div>
 </template>
 
@@ -169,7 +188,28 @@ const flawText = computed(() => {
 /* A dead reference has one frame, whether the card is a ghost or a found-then-lost object. */
 .lk-node--dead { border-style: dashed; }
 .lk-node--dim { opacity: 0.35; }
+.lk-node--target { border-color: var(--color-primary); box-shadow: 0 0 0 1px var(--color-primary); }
+.lk-node--origin { border-color: var(--color-gray-500); }
 
-/* Handles are anchors for the lines, not controls. */
+/* The grip: a small round handle on the right edge, there when the pointer is on the card. */
+.lk-node .vue-flow__handle.lk-grip {
+    opacity: 0;
+    pointer-events: auto;
+    width: 12px;
+    height: 12px;
+    right: -6px;
+    border: 1.5px solid var(--color-gray-400);
+    border-radius: 999px;
+    background: var(--color-content-bg, #fff);
+    cursor: crosshair;
+    transition: opacity 0.12s;
+}
+.lk-node:hover .vue-flow__handle.lk-grip,
+.lk-node.sa-node--selected .vue-flow__handle.lk-grip,
+.lk-node:focus-within .vue-flow__handle.lk-grip,
+.lk-node--origin .vue-flow__handle.lk-grip { opacity: 1; }
+.lk-node .vue-flow__handle.lk-grip:hover { border-color: var(--color-gray-700); }
+
+/* Handles are anchors for the lines, not controls (but for the grip). */
 .lk-node .vue-flow__handle { opacity: 0; pointer-events: none; width: 6px; height: 6px; min-width: 0; min-height: 0; }
 </style>

@@ -1,17 +1,20 @@
 <script setup>
-import { computed, nextTick, provide, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from 'vue';
 import { Head, router } from '@statamic/cms/inertia';
 import { toast } from '@statamic/cms/api';
 import { VueFlow, Panel as FlowPanel, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { ControlBar } from '@goldnead/flow-canvas';
 import {
-    Header, Button, Badge, Select, Input, Stack, Field, Heading, Icon, Description, Popover, Panel, Card, Alert,
+    Header, Button, Badge, Select, Input, Stack, Field, Heading, Icon, Description, Popover, Panel, Card, Alert, ConfirmationModal,
 } from '@statamic/cms/ui';
 import MapNode from '../../components/landkarte/MapNode.vue';
 import MapLane from '../../components/landkarte/MapLane.vue';
 import MapEdge from '../../components/landkarte/MapEdge.vue';
-import { flowEdges, kindOf, layoutNodes, wayThrough } from '../../support/landkarteLayout.js';
+import {
+    connectOutcome, dropSlot, flowEdges, kindOf, layoutNodes, moveRef, strokeOf, targetsFor, wayThrough,
+} from '../../support/landkarteLayout.js';
+import { postJson } from '../../support/landkarteRequest.js';
 
 /**
  * A Landkarte.
@@ -22,9 +25,12 @@ import { flowEdges, kindOf, layoutNodes, wayThrough } from '../../support/landka
  * else: label, link, switch, number and broken references come from the owner on
  * every load.
  *
- * Reading comes first, editing second. Moving is done with buttons, not by
- * dragging: every move is a labelled, keyboard-reachable action. Details of a
- * card or a line open in a Statamic stack, like an entry does.
+ * There is no edit mode. A card can always be dragged (to another phase or
+ * another place in its phase) and the map saves itself a moment later; the
+ * buttons in a card's panel do the same without a pointer. An arrow dragged from
+ * the grip of a card to another card sets up the real connection in the addon
+ * that owns it, after asking in plain words what that does. Details of a card or
+ * a line open in a Statamic stack, like an entry does.
  */
 const props = defineProps({
     landkarte: { type: Object, required: true },
@@ -38,6 +44,9 @@ const props = defineProps({
     period: { type: Object, required: true },
     saveUrl: { type: String, required: true },
     objectsUrl: { type: String, required: true },
+    connectionRules: { type: Array, default: () => [] },
+    previewUrl: { type: String, default: '' },
+    connectUrl: { type: String, default: '' },
     showUrl: { type: String, required: true },
     indexUrl: { type: String, required: true },
     labels: { type: Object, default: () => ({}) },
@@ -47,7 +56,7 @@ const props = defineProps({
 const t = (key, fallback = '') => props.labels?.[key] ?? fallback;
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const FLOW = 'landkarte';
-const { fitView, getViewport, setViewport } = useVueFlow(FLOW);
+const { fitView, getViewport, setViewport, setNodes } = useVueFlow(FLOW);
 
 // --- what is stored, as a form -------------------------------------------
 
@@ -81,8 +90,13 @@ function modelFrom(p) {
 const local = ref(modelFrom(props));
 const saved = ref(JSON.stringify(local.value));
 const saving = ref(false);
-const editing = ref(false);
 const isDirty = computed(() => JSON.stringify(local.value) !== saved.value);
+
+// Someone else saved this map since this page loaded: nothing is written until it is reloaded.
+const conflict = ref(false);
+// What was refused for another reason than a conflict, so the same picture is not sent again in a loop.
+let failed = null;
+const failedNow = ref(false);
 
 // Cards the page added this session, before the server has described them.
 const added = ref({});
@@ -104,21 +118,90 @@ watch(
     },
 );
 
+// --- saving by itself -------------------------------------------------------
+
+const SAVE_AFTER_MS = 800;
+let saveTimer = null;
+
+const saveState = computed(() => {
+    if (conflict.value) return 'conflict';
+    if (saving.value) return 'saving';
+    if (isDirty.value && failedNow.value) return 'error';
+    if (isDirty.value) return 'saving';
+    return 'saved';
+});
+
+function saveSoon() {
+    clearTimeout(saveTimer);
+    if (conflict.value) return;
+    saveTimer = setTimeout(save, SAVE_AFTER_MS);
+}
+
+// Every change to the picture is saved a moment after the last one; one request at a time.
+watch(
+    () => JSON.stringify(local.value),
+    (now) => {
+        failedNow.value = now === failed;
+        if (now === saved.value || now === failed) return;
+        saveSoon();
+    },
+);
+
 function save() {
+    clearTimeout(saveTimer);
+    if (saving.value || conflict.value || !isDirty.value) return;
+
     saving.value = true;
     sent = JSON.stringify(local.value);
+    const attempt = sent;
 
     router.put(
         props.saveUrl,
         { version: props.version, name: local.value.name, stages: local.value.lanes, edges: local.value.hand },
         {
             preserveScroll: true,
-            onSuccess: () => { toast.success(t('map_saved', 'Saved.'), {}); },
-            onError: (errors) => { sent = null; toast.error(String(Object.values(errors ?? {})[0] ?? ''), {}); },
-            onFinish: () => { saving.value = false; },
+            preserveState: true,
+            onSuccess: () => { failed = null; failedNow.value = false; },
+            onError: (errors) => {
+                sent = null;
+                const messages = Object.values(errors ?? {}).map(String);
+
+                if (messages.includes(t('map_conflict'))) {
+                    conflict.value = true;
+                    return;
+                }
+
+                failed = attempt;
+                failedNow.value = true;
+                toast.error(messages[0] ?? t('map_save_failed', 'The map could not be saved.'), {});
+            },
+            onFinish: () => {
+                saving.value = false;
+                // Something was changed while the request was on its way.
+                if (isDirty.value && !conflict.value && JSON.stringify(local.value) !== failed) saveSoon();
+            },
         },
     );
 }
+
+// Reload what the server has now and drop what this page was holding.
+function reloadMap() {
+    clearTimeout(saveTimer);
+    router.get(props.showUrl, { days: props.period.days }, {
+        preserveScroll: true,
+        preserveState: false,
+        onSuccess: () => {
+            local.value = modelFrom(props);
+            saved.value = JSON.stringify(local.value);
+            added.value = {};
+            failed = null;
+            failedNow.value = false;
+            conflict.value = false;
+        },
+    });
+}
+
+onBeforeUnmount(() => { clearTimeout(saveTimer); clearTimeout(clickTimer); clearTimeout(timer); });
 
 function setPeriod(days) {
     router.get(props.showUrl, { days }, { preserveScroll: true });
@@ -165,7 +248,7 @@ const displayEdges = computed(() => {
         const target = `${h.to_type}:${h.to_ref}`;
         if (!keys.has(source) || !keys.has(target) || pairs.has(`${source}>${target}`)) return;
         list.push({
-            id: `hand:${i}`, source, target, kind: 'hand', label: h.label || t('map_edge_hand_label'),
+            id: `hand:${i}`, source, target, kind: 'hand', label: h.label || t('map_edge_note_label', 'Note'),
             derived_from: null, dashed: true, hand: true, hand_index: i, main: false, bad: false,
         });
     });
@@ -182,7 +265,7 @@ const displayEdges = computed(() => {
     }));
 });
 
-const layout = computed(() => layoutNodes(local.value.lanes.map((l) => ({ ...l })), displayNodes.value, { editing: editing.value }));
+const layout = computed(() => layoutNodes(local.value.lanes.map((l) => ({ ...l })), displayNodes.value, { adders: true, draggable: !conflict.value }));
 const flowNodes = computed(() => layout.value.flowNodes);
 const flowEdgeList = computed(() => flowEdges(displayEdges.value, displayNodes.value, layout.value.rows));
 const nodeByKey = computed(() => Object.fromEntries(displayNodes.value.map((n) => [n.key, n])));
@@ -254,7 +337,7 @@ const DOUBLE_CLICK_MS = 230;
 let clickTimer = null;
 
 function onNodeClick({ node }) {
-    if (node.type !== 'landkarte') return;
+    if (node.type !== 'landkarte' || Date.now() - lastDragEnd < 150) return;
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => select(node.id), DOUBLE_CLICK_MS);
 }
@@ -315,7 +398,14 @@ function moveLane(index, by) {
 }
 
 function removeLane(index) {
-    if (window.confirm(t('map_remove_stage_confirm', 'Remove this phase?'))) local.value.lanes.splice(index, 1);
+    const lane = local.value.lanes[index];
+    ask({
+        title: t('map_remove_stage'),
+        body: `${lane?.name ?? ''}: ${t('map_remove_stage_confirm', 'Remove this phase?')}`,
+        button: t('map_remove_stage'),
+        danger: true,
+        run: () => { local.value.lanes.splice(index, 1); },
+    });
 }
 
 // --- cards ------------------------------------------------------------------
@@ -440,13 +530,198 @@ function removeHand(index) {
     clearSelection();
 }
 
-function toggleEditing() {
-    editing.value = !editing.value;
-    clearSelection();
+// --- asking before something is done ------------------------------------------
+
+// One Statamic confirmation for everything that needs a yes: removing a phase,
+// making a connection, undoing one.
+const confirmation = ref({ open: false, busy: false, title: '', body: '', button: '', danger: false, run: null });
+
+function ask({ title, body, button, danger = false, run }) {
+    confirmation.value = { open: true, busy: false, title, body, button, danger, run };
+}
+
+async function confirmed() {
+    const { run } = confirmation.value;
+    confirmation.value.busy = true;
+
+    try {
+        await run?.();
+    } finally {
+        confirmation.value.open = false;
+        confirmation.value.busy = false;
+    }
+}
+
+function onConfirmOpen(open) {
+    if (!confirmation.value.busy) confirmation.value.open = open;
+}
+
+// --- dragging cards -------------------------------------------------------------
+
+let lastDragEnd = 0;
+
+function onNodeDragStop({ node }) {
+    lastDragEnd = Date.now();
+    if (node.type !== 'landkarte') return;
+
+    const next = moveRef(local.value.lanes, node.id, dropSlot(local.value.lanes, node.id, node.position));
+    if (next) local.value.lanes = next;
+
+    // A card dropped where it was, or in a place it cannot take, goes back to its slot.
+    nextTick(() => setNodes(flowNodes.value));
+}
+
+// --- drawing a real connection ----------------------------------------------------
+
+const canConnect = computed(() => props.connectionRules.length > 0 && !!props.previewUrl && !!props.connectUrl && !conflict.value);
+
+// The card an arrow is being drawn from, while the pointer is down on its grip.
+const connecting = ref(null);
+const targets = computed(() => (connecting.value ? targetsFor(props.connectionRules, displayNodes.value, connecting.value) : new Set()));
+
+const typeName = (type) => displayNodes.value.find((n) => n.type === type)?.type_label ?? props.types.find((x) => x.value === type)?.label ?? type;
+
+function onConnectStart({ nodeId }) {
+    clearTimeout(clickTimer);
+    connecting.value = nodeId;
+}
+
+function pointOf(event) {
+    const p = event?.changedTouches?.[0] ?? event;
+    return p && Number.isFinite(p.clientX) ? [p.clientX, p.clientY] : null;
+}
+
+function cardUnder(event) {
+    const at = pointOf(event);
+    if (!at) return null;
+
+    for (const el of document.elementsFromPoint(at[0], at[1])) {
+        const key = el.closest?.('[data-lk-node]')?.getAttribute('data-lk-node');
+        if (key) return key;
+    }
+    return null;
+}
+
+function onConnectEnd(event) {
+    const from = connecting.value;
+    connecting.value = null;
+    if (!from) return;
+
+    const toKey = cardUnder(event);
+    if (!toKey || toKey === from) return;
+
+    const a = nodeByKey.value[from];
+    const b = nodeByKey.value[toKey];
+    const outcome = connectOutcome(props.connectionRules, a, b);
+
+    if (!outcome.ok) {
+        toast.info(refusalText(outcome, a, b), { duration: 6000 });
+        return;
+    }
+
+    previewConnection(a, b);
+}
+
+function refusalText(outcome, a, b) {
+    if (outcome.reason === 'gone') return t('map_connect_gone');
+
+    const text = outcome.reason === 'none'
+        ? t('map_connect_none').replace(':from', typeName(a.type))
+        : t('map_connect_pair').replace(':from', typeName(a.type)).replace(':to', typeName(b.type));
+    const allowed = outcome.allowed.map(typeName).join(', ');
+
+    return outcome.reason === 'pair' && allowed ? `${text} ${t('map_connect_allowed').replace(':types', allowed)}` : text;
+}
+
+const bodyOf = (a, b) => {
+    const [from_type, from_id] = splitKey(a.key);
+    const [to_type, to_id] = splitKey(b.key);
+    return { from_type, from_id, to_type, to_id };
+};
+
+// What the server said no with, as a sentence; a refused request never fails silently.
+function refuse(response) {
+    // Somebody else got there first (another tab, another user): say so, and show the
+    // map as it is now, so the next try starts from what is really stored.
+    if (response.status === 409) {
+        toast.error(response.data?.message || t('map_connect_conflict'), { duration: 8000 });
+        reloadMap();
+        return;
+    }
+
+    const fallback = response.status === 403 ? t('map_connect_forbidden') : t('map_connect_failed');
+    toast.error(response.data?.message || fallback, { duration: 8000 });
+}
+
+async function previewConnection(a, b, action = 'connect') {
+    const body = { action, ...bodyOf(a, b) };
+    const response = await postJson(props.previewUrl, body);
+
+    if (!response.ok) return refuse(response);
+
+    ask({
+        title: action === 'connect' ? t('map_connect_title') : t('map_disconnect_title'),
+        body: response.data.consequence,
+        button: action === 'connect' ? t('map_connect_do') : t('map_disconnect_do'),
+        danger: action === 'disconnect',
+        // What the user is shown and confirms: the write refuses when the field says something else by then.
+        run: () => writeConnection({ ...body, expected_before: response.data.before ?? '' }, action),
+    });
+}
+
+async function writeConnection(body, action) {
+    const response = await postJson(props.connectUrl, { ...body, action, version: props.version });
+    if (!response.ok) return refuse(response);
+
+    router.reload({ preserveScroll: true, preserveState: true });
+    if (action === 'disconnect') clearSelection();
+    offerUndo(response.data, action);
+}
+
+// "Connected." stays for a while with a button that puts it back as it was.
+function offerUndo(result, action) {
+    const undo = result?.undo;
+    const text = action === 'connect' ? t('map_connected') : t('map_disconnected');
+
+    toast.success(text, {
+        duration: UNDO_MS,
+        className: 'lk-toast',
+        action: undo
+            ? [
+                { text: t('map_undo'), onClick: (e, toastObject) => { toastObject.goAway(0); undoConnection(undo); } },
+                { text: '×', onClick: (e, toastObject) => toastObject.goAway(0) },
+            ]
+            : undefined,
+    });
+}
+
+const UNDO_MS = 10000;
+
+async function undoConnection(undo) {
+    // `rest` carries `restore` when the owner handed back what the disconnect removed: it goes back as it came.
+    const { action, ...rest } = undo;
+    const response = await postJson(props.connectUrl, { ...rest, action, version: props.version });
+    if (!response.ok) return refuse(response);
+
+    router.reload({ preserveScroll: true, preserveState: true });
+    toast.info(t('map_undone'), { duration: 4000 });
+}
+
+// "Remove connection" in a line's panel: ask first, with what it would undo.
+function disconnectEdge(e) {
+    if (!e?.disconnectable) return;
+    previewConnection(
+        { key: `${e.from_type}:${e.from_id}` },
+        { key: `${e.to_type}:${e.to_id}` },
+        'disconnect',
+    );
 }
 
 provide('landkarte', {
-    t, editing, lit, litEdges, dimmed, selectedEdge, select, selectEdge, openLane, moveLane, removeLane, openPicker,
+    t, lit, litEdges, dimmed, selectedEdge, select, selectEdge, openLane, moveLane, removeLane, openPicker,
+    connecting, canConnect, targets,
+    // A card of a type no rule starts from gets no grip: offering a handle that can only refuse is noise.
+    startsFrom: (type) => props.connectionRules.some((rule) => rule.from_type === type),
 });
 
 // Where the board opens: everything in view, every phase visible, flush with
@@ -462,8 +737,9 @@ function settleView() {
 const periodOptions = computed(() => props.period.options);
 const helpLines = computed(() => [
     { key: 'main', text: t('map_legend_main') },
+    { key: 'real', text: t('map_legend_real') },
+    { key: 'note', text: t('map_legend_note') },
     { key: 'wait', text: t('map_legend_wait') },
-    { key: 'hand', text: t('map_legend_hand') },
     { key: 'bad', text: t('map_legend_problem') },
 ]);
 </script>
@@ -473,7 +749,9 @@ const helpLines = computed(() => [
         <Head :title="[landkarte.name, t('landkarten_title', 'Maps')]" />
 
         <Header :title="landkarte.name" icon="travel-map">
-            <Badge v-if="isDirty" color="default" :text="t('map_unsaved', 'Unsaved changes')" pill />
+            <span class="lk-save" :class="`lk-save--${saveState}`" role="status" aria-live="polite" data-lk-save-state>
+                {{ saveState === 'saving' ? t('map_saving', 'Saving…') : saveState === 'conflict' || saveState === 'error' ? t('map_not_saved', 'Not saved') : t('map_saved_state', 'Saved') }}
+            </span>
             <Popover align="end" class="w-80">
                 <template #trigger>
                     <Button variant="ghost" icon="info" :aria-label="t('map_help')" :title="t('map_help')" data-lk-help />
@@ -494,30 +772,34 @@ const helpLines = computed(() => [
                 class="w-44"
                 :model-value="period.days"
                 :options="periodOptions"
-                :disabled="isDirty"
+                :disabled="isDirty || saving"
                 :aria-label="t('map_period', 'Period')"
                 @update:model-value="setPeriod"
             />
-            <template v-if="editing">
-                <Button :text="t('map_add_stage', 'Add phase')" icon="plus" @click="openLane()" />
-                <Button :text="t('map_draw_edge', 'Draw connection')" icon="link" @click="openLink()" />
-                <Button variant="primary" :text="t('map_save', 'Save')" :disabled="saving || !isDirty" @click="save" />
-                <Button :text="t('map_done', 'Done')" :disabled="isDirty" @click="toggleEditing" />
-            </template>
-            <Button v-else :text="t('map_edit', 'Edit')" icon="edit" @click="toggleEditing" />
+            <Button :text="t('map_note_edge', 'Note arrow')" icon="link" :disabled="!displayNodes.length" @click="openLink()" />
+            <Button :text="t('map_add_stage', 'Add phase')" icon="plus" @click="openLane()" />
         </Header>
 
         <Description :text="t('landkarten_description')" class="mb-4" />
 
-        <p v-if="errors && Object.keys(errors).length" class="mb-3 text-sm text-red-600" role="alert">{{ Object.values(errors)[0] }}</p>
+        <Alert v-if="conflict" variant="warning" class="mb-3" data-lk-conflict>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <span>{{ t('map_conflict_banner') }}</span>
+                <Button size="sm" :text="t('map_reload')" @click="reloadMap" />
+            </div>
+        </Alert>
+        <p v-else-if="errors && Object.keys(errors).length" class="mb-3 text-sm text-red-600" role="alert">{{ Object.values(errors)[0] }}</p>
 
         <div class="lk-board sa-canvas-frame" data-landkarte-board>
             <VueFlow
                 :id="FLOW"
                 :nodes="flowNodes"
                 :edges="flowEdgeList"
-                :nodes-draggable="false"
-                :nodes-connectable="false"
+                :nodes-draggable="!conflict"
+                :nodes-connectable="canConnect"
+                :node-drag-threshold="4"
+                :connection-radius="0"
+                :connection-line-style="{ stroke: 'var(--color-gray-500)', strokeWidth: 1.5, strokeDasharray: '4 4' }"
                 :edges-updatable="false"
                 :elements-selectable="false"
                 :zoom-on-double-click="false"
@@ -529,6 +811,9 @@ const helpLines = computed(() => [
                 @pane-ready="settleView"
                 @node-click="onNodeClick"
                 @node-double-click="onNodeDoubleClick"
+                @node-drag-stop="onNodeDragStop"
+                @connect-start="onConnectStart"
+                @connect-end="onConnectEnd"
                 @pane-click="onPaneClick"
             >
                 <template #node-landkarte="slot"><MapNode v-bind="slot" :selected="selectedKey === slot.id" /></template>
@@ -559,7 +844,7 @@ const helpLines = computed(() => [
             <div v-if="!lanes.length" class="lk-empty">
                 <Heading :text="t('landkarten_empty', 'No phases yet')" size="lg" />
                 <p>{{ t('landkarten_empty_help') }}</p>
-                <Button icon="plus" :text="t('map_add_stage')" @click="editing = true; openLane()" />
+                <Button icon="plus" :text="t('map_add_stage')" @click="openLane()" />
             </div>
         </div>
 
@@ -625,7 +910,7 @@ const helpLines = computed(() => [
                     </Card>
                 </Panel>
 
-                <Panel v-if="editing && !selected.ghost" :heading="t('map_edit')">
+                <Panel v-if="!selected.ghost" :heading="t('map_edit')">
                     <Card class="space-y-3">
                         <div class="flex flex-wrap gap-2">
                             <Button size="sm" icon="arrow-left" :disabled="laneOf <= 0" :aria-label="t('map_move_left')" @click="moveCardToLane(selected.key, -1)" />
@@ -634,7 +919,7 @@ const helpLines = computed(() => [
                             <Button size="sm" icon="arrow-right" :disabled="laneOf < 0 || laneOf >= local.lanes.length - 1" :aria-label="t('map_move_right')" @click="moveCardToLane(selected.key, 1)" />
                         </div>
                         <div class="flex flex-wrap gap-2">
-                            <Button size="sm" icon="link" :text="t('map_draw_edge_from')" @click="openLink(selected.key)" />
+                            <Button size="sm" icon="link" :text="t('map_note_edge_from')" @click="openLink(selected.key)" />
                             <Button size="sm" variant="danger" icon="trash" :text="t('map_remove_ref')" @click="removeCard(selected.key)" />
                         </div>
                     </Card>
@@ -643,7 +928,7 @@ const helpLines = computed(() => [
 
             <div v-else-if="edge" class="space-y-6 p-4" data-lk-panel>
                 <div class="flex flex-wrap items-center gap-2">
-                    <Badge :text="edge.hand ? t('map_edge_origin_hand') : t('map_edge_origin_derived')" />
+                    <Badge :text="edge.hand ? t('map_edge_origin_note') : t('map_edge_origin_derived')" />
                     <Badge v-if="edge.main" :text="t('map_legend_main')" />
                 </div>
 
@@ -664,10 +949,18 @@ const helpLines = computed(() => [
                     </Card>
                 </Panel>
 
+                <Alert v-if="edge.bad" variant="error" :text="t('map_dead_stub_help')" data-lk-dead-help />
+
                 <p v-if="edge.main" class="text-sm text-gray-900 dark:text-gray-100">{{ t('map_main_path_title') }}</p>
 
-                <div v-if="editing && edge.hand">
+                <p v-if="edge.hand" class="text-sm text-gray-600 dark:text-gray-400">{{ t('map_note_edge_help') }}</p>
+                <p v-else-if="!edge.disconnectable" class="text-sm text-gray-600 dark:text-gray-400">{{ t('map_edge_fixed_help') }}</p>
+
+                <div v-if="edge.hand">
                     <Button variant="danger" icon="trash" :text="t('map_remove_edge')" @click="removeHand(edge.hand_index)" />
+                </div>
+                <div v-else-if="edge.disconnectable">
+                    <Button variant="danger" icon="trash" :text="t('map_disconnect')" @click="disconnectEdge(edge)" />
                 </div>
             </div>
 
@@ -741,7 +1034,7 @@ const helpLines = computed(() => [
         <Stack v-model:open="link.open" size="narrow">
             <div class="flex h-full flex-col bg-content-bg">
                 <div class="border-b border-content-border px-6 py-4">
-                    <Heading :text="t('map_draw_edge')" size="lg" />
+                    <Heading :text="t('map_note_edge')" size="lg" />
                 </div>
                 <div class="flex-1 space-y-4 px-6 py-5">
                     <Field :label="t('map_draw_edge_from')"><Select v-model="link.from" :options="nodeOptions" /></Field>
@@ -756,6 +1049,20 @@ const helpLines = computed(() => [
                 </div>
             </div>
         </Stack>
+
+        <!-- Every yes the map asks for: a removed phase, a new connection, an undone one. -->
+        <ConfirmationModal
+            :open="confirmation.open"
+            :title="confirmation.title"
+            :body-text="confirmation.body"
+            :button-text="confirmation.button"
+            :cancel-text="t('map_cancel', 'Cancel')"
+            :danger="confirmation.danger"
+            :busy="confirmation.busy"
+            data-lk-confirm
+            @update:open="onConfirmOpen"
+            @confirm="confirmed"
+        />
     </div>
 </template>
 
@@ -765,11 +1072,39 @@ const helpLines = computed(() => [
 .lk-defs { position: absolute; }
 .lk-controls { margin: 0 0.9rem 0.9rem 0; }
 
+/* The toast's own button style is a shouting grey; here it must read as the one thing to click. */
+.toasted-container .toasted.lk-toast button.action {
+    margin-left: 0.75rem; padding: 0.15rem 0.4rem; font-size: 0.875rem; font-weight: 600; letter-spacing: 0;
+    text-transform: none; opacity: 1; color: var(--color-gray-900); text-decoration: underline; text-underline-offset: 3px;
+}
+.toasted-container .toasted.lk-toast button.action:hover { color: var(--color-gray-600); }
+.dark .toasted-container .toasted.lk-toast button.action { color: var(--color-white); }
+
+.lk-save { font-size: 0.8rem; color: var(--color-gray-600); }
+.dark .lk-save { color: var(--color-gray-400); }
+.lk-save--conflict, .lk-save--error { color: var(--color-red-600); }
+
 .lk-key { display: inline-block; width: 1.6rem; height: 0; border-top: 1.5px solid var(--color-gray-400); }
 .lk-key--main { border-top: 2.25px solid var(--color-primary); }
-.lk-key--wait { border-top-style: dashed; }
-.lk-key--bad { border-top: 1.75px dashed var(--color-red-500); }
-.lk-key--hand { border-top: 2px dotted var(--color-gray-400); }
+.lk-key--real { border-top: 1.5px solid var(--color-gray-400); }
+.lk-key--note { border-top: 1.5px dashed var(--color-gray-500); }
+.lk-key--wait { border-top: 2px dotted var(--color-gray-500); }
+.lk-key--bad { border-top: 1.75px solid var(--color-red-500); }
+
+/*
+ * The confirmation is Statamic's own component (the one core uses), set in the middle of the
+ * screen and as one card: the frame and the card inside it would otherwise be two boxes, and
+ * the buttons sit in the frame's padding under the text.
+ */
+[data-lk-confirm][data-ui-modal-content] {
+    top: 50%; translate: -50% -50%; max-width: 28rem; padding: 0;
+    background: var(--color-white); border: 1px solid var(--color-gray-300); backdrop-filter: none;
+}
+.dark [data-lk-confirm][data-ui-modal-content] { background: var(--color-gray-800); border-color: var(--color-gray-700); }
+[data-lk-confirm][data-ui-modal-content] > div:first-child {
+    border: 0; background: transparent; box-shadow: none; border-radius: 0; padding: 1.25rem 1.25rem 0.75rem;
+}
+[data-lk-confirm][data-ui-modal-content] > div:not(:first-child) { padding: 0 1.25rem 1.25rem; }
 
 .lk-adder {
     display: flex; align-items: center; justify-content: center; gap: 0.4rem; width: 204px; padding: 0.6rem;

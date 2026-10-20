@@ -25,6 +25,18 @@ parameters:
         -
             message: '#Call to an undefined method Statamic\\Contracts\\Entries\\Entry::in\(\)#'
             path: src/Http/Controllers/Web/FunnelController.php
+        # Connections need brand-context >= 1.19; the addon still installs on ^1.18 and
+        # asks `method_exists` first (LandkarteGraph::supportsConnections). Reported on
+        # 1.18, fine on 1.19: hence no "unmatched" complaint.
+        -
+            messages:
+                - '#undefined method Goldnead\\BrandContext\\Map\\MapObjectRegistry::(previewConnection|applyConnection|connectionRules)\(\)#'
+                - '#undefined property Goldnead\\BrandContext\\Map\\MapEdge::\$ownerType#'
+            reportUnmatched: false
+        -
+            identifier: function.alreadyNarrowedType
+            path: src/Support/LandkarteGraph.php
+            reportUnmatched: false
 
     # Corrects a wrong annotation in Statamic itself, see the stub for why.
     stubFiles:
