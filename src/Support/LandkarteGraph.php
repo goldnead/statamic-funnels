@@ -104,6 +104,7 @@ class LandkarteGraph
         }
 
         $edges = $this->edges($landkarte, $nodes, $period);
+        $edges = $this->withConnectionFields($edges, $nodes);
         $mainPath = $this->markMainPath($nodes, $edges);
 
         foreach ($nodes as $key => $node) {
@@ -119,6 +120,71 @@ class LandkarteGraph
             'main_path' => $mainPath,
             'problem_count' => $problems,
         ];
+    }
+
+    /**
+     * Whether the installed brand-context can write connections at all. An older
+     * one (the addon still runs on `^1.18`) cannot: no rules, drawing is off,
+     * everything else on the map is unchanged.
+     */
+    public function supportsConnections(): bool
+    {
+        return method_exists($this->registry, 'connectionRules')
+            && method_exists($this->registry, 'previewConnection')
+            && method_exists($this->registry, 'applyConnection');
+    }
+
+    /**
+     * The pairs a line may be drawn between, as the page needs them.
+     *
+     * @return list<array{from_type: string, to_type: string, kind: string, label: string}>
+     */
+    public function connectionRules(): array
+    {
+        if (! $this->supportsConnections()) {
+            return [];
+        }
+
+        return array_values(array_map(fn (array $rule) => [
+            'from_type' => (string) $rule['from_type'],
+            'to_type' => (string) $rule['to_type'],
+            'kind' => (string) $rule['kind'],
+            'label' => (string) ($rule['label'] ?? $rule['kind']),
+        ], $this->registry->connectionRules()));
+    }
+
+    /**
+     * Both ends of every edge as type and id (what the connect call needs) and
+     * whether the edge is a real connection that may be loosened: derived, a
+     * rule for its pair and kind, and both ends objects of this map, not ghosts.
+     *
+     * @param  array<string, array<string, mixed>>  $edges
+     * @param  array<string, array<string, mixed>>  $nodes
+     * @return array<string, array<string, mixed>>
+     */
+    protected function withConnectionFields(array $edges, array $nodes): array
+    {
+        $rules = [];
+
+        foreach ($this->connectionRules() as $rule) {
+            $rules[$rule['from_type'].'>'.$rule['to_type'].'>'.$rule['kind']] = true;
+        }
+
+        foreach ($edges as $key => $edge) {
+            $from = $nodes[$edge['source']] ?? null;
+            $to = $nodes[$edge['target']] ?? null;
+
+            $edges[$key]['from_type'] = $from['type'] ?? null;
+            $edges[$key]['from_id'] = $from['ref_id'] ?? null;
+            $edges[$key]['to_type'] = $to['type'] ?? null;
+            $edges[$key]['to_id'] = $to['ref_id'] ?? null;
+            $edges[$key]['disconnectable'] = ! $edge['hand']
+                && $from !== null && $to !== null
+                && ! ($from['ghost'] ?? false) && ! ($to['ghost'] ?? false)
+                && isset($rules[$from['type'].'>'.$to['type'].'>'.$edge['kind']]);
+        }
+
+        return $edges;
     }
 
     /**

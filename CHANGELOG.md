@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added: move cards and draw real connections on the Landkarte, no edit mode
+
+- **Cards move freely** (to another phase, to another place) and the position saves itself, one request at a time, against the map's `version`. A tab that went stale gets a clear message with a reload button instead of overwriting the newer picture.
+- **Drag a line from a card's handle to another card** to set the real connection in the addon that owns it. Only pairs an addon offers are dockable (needs brand-context with `ProvidesMapConnections`; on 1.18 the handles are simply absent). A Statamic confirmation states the consequence in plain words, a toast offers "Undo", and a solid line's panel offers "Release connection". Notes drawn by hand stay possible and are dashed; waits are dotted.
+- New routes `POST funnels/landkarten/{id}/connections/preview` and `…/connections` (403 without the owning addon's permission, 409 on a stale version, 422 on a refusal).
+
 ### Changed
 
 - **Landkarte cards show no second, truncated chip.** An object's `detail` text (for example the newsletter's description) now appears only in the side panel, in normal type instead of monospace.

@@ -23,7 +23,7 @@ const lk = inject('landkarte');
                 <div class="lk-lane__name">{{ data.lane.name }}</div>
                 <div v-if="data.lane.purpose" class="lk-lane__purpose">{{ data.lane.purpose }}</div>
             </div>
-            <Dropdown v-if="lk.editing.value" align="end" class="nodrag nopan">
+            <Dropdown align="end" class="nodrag nopan">
                 <template #trigger>
                     <Button icon="dots" variant="ghost" size="sm" inset :aria-label="lk.t('map_rename')" @pointerdown.stop @click.stop />
                 </template>

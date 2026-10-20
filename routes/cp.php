@@ -21,4 +21,6 @@ Route::prefix('funnels/landkarten')->name('statamic-funnels.landkarten.')->group
     Route::put('{landkarte}', [LandkarteController::class, 'update'])->name('update');
     Route::delete('{landkarte}', [LandkarteController::class, 'destroy'])->name('destroy');
     Route::get('{landkarte}/objects', [LandkarteController::class, 'objects'])->name('objects');
+    Route::post('{landkarte}/connections/preview', [LandkarteController::class, 'previewConnection'])->name('connections.preview');
+    Route::post('{landkarte}/connections', [LandkarteController::class, 'connect'])->name('connections.store');
 });

@@ -67,9 +67,9 @@ const cardTop = (row) => HEAD_H + LANE_PAD + row * ROW_H;
 /**
  * @returns {{ flowNodes: object[], laneHeight: number, rows: Record<string, number> }}
  */
-export function layoutNodes(lanes, nodes, { editing = false } = {}) {
+export function layoutNodes(lanes, nodes, { editing = false, adders = editing, draggable = false } = {}) {
     const { rows, counts } = rowsOf(lanes, nodes);
-    const deepest = Math.max(0, ...counts) + (editing ? 1 : 0);
+    const deepest = Math.max(0, ...counts) + (adders ? 1 : 0);
     const laneHeight = Math.max(LANE_MIN_H, HEAD_H + LANE_PAD + deepest * ROW_H);
     const flowNodes = [];
 
@@ -92,12 +92,13 @@ export function layoutNodes(lanes, nodes, { editing = false } = {}) {
             type: 'landkarte',
             position: { x: cardLeft(node.lane), y: cardTop(rows[node.key]) },
             data: node,
-            draggable: false,
+            // A card the owner no longer knows has no place of its own to move to.
+            draggable: draggable && !node.ghost && node.row !== null && node.row !== undefined,
             zIndex: 2,
         });
     }
 
-    if (editing) {
+    if (adders) {
         lanes.forEach((lane, index) => {
             flowNodes.push({
                 id: `adder:${index}`,
@@ -112,6 +113,101 @@ export function layoutNodes(lanes, nodes, { editing = false } = {}) {
     }
 
     return { flowNodes, laneHeight, rows };
+}
+
+// --- moving a card by dragging it ---------------------------------------------
+
+const refKey = (ref) => `${ref.type}:${ref.ref_id}`;
+
+/**
+ * Where a card dropped at `topLeft` (the canvas position the drag ended on)
+ * lands: the lane under its middle, and the place in that lane's order, counted
+ * against the cards that stay where they are.
+ *
+ * @returns {{ lane: number, index: number } | null} null when there is no lane
+ */
+export function dropSlot(lanes, key, topLeft) {
+    if (!lanes.length) return null;
+
+    const cx = topLeft.x + NODE_W / 2;
+    const cy = topLeft.y + NODE_H / 2;
+    const lane = Math.max(0, Math.min(lanes.length - 1, Math.floor(cx / LANE_W)));
+
+    // The other cards keep their drawn rows while the dragged one is away, so it is
+    // measured against those rows, not against the rows they would have after it left.
+    const refs = lanes[lane].refs ?? [];
+    let index = 0;
+    let seen = 0;
+
+    refs.forEach((ref, row) => {
+        if (refKey(ref) === key) return;
+        seen += 1;
+        if (cardTop(row) + NODE_H / 2 < cy) index = seen;
+    });
+
+    return { lane, index };
+}
+
+/**
+ * The lanes after the card moved to `slot`, or null when that is where it
+ * already is. The lanes passed in are not touched.
+ */
+export function moveRef(lanes, key, slot) {
+    if (!slot) return null;
+
+    const from = lanes.findIndex((l) => (l.refs ?? []).some((r) => refKey(r) === key));
+    if (from === -1 || !lanes[slot.lane]) return null;
+
+    const at = lanes[from].refs.findIndex((r) => refKey(r) === key);
+    if (from === slot.lane && at === slot.index) return null;
+
+    const next = lanes.map((l) => ({ ...l, refs: [...(l.refs ?? [])] }));
+    const [ref] = next[from].refs.splice(at, 1);
+    next[slot.lane].refs.splice(slot.index, 0, ref);
+
+    return next;
+}
+
+// --- drawing a connection by dragging an arrow ----------------------------------
+
+/** The rule that lets an object of the first type be connected to one of the second, if any. */
+export function ruleBetween(rules, from, to) {
+    return (rules ?? []).find((r) => r.from_type === from.type && r.to_type === to.type) ?? null;
+}
+
+/**
+ * Whether a card may be dropped on another. When it may not, `reason` says why
+ * in a word the page turns into a sentence: `same` (itself), `gone` (a card of
+ * something that no longer exists), `none` (nothing leaves this kind of object)
+ * or `pair` (this kind does not lead to that kind); `allowed` lists the types it does lead to.
+ */
+export function connectOutcome(rules, from, to) {
+    if (!from || !to || from.key === to.key) return { ok: false, reason: 'same', allowed: [] };
+
+    const allowed = [...new Set((rules ?? []).filter((r) => r.from_type === from.type).map((r) => r.to_type))];
+
+    if (to.ghost || to.status === 'missing' || from.ghost || from.status === 'missing') return { ok: false, reason: 'gone', allowed };
+    if (!allowed.length) return { ok: false, reason: 'none', allowed };
+
+    const rule = ruleBetween(rules, from, to);
+    return rule ? { ok: true, rule, allowed } : { ok: false, reason: 'pair', allowed };
+}
+
+/** Keys of every card the card `fromKey` may be dropped on. */
+export function targetsFor(rules, nodes, fromKey) {
+    const from = nodes.find((n) => n.key === fromKey);
+    return new Set(nodes.filter((n) => connectOutcome(rules, from, n).ok).map((n) => n.key));
+}
+
+/**
+ * How a line is drawn: `real` is a connection an addon holds in its own data
+ * (solid), `wait` a wait (dotted, round and short), `note` an arrow somebody drew
+ * by hand that no addon knows about (dashed, long strokes).
+ */
+export function strokeOf(edge) {
+    if (edge.hand) return 'note';
+    if (edge.kind === 'waits_for' || edge.dashed) return 'wait';
+    return 'real';
 }
 
 /**

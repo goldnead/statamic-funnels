@@ -1,6 +1,7 @@
 <script setup>
 import { computed, inject, ref } from 'vue';
 import { BaseEdge, EdgeLabelRenderer } from '@vue-flow/core';
+import { strokeOf } from '../../support/landkarteLayout.js';
 
 /**
  * A connection between two cards: a thin orthogonal line with an arrow. The
@@ -8,10 +9,12 @@ import { BaseEdge, EdgeLabelRenderer } from '@vue-flow/core';
  * every card and every gutter is, so the line is drawn from `data.path` and
  * not from the canvas's own routing.
  *
- * Grey by default. Three looks beyond it, each one a statement: the CP's
- * primary colour for the main path from the entry to the product that earned
- * money, dashed for a wait (not a hand-over of people), red for a connection
- * that ends at something that is gone.
+ * Grey by default and solid: an addon holds this connection in its own data.
+ * Beyond it, each look is a statement: the CP's primary colour for the main
+ * path from the entry to the product that earned money, dotted for a wait (not
+ * a hand-over of people), long dashes for a note (an arrow drawn by hand that no
+ * addon stands behind, marked "Note"), red for a connection that ends at
+ * something that is gone.
  *
  * The name of the connection is not on the line. It appears while the pointer
  * is on the line, or when the line is the selection: one label at a time, so
@@ -33,13 +36,17 @@ const lit = computed(() => lk.lit.value.size > 0);
 const onWay = computed(() => lk.litEdges.value.has(props.id));
 const picked = computed(() => lk.selectedEdge.value === props.id);
 const dim = computed(() => (lit.value && !onWay.value && !picked.value) || (!lit.value && !!lk.selectedEdge.value && !picked.value));
-const showLabel = computed(() => !!props.data.label && (hover.value || picked.value));
+const stroke = computed(() => strokeOf(props.data));
+// A note arrow always carries its word: it is the one line no addon stands behind.
+const noteWord = computed(() => lk.t('map_edge_note_label', 'Note'));
+const labelText = computed(() => (stroke.value === 'note' && props.data.label !== noteWord.value ? `${noteWord.value}: ${props.data.label}` : props.data.label));
+const showLabel = computed(() => !!props.data.label && (hover.value || picked.value || stroke.value === 'note'));
 
 const classes = computed(() => ({
     'lk-edge--main': props.data.main,
-    'lk-edge--dashed': props.data.dashed && !props.data.hand,
+    'lk-edge--wait': stroke.value === 'wait',
+    'lk-edge--note': stroke.value === 'note',
     'lk-edge--bad': props.data.bad,
-    'lk-edge--hand': props.data.hand,
     'lk-edge--on': (onWay.value || picked.value || hover.value) && !props.data.main && !props.data.bad,
     'lk-edge--dim': dim.value,
 }));
@@ -54,7 +61,7 @@ const marker = computed(() => {
 </script>
 
 <template>
-    <g :class="classes" class="lk-edge" :data-lk-edge="id">
+    <g :class="classes" class="lk-edge" :data-lk-edge="id" :data-stroke="stroke">
         <BaseEdge :id="id" :path="data.path" :marker-end="`url(#${marker})`" class="lk-edge__line" />
         <path
             :d="data.path"
@@ -71,7 +78,7 @@ const marker = computed(() => {
                 :style="{ transform: `translate(-50%, -50%) translate(${data.label_at[0]}px, ${data.label_at[1]}px)` }"
                 data-lk-edge-label
             >
-                {{ data.label }}
+                {{ labelText }}
             </div>
         </EdgeLabelRenderer>
     </g>
@@ -81,8 +88,8 @@ const marker = computed(() => {
 /* Not scoped: Vue Flow renders the path in its own tree. */
 .lk-edge__line { stroke: var(--color-gray-400); stroke-width: 1.5; fill: none; transition: opacity 0.15s; }
 .dark .lk-edge__line { stroke: var(--color-gray-600); }
-.lk-edge--dashed .lk-edge__line { stroke-dasharray: 5 4; }
-.lk-edge--hand .lk-edge__line { stroke-dasharray: 1.5 4; stroke-linecap: round; }
+.lk-edge--note .lk-edge__line { stroke-dasharray: 9 5; }
+.lk-edge--wait .lk-edge__line { stroke-dasharray: 0.1 5; stroke-linecap: round; stroke-width: 2.25; }
 .lk-edge--on .lk-edge__line { stroke: var(--color-gray-600); stroke-width: 2; }
 .dark .lk-edge--on .lk-edge__line { stroke: var(--color-gray-300); }
 .lk-edge--main .lk-edge__line { stroke: var(--color-primary); stroke-width: 2.25; }

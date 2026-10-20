@@ -7,7 +7,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-    HEAD_H, LANE_PAD, LANE_W, NODE_H, NODE_W, ROW_H, flowEdges, layoutNodes, pathThrough, wayThrough,
+    HEAD_H, LANE_PAD, LANE_W, NODE_H, NODE_W, ROW_H, connectOutcome, dropSlot, flowEdges, layoutNodes, moveRef, pathThrough, strokeOf,
+    targetsFor, wayThrough,
 } from '../../resources/js/support/landkarteLayout.js';
 
 const LANES = 5;
@@ -112,4 +113,95 @@ test('the way through a card is everything before and after it, nothing beside i
 
     assert.deepEqual([...nodes].sort(), ['a', 'b', 'c']);
     assert.deepEqual([...ids].sort(), ['e1', 'e2']);
+});
+
+// --- dragging a card -------------------------------------------------------------
+
+const refs = (...ids) => ids.map((id) => ({ type: 'x', ref_id: id }));
+const lanesOf = (...lists) => lists.map((ids, i) => ({ name: `L${i}`, refs: refs(...ids) }));
+const ids = (lanes) => lanes.map((l) => l.refs.map((r) => r.ref_id));
+const at = (lane, row) => ({ x: lane2x(lane), y: HEAD_H + LANE_PAD + row * ROW_H });
+
+test('a card dropped where it was does not move', () => {
+    const lanes = lanesOf(['a', 'b', 'c'], []);
+    assert.deepEqual(dropSlot(lanes, 'x:b', at(0, 1)), { lane: 0, index: 1 });
+    assert.equal(moveRef(lanes, 'x:b', dropSlot(lanes, 'x:b', at(0, 1))), null);
+    assert.equal(moveRef(lanes, 'x:b', dropSlot(lanes, 'x:b', { x: at(0, 1).x + 20, y: at(0, 1).y - 15 })), null);
+});
+
+test('a card dropped in another lane lands at the place under its middle', () => {
+    const lanes = lanesOf(['a', 'b'], ['c', 'd', 'e'], []);
+
+    // Between d and e: its middle is below d's middle and above e's.
+    const slot = dropSlot(lanes, 'x:a', at(1, 1.6));
+    assert.deepEqual(slot, { lane: 1, index: 2 });
+    assert.deepEqual(ids(moveRef(lanes, 'x:a', slot)), [['b'], ['c', 'd', 'a', 'e'], []]);
+
+    // Above everything, below everything, into an empty lane.
+    assert.deepEqual(dropSlot(lanes, 'x:a', at(1, -1)), { lane: 1, index: 0 });
+    assert.deepEqual(dropSlot(lanes, 'x:a', at(1, 9)), { lane: 1, index: 3 });
+    assert.deepEqual(ids(moveRef(lanes, 'x:b', dropSlot(lanes, 'x:b', at(2, 0)))), [['a'], ['c', 'd', 'e'], ['b']]);
+});
+
+test('a card moved within its lane is placed against the cards that stay', () => {
+    const lanes = lanesOf(['a', 'b', 'c']);
+
+    assert.deepEqual(ids(moveRef(lanes, 'x:a', dropSlot(lanes, 'x:a', at(0, 1.2)))), [['b', 'a', 'c']]);
+    assert.deepEqual(ids(moveRef(lanes, 'x:a', dropSlot(lanes, 'x:a', at(0, 2.4)))), [['b', 'c', 'a']]);
+    assert.deepEqual(ids(moveRef(lanes, 'x:c', dropSlot(lanes, 'x:c', at(0, 0)))), [['c', 'a', 'b']]);
+    // The lanes handed in are left alone.
+    assert.deepEqual(ids(lanes), [['a', 'b', 'c']]);
+});
+
+test('a drop outside the board falls into the nearest lane', () => {
+    const lanes = lanesOf(['a'], ['b']);
+    assert.equal(dropSlot(lanes, 'x:a', { x: -900, y: 0 }).lane, 0);
+    assert.equal(dropSlot(lanes, 'x:a', { x: 9000, y: 0 }).lane, 1);
+    assert.equal(dropSlot([], 'x:a', { x: 0, y: 0 }), null);
+});
+
+test('cards the owner no longer knows are not draggable, the others are when asked', () => {
+    const nodes = [{ key: 'a', lane: 0, row: 0 }, { key: 'g', lane: 0, row: null, ghost: true }];
+    const flow = (options) => layoutNodes([{ name: 'x' }], nodes, options).flowNodes.filter((n) => n.type === 'landkarte');
+
+    assert.deepEqual(flow().map((n) => n.draggable), [false, false]);
+    assert.deepEqual(flow({ draggable: true }).map((n) => n.draggable), [true, false]);
+    assert.equal(layoutNodes([{ name: 'x' }], nodes, { adders: true }).flowNodes.filter((n) => n.type === 'adder').length, 1);
+});
+
+// --- drawing a connection --------------------------------------------------------
+
+const RULES = [
+    { from_type: 'lead_magnet', to_type: 'automation', kind: 'triggers', label: 'startet' },
+    { from_type: 'lead_magnet', to_type: 'course', kind: 'unlocks', label: 'schaltet frei' },
+    { from_type: 'course', to_type: 'offer', kind: 'shows_box', label: 'zeigt' },
+];
+const CARDS = [
+    { key: 'lead_magnet:l', type: 'lead_magnet', status: 'found' },
+    { key: 'automation:a', type: 'automation', status: 'found' },
+    { key: 'course:c', type: 'course', status: 'found' },
+    { key: 'offer:o', type: 'offer', status: 'found' },
+    { key: 'automation:dead', type: 'automation', status: 'missing', ghost: true },
+];
+const card = (key) => CARDS.find((c) => c.key === key);
+
+test('only the pairs a rule names can be dropped on each other', () => {
+    assert.deepEqual([...targetsFor(RULES, CARDS, 'lead_magnet:l')].sort(), ['automation:a', 'course:c']);
+    assert.deepEqual([...targetsFor(RULES, CARDS, 'offer:o')], []);
+});
+
+test('a refused drop says why', () => {
+    assert.equal(connectOutcome(RULES, card('lead_magnet:l'), card('automation:a')).rule.kind, 'triggers');
+    assert.equal(connectOutcome(RULES, card('lead_magnet:l'), card('lead_magnet:l')).reason, 'same');
+    assert.equal(connectOutcome(RULES, card('lead_magnet:l'), card('offer:o')).reason, 'pair');
+    assert.deepEqual(connectOutcome(RULES, card('lead_magnet:l'), card('offer:o')).allowed, ['automation', 'course']);
+    assert.equal(connectOutcome(RULES, card('offer:o'), card('course:c')).reason, 'none');
+    assert.equal(connectOutcome(RULES, card('lead_magnet:l'), card('automation:dead')).reason, 'gone');
+    assert.equal(connectOutcome([], card('lead_magnet:l'), card('automation:a')).ok, false);
+});
+
+test('a line is solid when an addon holds it, dashed when drawn by hand, dotted when it waits', () => {
+    assert.equal(strokeOf({ kind: 'triggers' }), 'real');
+    assert.equal(strokeOf({ kind: 'hand', hand: true, dashed: true }), 'note');
+    assert.equal(strokeOf({ kind: 'waits_for', dashed: true }), 'wait');
 });
