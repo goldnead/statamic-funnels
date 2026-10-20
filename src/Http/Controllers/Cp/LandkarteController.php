@@ -109,6 +109,7 @@ class LandkarteController extends CpController
             'version' => $this->graph->version($landkarte),
             'saveUrl' => cp_route('statamic-funnels.landkarten.update', $landkarte->id),
             'objectsUrl' => cp_route('statamic-funnels.landkarten.objects', $landkarte->id),
+            'detailsUrl' => cp_route('statamic-funnels.landkarten.details', $landkarte->id),
             'connectionRules' => $this->graph->connectionRules(),
             'previewUrl' => cp_route('statamic-funnels.landkarten.connections.preview', $landkarte->id),
             'connectUrl' => cp_route('statamic-funnels.landkarten.connections.store', $landkarte->id),
@@ -186,6 +187,33 @@ class LandkarteController extends CpController
                 $this->registry->objects($data['type'], $data['q'] ?? null, 50),
             ),
         ]);
+    }
+
+    /**
+     * What a card's panel shows beyond the number: asked of the owning addon,
+     * once, when the panel opens. Empty for an addon that has nothing to add.
+     */
+    public function details(Request $request, Landkarte $landkarte)
+    {
+        $this->authorizeAccess();
+
+        $data = $request->validate([
+            'type' => ['required', 'string', 'max:64'],
+            'ref_id' => ['required', 'string', 'max:191'],
+            'days' => ['nullable', 'integer'],
+        ]);
+
+        abort_unless($this->registry->has($data['type']), 404);
+
+        $days = (int) ($data['days'] ?? 30);
+        $days = in_array($days, self::PERIODS, true) ? $days : 30;
+
+        // An older brand-context has no details(): the panel shows what it always did.
+        $blocks = method_exists($this->registry, 'details')
+            ? $this->registry->details($data['type'], $data['ref_id'], MapPeriod::lastDays($days))
+            : null;
+
+        return response()->json(['blocks' => $blocks ?? []]);
     }
 
     /**
@@ -392,7 +420,7 @@ class LandkarteController extends CpController
             'map_edge_origin_note', 'map_legend_real', 'map_legend_note', 'map_grip_hint', 'map_connect_gone', 'map_connect_none',
             'map_connect_pair', 'map_connect_allowed', 'map_connect_forbidden', 'map_connect_failed', 'map_connect_title',
             'map_disconnect_title', 'map_connect_do', 'map_disconnect_do', 'map_connected', 'map_disconnected', 'map_undo', 'map_undone',
-            'map_disconnect', 'map_connect_conflict', 'map_dead_stub_help',
+            'map_disconnect', 'map_connect_conflict', 'map_dead_stub_help', 'map_details_loading', 'map_details_failed', 'map_details_more',
         ];
 
         return collect($keys)

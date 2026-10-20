@@ -65,6 +65,32 @@ class EntryMapObjects implements ProvidesMapObjects
         return null;
     }
 
+    /**
+     * The page in a few words: title, address, whether it is live. No picture:
+     * Statamic keeps none for a page, and rendering one per opened panel would
+     * mean a headless browser for a glance.
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    public function details(string $id, MapPeriod $period): ?array
+    {
+        $entry = Entry::find($id);
+
+        if (! $entry instanceof StatamicEntry) {
+            return null;
+        }
+
+        $url = $entry->url();
+
+        return [['kind' => 'facts', 'title' => null, 'rows' => [
+            ['label' => __('statamic-funnels::messages.map_details_title'), 'value' => (string) ($entry->get('title') ?: $entry->slug())],
+            ['label' => __('statamic-funnels::messages.map_details_url'), 'value' => (string) $url, 'href' => $entry->published() ? $url : null],
+            ['label' => __('statamic-funnels::messages.map_details_status'), 'value' => $entry->published()
+                ? __('statamic-funnels::messages.map_details_published')
+                : __('statamic-funnels::messages.map_details_draft')],
+        ]]];
+    }
+
     protected function object(StatamicEntry $entry): MapObject
     {
         return new MapObject(

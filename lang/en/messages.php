@@ -401,4 +401,12 @@ return [
     'edge_via' => 'via :name',
     'edge_hand_label' => 'by hand',
     'edge_hand_origin' => 'drawn by hand',
+    'map_details_loading' => 'Loading details …',
+    'map_details_failed' => 'The details could not be loaded.',
+    'map_details_more' => '+ :count more',
+    'map_details_title' => 'Title',
+    'map_details_url' => 'Address',
+    'map_details_status' => 'Status',
+    'map_details_published' => 'Published',
+    'map_details_draft' => 'Draft',
 ];

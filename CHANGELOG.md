@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added: richer details in a Landkarte card's panel
+
+The panel asks the owning addon for more (a page's title, address and status; a course's lessons; an
+automation's mails; price and sales) through a new `landkarten/{id}/details` endpoint, once per card
+and period when the panel opens, never for the whole map. Needs `MapObjectRegistry::details()` from
+statamic-brand-context (an older one leaves the panel as it was). Pages show no picture: Statamic keeps
+none, and a screenshot per opened panel would need a headless browser.
+
 ## 1.28.0 — 2026-10-20
 
 ### Added: move cards and draw real connections on the Landkarte, no edit mode
