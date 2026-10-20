@@ -50,7 +50,7 @@ const flawText = computed(() => {
             selected && 'sa-node--selected',
             flawed && 'lk-node--flawed',
             dimmed && 'lk-node--dim',
-            data.ghost && 'lk-node--ghost',
+            broken && 'lk-node--dead',
         ]"
         :data-lk-node="id"
         :data-status="data.status"
@@ -65,7 +65,6 @@ const flawText = computed(() => {
             <div class="lk-node__heading">
                 <div class="lk-node__meta">
                     <span class="lk-pill">{{ data.type_label }}</span>
-                    <span v-if="data.detail" class="lk-node__sub" :title="data.detail">{{ data.detail }}</span>
                 </div>
                 <div class="lk-node__title" :title="data.label" :class="{ 'lk-node__title--gone': broken }">{{ data.label }}</div>
             </div>
@@ -130,16 +129,6 @@ const flawText = computed(() => {
 }
 .dark .lk-node__title { color: var(--color-gray-100); }
 .lk-node__title--gone { text-decoration: line-through; text-decoration-thickness: 1px; }
-.lk-node__sub {
-    min-width: 0;
-    font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 0.7rem;
-    color: var(--color-gray-500);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.dark .lk-node__sub { color: var(--color-gray-400); }
 .lk-node__drill { flex-shrink: 0; margin-top: 0.15rem; color: var(--color-gray-400); }
 
 .lk-node__foot {
@@ -177,7 +166,8 @@ const flawText = computed(() => {
 
 .lk-node--flawed { border-color: var(--color-red-400); }
 .dark .lk-node--flawed { border-color: var(--color-red-500); }
-.lk-node--ghost { border-style: dashed; }
+/* A dead reference has one frame, whether the card is a ghost or a found-then-lost object. */
+.lk-node--dead { border-style: dashed; }
 .lk-node--dim { opacity: 0.35; }
 
 /* Handles are anchors for the lines, not controls. */

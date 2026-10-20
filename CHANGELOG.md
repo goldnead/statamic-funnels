@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Landkarte cards show no second, truncated chip.** An object's `detail` text (for example the newsletter's description) now appears only in the side panel, in normal type instead of monospace.
+- **One frame for a dead reference.** Every dead card is red and dashed, whether it is a typo'd reference or a product that was lost. Before, the product had a solid red frame.
+
 ## 1.27.0 — 2026-10-19
 
 ### Changed: the Landkarte in the Control Panel's own look
