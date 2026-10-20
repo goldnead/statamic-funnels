@@ -156,7 +156,8 @@ class LandkarteGraph
     /**
      * Both ends of every edge as type and id (what the connect call needs) and
      * whether the edge is a real connection that may be loosened: derived, a
-     * rule for its pair and kind, and both ends objects of this map, not ghosts.
+     * rule for its pair and kind that belongs to the provider that derived the
+     * edge, and both ends objects of this map, not ghosts.
      *
      * @param  array<string, array<string, mixed>>  $edges
      * @param  array<string, array<string, mixed>>  $nodes
@@ -166,8 +167,11 @@ class LandkarteGraph
     {
         $rules = [];
 
-        foreach ($this->connectionRules() as $rule) {
-            $rules[$rule['from_type'].'>'.$rule['to_type'].'>'.$rule['kind']] = true;
+        // The rule's owner must be the provider that derived the edge: a
+        // `triggers` line another addon reads is not this rule's to loosen.
+        // A brand-context without `MapEdge::$ownerType` never names an owner.
+        foreach ($this->supportsConnections() ? $this->registry->connectionRules() : [] as $rule) {
+            $rules[$rule['from_type'].'>'.$rule['to_type'].'>'.$rule['kind']] = $rule['owner'] ?? null;
         }
 
         foreach ($edges as $key => $edge) {
@@ -181,7 +185,8 @@ class LandkarteGraph
             $edges[$key]['disconnectable'] = ! $edge['hand']
                 && $from !== null && $to !== null
                 && ! ($from['ghost'] ?? false) && ! ($to['ghost'] ?? false)
-                && isset($rules[$from['type'].'>'.$to['type'].'>'.$edge['kind']]);
+                && ($edge['owner_type'] ?? null) !== null
+                && ($rules[$from['type'].'>'.$to['type'].'>'.$edge['kind']] ?? null) === $edge['owner_type'];
         }
 
         return $edges;
@@ -375,7 +380,7 @@ class LandkarteGraph
             }
 
             if ($fromPlaced && $toPlaced && $from !== $to) {
-                $edges[$edge->key()] = $this->edgeRow($edge->key(), $from, $to, $edge->kind, $edge->label, $edge->derivedFrom, $edge->dashed, false, null);
+                $edges[$edge->key()] = $this->edgeRow($edge->key(), $from, $to, $edge->kind, $edge->label, $edge->derivedFrom, $edge->dashed, false, null, $edge->ownerType ?? null);
             }
         }
 
@@ -499,7 +504,7 @@ class LandkarteGraph
     }
 
     /** @return array<string, mixed> */
-    protected function edgeRow(string $id, string $source, string $target, string $kind, string $label, string $derivedFrom, bool $dashed, bool $hand, ?int $handId): array
+    protected function edgeRow(string $id, string $source, string $target, string $kind, string $label, string $derivedFrom, bool $dashed, bool $hand, ?int $handId, ?string $ownerType = null): array
     {
         return [
             'id' => $id,
@@ -511,6 +516,7 @@ class LandkarteGraph
             'dashed' => $dashed,
             'hand' => $hand,
             'hand_id' => $handId,
+            'owner_type' => $ownerType,
             'main' => false,
             'bad' => false,
         ];

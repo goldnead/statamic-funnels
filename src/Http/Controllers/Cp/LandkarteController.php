@@ -202,14 +202,19 @@ class LandkarteController extends CpController
         }
 
         try {
-            $preview = $this->registry->previewConnection($c['connection'], $c['action']);
+            $preview = $this->registry->previewConnection($c['connection'], $c['action'], User::current());
         } catch (AuthorizationException $e) {
             return $this->refuse(403, $e->getMessage(), 'map_connect_forbidden', 'Das darfst du nicht.');
         } catch (InvalidArgumentException|DomainException $e) {
             return $this->refuse(422, $e->getMessage(), 'map_connect_impossible', 'Das lässt sich nicht verbinden.');
         }
 
-        return response()->json(['kind' => $preview['kind'], 'consequence' => $preview['consequence']]);
+        // `before` is what the user is about to confirm: the write compares against it.
+        return response()->json([
+            'kind' => $preview['kind'],
+            'consequence' => $preview['consequence'],
+            'before' => $preview['before'] ?? '',
+        ]);
     }
 
     /**
@@ -227,11 +232,29 @@ class LandkarteController extends CpController
         }
 
         try {
-            $result = $this->registry->applyConnection($c['connection'], $c['action'], User::current());
+            $result = $this->registry->applyConnection($c['connection'], $c['action'], User::current(), $c['expected_before']);
         } catch (AuthorizationException $e) {
             return $this->refuse(403, $e->getMessage(), 'map_connect_forbidden', 'Das darfst du nicht.');
-        } catch (InvalidArgumentException|DomainException $e) {
+        } catch (InvalidArgumentException $e) {
             return $this->refuse(422, $e->getMessage(), 'map_connect_impossible', 'Das lässt sich nicht verbinden.');
+        } catch (DomainException) {
+            // The field is no longer what the user confirmed (ConnectionConflict) or the
+            // owner refused on its own re-check right before writing: either way somebody
+            // else got there first, and nothing was written.
+            return response()->json(['message' => __('statamic-funnels::messages.map_connect_conflict')], 409);
+        }
+
+        $undo = [
+            'action' => $result['undo']['action'],
+            'from_type' => $result['undo']['from_type'],
+            'from_id' => $result['undo']['from_id'],
+            'to_type' => $result['undo']['to_type'],
+            'to_id' => $result['undo']['to_id'],
+        ];
+
+        // What a disconnect removed travels to the client and back, so the undo restores exactly that.
+        if (isset($result['undo']['restore']) && is_array($result['undo']['restore'])) {
+            $undo['restore'] = $result['undo']['restore'];
         }
 
         return response()->json([
@@ -239,13 +262,7 @@ class LandkarteController extends CpController
             'consequence' => $result['consequence'],
             'before' => $result['before'],
             'after' => $result['after'],
-            'undo' => [
-                'action' => $result['undo']['action'],
-                'from_type' => $result['undo']['from_type'],
-                'from_id' => $result['undo']['from_id'],
-                'to_type' => $result['undo']['to_type'],
-                'to_id' => $result['undo']['to_id'],
-            ],
+            'undo' => $undo,
         ]);
     }
 
@@ -254,7 +271,7 @@ class LandkarteController extends CpController
      * body is whole, (for a write) the picture is current and both ends are
      * objects of this map. Whatever is wrong comes back as the answer.
      *
-     * @return JsonResponse|array{action: string, connection: array<string, string>}
+     * @return JsonResponse|array{action: string, connection: array<string, mixed>, expected_before: string|null}
      */
     protected function connection(Request $request, Landkarte $landkarte, bool $write): JsonResponse|array
     {
@@ -269,6 +286,8 @@ class LandkarteController extends CpController
             'to_type' => ['required', 'string', 'max:64'],
             'to_id' => ['required', 'string', 'max:191'],
             'version' => $write ? ['required', 'string'] : ['nullable', 'string'],
+            'expected_before' => ['nullable', 'string', 'max:1000'],
+            'restore' => ['nullable', 'array'],
         ]);
 
         if ($validator->fails()) {
@@ -288,14 +307,24 @@ class LandkarteController extends CpController
             return $this->refuse(422, '', 'map_connect_not_on_map', 'Beide Karten müssen auf dieser Landkarte liegen.');
         }
 
+        $connection = [
+            'from_type' => $data['from_type'],
+            'from_id' => $data['from_id'],
+            'to_type' => $data['to_type'],
+            'to_id' => $data['to_id'],
+        ];
+
+        // Only an undo of a disconnect carries what the disconnect removed.
+        if (is_array($data['restore'] ?? null)) {
+            $connection['restore'] = $data['restore'];
+        }
+
         return [
             'action' => $data['action'],
-            'connection' => [
-                'from_type' => $data['from_type'],
-                'from_id' => $data['from_id'],
-                'to_type' => $data['to_type'],
-                'to_id' => $data['to_id'],
-            ],
+            'connection' => $connection,
+            // An empty `before` reaches us as null (the request strips empty strings): a key that is
+            // there still means "the field was empty when you looked".
+            'expected_before' => array_key_exists('expected_before', $data) ? (string) $data['expected_before'] : null,
         ];
     }
 
@@ -363,7 +392,7 @@ class LandkarteController extends CpController
             'map_edge_origin_note', 'map_legend_real', 'map_legend_note', 'map_grip_hint', 'map_connect_gone', 'map_connect_none',
             'map_connect_pair', 'map_connect_allowed', 'map_connect_forbidden', 'map_connect_failed', 'map_connect_title',
             'map_disconnect_title', 'map_connect_do', 'map_disconnect_do', 'map_connected', 'map_disconnected', 'map_undo', 'map_undone',
-            'map_disconnect',
+            'map_disconnect', 'map_connect_conflict', 'map_dead_stub_help',
         ];
 
         return collect($keys)

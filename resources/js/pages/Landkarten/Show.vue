@@ -641,8 +641,11 @@ const bodyOf = (a, b) => {
 
 // What the server said no with, as a sentence; a refused request never fails silently.
 function refuse(response) {
+    // Somebody else got there first (another tab, another user): say so, and show the
+    // map as it is now, so the next try starts from what is really stored.
     if (response.status === 409) {
-        conflict.value = true;
+        toast.error(response.data?.message || t('map_connect_conflict'), { duration: 8000 });
+        reloadMap();
         return;
     }
 
@@ -661,7 +664,8 @@ async function previewConnection(a, b, action = 'connect') {
         body: response.data.consequence,
         button: action === 'connect' ? t('map_connect_do') : t('map_disconnect_do'),
         danger: action === 'disconnect',
-        run: () => writeConnection(body, action),
+        // What the user is shown and confirms: the write refuses when the field says something else by then.
+        run: () => writeConnection({ ...body, expected_before: response.data.before ?? '' }, action),
     });
 }
 
@@ -694,6 +698,7 @@ function offerUndo(result, action) {
 const UNDO_MS = 10000;
 
 async function undoConnection(undo) {
+    // `rest` carries `restore` when the owner handed back what the disconnect removed: it goes back as it came.
     const { action, ...rest } = undo;
     const response = await postJson(props.connectUrl, { ...rest, action, version: props.version });
     if (!response.ok) return refuse(response);
@@ -944,6 +949,8 @@ const helpLines = computed(() => [
                     </Card>
                 </Panel>
 
+                <Alert v-if="edge.bad" variant="error" :text="t('map_dead_stub_help')" data-lk-dead-help />
+
                 <p v-if="edge.main" class="text-sm text-gray-900 dark:text-gray-100">{{ t('map_main_path_title') }}</p>
 
                 <p v-if="edge.hand" class="text-sm text-gray-600 dark:text-gray-400">{{ t('map_note_edge_help') }}</p>
@@ -1082,7 +1089,22 @@ const helpLines = computed(() => [
 .lk-key--real { border-top: 1.5px solid var(--color-gray-400); }
 .lk-key--note { border-top: 1.5px dashed var(--color-gray-500); }
 .lk-key--wait { border-top: 2px dotted var(--color-gray-500); }
-.lk-key--bad { border-top: 1.75px dashed var(--color-red-500); }
+.lk-key--bad { border-top: 1.75px solid var(--color-red-500); }
+
+/*
+ * The confirmation is Statamic's own component (the one core uses), set in the middle of the
+ * screen and as one card: the frame and the card inside it would otherwise be two boxes, and
+ * the buttons sit in the frame's padding under the text.
+ */
+[data-lk-confirm][data-ui-modal-content] {
+    top: 50%; translate: -50% -50%; max-width: 28rem; padding: 0;
+    background: var(--color-white); border: 1px solid var(--color-gray-300); backdrop-filter: none;
+}
+.dark [data-lk-confirm][data-ui-modal-content] { background: var(--color-gray-800); border-color: var(--color-gray-700); }
+[data-lk-confirm][data-ui-modal-content] > div:first-child {
+    border: 0; background: transparent; box-shadow: none; border-radius: 0; padding: 1.25rem 1.25rem 0.75rem;
+}
+[data-lk-confirm][data-ui-modal-content] > div:not(:first-child) { padding: 0 1.25rem 1.25rem; }
 
 .lk-adder {
     display: flex; align-items: center; justify-content: center; gap: 0.4rem; width: 204px; padding: 0.6rem;

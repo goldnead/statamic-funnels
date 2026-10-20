@@ -205,3 +205,54 @@ test('a line is solid when an addon holds it, dashed when drawn by hand, dotted 
     assert.equal(strokeOf({ kind: 'hand', hand: true, dashed: true }), 'note');
     assert.equal(strokeOf({ kind: 'waits_for', dashed: true }), 'wait');
 });
+
+test('a line to something that is gone is a short stub off the source card, with its end named', () => {
+    const nodes = [{ key: 'a', lane: 0, row: 0 }, { key: 'z', lane: 3, row: 2 }];
+    const { rows } = layoutNodes([{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }], nodes);
+    const [dead, live] = flowEdges([
+        { id: 'dead', source: 'a', target: 'z', bad: true },
+        { id: 'live', source: 'a', target: 'z', bad: false },
+    ], nodes, rows);
+
+    const length = (d) => pointsOf(d).reduce((sum, p, i, all) => (i ? sum + Math.hypot(p[0] - all[i - 1][0], p[1] - all[i - 1][1]) : sum), 0);
+    assert.ok(length(live.data.path) > 300, 'a live line crosses the board');
+    assert.ok(length(dead.data.path) <= 50, 'a dead one stops after a stub');
+    assert.deepEqual(dead.data.stub_end, pointsOf(dead.data.path).at(-1));
+    assert.equal(live.data.stub_end, null);
+});
+
+test('lines that arrive on one side of a card take turns along it', () => {
+    const nodes = [
+        { key: 'a', lane: 0, row: 0 }, { key: 'b', lane: 0, row: 1 }, { key: 'c', lane: 0, row: 2 }, { key: 't', lane: 1, row: 1 },
+    ];
+    const { rows } = layoutNodes([{ name: 'x' }, { name: 'y' }], nodes);
+    const drawn = flowEdges(['a', 'b', 'c'].map((k) => ({ id: `${k}>t`, source: k, target: 't' })), nodes, rows);
+    const arrival = (edge) => pointsOf(edge.data.path).at(-1)[1];
+
+    assert.equal(new Set(drawn.map(arrival)).size, 3, 'three arrowheads, three places');
+});
+
+test('a straight line stays in the middle of its card side and the others make room', () => {
+    const nodes = [{ key: 'a', lane: 0, row: 1 }, { key: 'b', lane: 1, row: 1 }, { key: 'c', lane: 0, row: 0 }];
+    const { rows } = layoutNodes([{ name: 'x' }, { name: 'y' }], nodes);
+    const drawn = Object.fromEntries(flowEdges([
+        { id: 'straight', source: 'a', target: 'b' },
+        { id: 'bent', source: 'c', target: 'b' },
+    ], nodes, rows).map((e) => [e.id, e]));
+    const middle = HEAD_H + LANE_PAD + ROW_H + NODE_H / 2;
+
+    assert.equal(pointsOf(drawn.straight.data.path).at(-1)[1], middle);
+    assert.notEqual(pointsOf(drawn.bent.data.path).at(-1)[1], middle);
+});
+
+test('a note names itself above a sideways piece or beside an upright one', () => {
+    const nodes = [{ key: 'a', lane: 0, row: 0 }, { key: 'b', lane: 0, row: 1 }, { key: 'c', lane: 1, row: 0 }];
+    const { rows } = layoutNodes([{ name: 'x' }, { name: 'y' }], nodes);
+    const drawn = Object.fromEntries(flowEdges([
+        { id: 'column', source: 'a', target: 'b' },
+        { id: 'across', source: 'a', target: 'c' },
+    ], nodes, rows).map((e) => [e.id, e]));
+
+    assert.equal(drawn.column.data.label_sideways, false);
+    assert.equal(drawn.across.data.label_sideways, true);
+});

@@ -385,6 +385,8 @@ return [
     'map_connect_allowed' => 'Von dort aus geht: :types.',
     'map_connect_forbidden' => 'Du darfst diese Verbindung nicht ändern.',
     'map_connect_failed' => 'Die Verbindung konnte nicht geändert werden.',
+    'map_connect_conflict' => 'Das hat sich inzwischen geändert (anderer Tab oder anderer Nutzer). Bitte neu laden.',
+    'map_dead_stub_help' => 'Diese Verbindung zeigt auf etwas, das es nicht mehr gibt. Die Linie ist deshalb nur ein kurzer Stummel mit Kreuz, nicht bis zur Karte gezogen. Behebe es im Addon, dem die Verbindung gehört.',
     'map_connect_title' => 'Verbinden?',
     'map_disconnect_title' => 'Verbindung lösen?',
     'map_connect_do' => 'Verbinden',

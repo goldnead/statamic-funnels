@@ -383,6 +383,8 @@ return [
     'map_connect_allowed' => 'From there you can reach: :types.',
     'map_connect_forbidden' => 'You may not change this connection.',
     'map_connect_failed' => 'The connection could not be changed.',
+    'map_connect_conflict' => 'This has changed in the meantime (another tab or another user). Please reload.',
+    'map_dead_stub_help' => 'This connection points at something that no longer exists. The line is only a short stub with a cross, not drawn all the way to the card. Fix it in the addon that owns the connection.',
     'map_connect_title' => 'Connect?',
     'map_disconnect_title' => 'Remove connection?',
     'map_connect_do' => 'Connect',
