@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.28.0 — 2026-10-20
+
 ### Added: move cards and draw real connections on the Landkarte, no edit mode
 
 - **Cards move freely** (to another phase, to another place) and the position saves itself, one request at a time, against the map's `version`. A tab that went stale gets a clear message with a reload button instead of overwriting the newer picture.
@@ -9,7 +11,7 @@
 - New routes `POST funnels/landkarten/{id}/connections/preview` and `…/connections` (403 without the owning addon's permission for source and target, 409 on a stale version or when the field changed since the preview, 422 on a refusal in the preview).
 - **Compare and set.** The preview hands out the `before` the user confirms; the write sends it back as `expected_before`, and a field that changed in the meantime (another tab or user) is a 409 "Das hat sich inzwischen geändert …", nothing written, the map reloads. An undo of a release carries `restore` from the server and back, so exactly what was removed comes back.
 - "Release connection" is offered only when the provider that read the line is the owner of the rule for the pair (`owner_type`); a `triggers` line another addon read gets none.
-- Audit of connects/releases is written by brand-context (user id only, table `map_connection_audits`): run `php artisan migrate` after updating brand-context. Needs brand-context >= 1.19 (unreleased).
+- Audit of connects/releases is written by brand-context (user id only, table `map_connection_audits`): run `php artisan migrate` after updating brand-context. Needs brand-context >= 1.19.
 - The confirmation is Statamic's own modal, centred and as one card. A note's word sits on a dashed chip beside its line, a line to something gone is a short stub with a cross (the panel says why), and lines arriving on one side of a card take turns instead of piling up.
 
 ### Changed
