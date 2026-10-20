@@ -222,6 +222,15 @@ class LandkarteZiehenTest extends TestCase
     {
         parent::setUp();
 
+        // The connection contract is brand-context >= 1.19. On the published 1.18 only the
+        // paths that must keep working without it run; the rest runs where 1.19 is installed.
+        $contract = method_exists(MapObjectRegistry::class, 'applyConnection') && property_exists(MapEdge::class, 'ownerType');
+        $worksWithout = ['an_older_brand_context_without_the_contract_gives_no_rules_and_no_crash', 'without_the_gate_both_endpoints_are_forbidden', 'a_brand_context_that_names_no_edge_owner_offers_no_disconnect'];
+
+        if (! $contract && ! in_array($this->name(), $worksWithout, true)) {
+            $this->markTestSkipped('needs brand-context >= 1.19 (connection contract)');
+        }
+
         ZiehenWorld::reset();
         $this->useRegistry(new MapObjectRegistry($this->app));
     }
