@@ -574,7 +574,7 @@ const helpLines = computed(() => [
             <div v-if="selected" class="space-y-6 p-4" data-lk-panel>
                 <div class="flex flex-wrap items-center gap-2">
                     <Badge :text="selected.type_label" />
-                    <span v-if="selected.detail" class="font-mono text-xs text-gray-600 dark:text-gray-400">{{ selected.detail }}</span>
+                    <span v-if="selected.detail" class="text-sm text-gray-600 dark:text-gray-400">{{ selected.detail }}</span>
                 </div>
 
                 <Alert v-if="selected.status === 'missing'" variant="error" :text="selected.ghost ? t('map_ghost_help') : t('map_broken_help')" />
