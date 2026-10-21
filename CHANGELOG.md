@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.33.0 — 2026-10-21
+
 ### Added: Probelauf, "as for a real person" (part 4, the CRM person; read only)
 
 Besides the made-up test person the dry run can copy a real one: **Wie bei einer echten Person** finds her in the CRM
