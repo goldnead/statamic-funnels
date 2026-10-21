@@ -13,6 +13,8 @@ use Goldnead\BrandContext\Simulation\SimEvent;
 use Goldnead\BrandContext\Simulation\SimPerson;
 use Goldnead\BrandContext\Simulation\Simulator;
 use Goldnead\StatamicFunnels\Events\FunnelStepEntered;
+use Goldnead\StatamicFunnels\Http\Middleware\KeepPreviewOutOfTheCache;
+use Goldnead\StatamicFunnels\Http\Middleware\MarkPagePreview;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
@@ -32,6 +34,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Statamic\Events\ResponseCreated;
@@ -39,6 +42,7 @@ use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Permission;
 use Statamic\Facades\Role;
+use Statamic\Facades\Site;
 use Statamic\Facades\Token;
 use Statamic\Facades\User;
 
@@ -385,6 +389,75 @@ class ProbelaufSeiteTest extends TestCase
         $this->assertSame([], $response->headers->getCookies());
         $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
         $this->assertSame('noindex, nofollow', $response->headers->get('X-Robots-Tag'));
+        // Not for Statamic's static cache either (it reads this on the answer, from inside its own middleware).
+        $this->assertSame('1', $response->headers->get('X-Statamic-Uncacheable'));
+
+        // What the look changed for the request is put back when the answer is out.
+        $this->assertNotSame('array-but-not-ours', config('session.driver'));
+        $this->assertFalse(view()->shared('probe_preview'));
+    }
+
+    #[Test]
+    public function the_pass_is_read_with_the_address_written_out_or_not_and_both_groups_carry_the_middleware(): void
+    {
+        $request = fn (string $uri, string $pass) => Request::create($uri, 'GET', [], [], [], ['HTTP_'.strtoupper(str_replace('-', '_', PagePreviewToken::HEADER)) => $pass]);
+
+        // An address with an umlaut, as the entry gives it and as a browser's request has it.
+        $this->assertSame(PagePreviewToken::GOOD, PagePreviewToken::consume($request('/%C3%BCber-mich', PagePreviewToken::mint('/über-mich'))));
+        $this->assertSame(PagePreviewToken::GOOD, PagePreviewToken::consume($request('/kurs/', PagePreviewToken::mint('/kurs'))));
+        $this->assertSame(PagePreviewToken::GOOD, PagePreviewToken::consume($request('/', PagePreviewToken::mint('/'))));
+        $this->assertSame(PagePreviewToken::MISMATCH, PagePreviewToken::consume($request('/kurs2', PagePreviewToken::mint('/kurs'))));
+        $this->assertSame(PagePreviewToken::NONE, PagePreviewToken::consume($request('/kurs', 'nope')));
+
+        foreach (['web', 'statamic.web'] as $group) {
+            $groups = $this->app['router']->getMiddlewareGroups();
+            $this->assertSame(MarkPagePreview::class, $groups[$group][0], "first in {$group}");
+            $this->assertSame(KeepPreviewOutOfTheCache::class, end($groups[$group]), "last in {$group}");
+        }
+    }
+
+    #[Test]
+    public function the_host_of_an_application_page_must_be_one_the_site_owns_and_an_error_of_the_site_is_a_failure(): void
+    {
+        $this->page('app-seite');
+        $app = Entry::query()->where('slug', 'app-seite')->first();
+        $tokens = $this->counts()['tokens'];
+
+        // A site address of `/` takes the host from whoever asked: a made-up `Host` header must not become the target.
+        $status = 200;
+        Http::fake(function () use (&$status) {
+            return Http::response('x', $status, ['Content-Type' => 'text/html']);
+        });
+        URL::forceRootUrl('http://evil.example');
+        config(['app.url' => 'http://localhost']);
+        Site::setSites(['default' => ['name' => 'Test', 'locale' => 'en_US', 'url' => '/']]);
+        $this->assertSame(PagePreview::FAILED, app(PagePreview::class)->render($app->id())['reason']);
+        Http::assertNothingSent();
+
+        // The site's own host: an answer that is a refusal or an error is a failure (not "what a visitor would see").
+        URL::forceRootUrl(null);
+        Site::setSites(['default' => ['name' => 'Test', 'locale' => 'en_US', 'url' => 'http://localhost/']]);
+
+        foreach ([401, 403, 500, 503] as $status) {
+            $this->assertSame(PagePreview::FAILED, app(PagePreview::class)->render($app->id())['reason'], (string) $status);
+        }
+
+        $status = 404;
+        $this->assertSame(PagePreview::NOT_A_PAGE, app(PagePreview::class)->render($app->id())['reason']);
+        $this->assertSame($tokens, $this->counts()['tokens']);
+    }
+
+    #[Test]
+    public function a_class_on_the_body_does_not_swallow_the_links_of_the_page(): void
+    {
+        $this->page('app-seite');
+        $app = Entry::query()->where('slug', 'app-seite')->first();
+        Http::fake(['*' => Http::response('<html><body class="has-consent"><main><a href="/kontakt">Kontakt</a></main><div class="consent-banner"><a href="/datenschutz">Datenschutz</a></div></body></html>', 200, ['Content-Type' => 'text/html'])]);
+
+        $page = app(PagePreview::class)->render($app->id());
+
+        // The page's own link stays; the banner's does not.
+        $this->assertSame([['text' => 'Kontakt', 'url' => '/kontakt']], $page['links']);
     }
 
     #[Test]
@@ -406,8 +479,10 @@ class ProbelaufSeiteTest extends TestCase
         $tokens = $this->counts()['tokens'];
         $other = PagePreviewToken::mint('/anderswo');
 
-        $this->assertFalse(json_decode($this->asked($other)->getContent(), true)['look']);
-        // Wrong path: gone anyway, it is not kept for a second try.
+        // Wrong path: the page is not served at all (a look that is mistaken for a visit would count), the pass is gone anyway.
+        $refused = $this->asked($other);
+        $refused->assertNotFound();
+        $this->assertSame('', $refused->getContent());
         $this->assertSame($tokens, $this->counts()['tokens']);
 
         foreach (['', 'abc', str_repeat('a', 32), '../../etc/passwd'] as $made) {

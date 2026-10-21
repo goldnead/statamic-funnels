@@ -9,6 +9,7 @@ use Goldnead\StatamicFunnels\Contracts\ThumbnailRenderer;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelActionsController;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelsController;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\LandkarteController;
+use Goldnead\StatamicFunnels\Http\Middleware\KeepPreviewOutOfTheCache;
 use Goldnead\StatamicFunnels\Http\Middleware\MarkPagePreview;
 use Goldnead\StatamicFunnels\Integrations\Insights\Completed;
 use Goldnead\StatamicFunnels\Integrations\Insights\CompletionRate;
@@ -102,9 +103,15 @@ class ServiceProvider extends AddonServiceProvider
 
         // The page the Probelauf asks of the site itself is a look, not a visit. First in the group, ahead of the session and of
         // anything the site adds after it; `statamic.web` is the group of the catch-all that serves entries.
-        foreach (['web', 'statamic.web'] as $group) {
-            $this->app['router']->prependMiddlewareToGroup($group, MarkPagePreview::class);
-        }
+        // From `booted()`: Statamic registers the members of `statamic.web` (its static cache among them) in its own boot, and the
+        // second middleware has to come after them to run inside the cache; a prepend to a group that does not exist yet does nothing.
+        $this->app->booted(function (): void {
+            foreach (['web', 'statamic.web'] as $group) {
+                $this->app['router']->prependMiddlewareToGroup($group, MarkPagePreview::class);
+                // Behind Statamic's static cache (the last of its group), so that it runs inside it and can say "uncacheable" in time.
+                $this->app['router']->pushMiddlewareToGroup($group, KeepPreviewOutOfTheCache::class);
+            }
+        });
 
         // What the funnel map can point at from here: funnels, their steps and
         // Statamic entries. The other addons register their own.

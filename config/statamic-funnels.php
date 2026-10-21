@@ -89,7 +89,7 @@ return [
 
     'page_preview' => [
         // A page that the application builds itself (a front-end framework with server-side rendering) is asked of the
-        // application over a request that does not leave the host, marked as a look. Switch it off, and such a page shows
+        // application over a request of the server to the site's own address, marked as a look. Switch it off, and such a page shows
         // its picture and the reason instead.
         'app_pages' => true,
         // Where that request goes. Empty: the site's own address, as the entry gives it. Behind a proxy or a login in front

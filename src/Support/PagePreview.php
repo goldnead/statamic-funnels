@@ -35,7 +35,7 @@ use Throwable;
  *
  * A page that the application serves through a route of its own (a controller that builds it with a front-end
  * framework, as most pages of adriangoldner.com) is no Statamic response. It is asked of the application itself
- * ({@see fromApplication()}): a request that never leaves the host, marked as a look by a pass that only the server holds
+ * ({@see fromApplication()}): a request of the server to the site's own address, marked as a look by a pass that only the server holds
  * ({@see PagePreviewToken}), answered with the markup the application's server-side rendering produces. That markup goes
  * through the same safety as any other: it is shown without a single script (the page the person sees is the page as the
  * server drew it, not as a browser would redraw it).
@@ -135,31 +135,43 @@ class PagePreview
      * The markup the application answers for the page it builds itself (a front-end framework with server-side rendering),
      * or null when it is not a page.
      *
-     * Asked over a request of its own, as a separate process step: the application's own routes, middleware and renderer
-     * run exactly as for a visitor, and none of it shares the request, the session or the user of the Control Panel. The
-     * request is marked as a look by a pass that only this server holds ({@see PagePreviewToken}); redirects are not
-     * followed, because a redirect is no page, and the pass is gone when the answer is in. The address is the entry's own
-     * path on the site's own host (or on `page_preview.url`, with the host as the `Host` header): nothing a person typed.
+     * Asked over a request of its own: the application's own routes, middleware and renderer run exactly as for a visitor,
+     * and none of it shares the request, the session or the user of the Control Panel. The request is marked as a look by a
+     * pass that only this server holds ({@see PagePreviewToken}); redirects are not followed, because a redirect is no page,
+     * and the pass is gone when the answer is in.
+     *
+     * Where the request goes is not a thing a person can steer. The path is the entry's own. The host is the entry's host, and
+     * only when it is one of the site's own (the application's address and the addresses of its sites); a host that arrives in
+     * the Control Panel request and is not one of them is refused, because with a site address of `/` the entry's host is
+     * whatever the caller's `Host` header said. The place to connect to is that host's own address, or `page_preview.url`
+     * (the web server itself, for a host that has a login or a proxy in front of its public address): the pass travels there
+     * and nowhere else.
+     *
+     * @throws \RuntimeException when the host is not the site's own, or the site answers with an error (the caller says "failed")
      */
     protected function fromApplication(StatamicEntry $entry, string $path): ?string
     {
-        $absolute = (string) $entry->absoluteUrl();
-        $parts = parse_url($absolute) ?: [];
-        $host = (string) ($parts['host'] ?? '').(isset($parts['port']) ? ':'.$parts['port'] : '');
+        $parts = parse_url((string) $entry->absoluteUrl()) ?: [];
+        $host = strtolower((string) ($parts['host'] ?? '')).(isset($parts['port']) ? ':'.$parts['port'] : '');
 
         // The path of the entry, and only that: a path that is not one (a scheme-relative `//host`) is no page of this site.
-        if ($host === '' || ! str_starts_with($path, '/') || str_starts_with($path, '//')) {
+        if ($host === '' || ! str_starts_with($path, '/') || str_starts_with($path, '//') || str_contains($path, '\\')) {
             return null;
         }
 
-        $base = rtrim((string) (config('statamic-funnels.page_preview.url') ?: ($parts['scheme'] ?? 'https').'://'.$host), '/');
+        if (! in_array($host, $this->ownHosts(), true)) {
+            throw new \RuntimeException('the host of the page is not one of the site\'s own');
+        }
+
+        $scheme = ($parts['scheme'] ?? 'https') === 'http' ? 'http' : 'https';
+        $base = rtrim((string) (config('statamic-funnels.page_preview.url') ?: $scheme.'://'.$host), '/');
         $token = PagePreviewToken::mint($path);
 
         try {
             $response = Http::withHeaders([
                 PagePreviewToken::HEADER => $token,
                 'Host' => $host,
-                'X-Forwarded-Proto' => (string) ($parts['scheme'] ?? 'https'),
+                'X-Forwarded-Proto' => $scheme,
                 'X-Forwarded-Host' => $host,
                 'Accept' => 'text/html',
             ])
@@ -170,13 +182,48 @@ class PagePreview
             PagePreviewToken::forget($token);
         }
 
-        if ($response->status() !== 200 || ! str_contains(strtolower((string) $response->header('Content-Type')), 'text/html')) {
+        $status = $response->status();
+
+        // A redirect or a missing page is no page ("not a page"); a refusal, a failure of the site or of the renderer is not
+        // "what a visitor would see" either, it is a failure, and is said so.
+        if ($status >= 300 && $status < 400 || $status === 404 || $status === 410) {
+            return null;
+        }
+
+        if ($status !== 200) {
+            Log::info('statamic-funnels: the site answered a page of the dry run with an error.', ['status' => $status, 'path' => $path]);
+
+            throw new \RuntimeException('the site answered '.$status);
+        }
+
+        if (! str_contains(strtolower((string) $response->header('Content-Type')), 'text/html')) {
             return null;
         }
 
         $body = $response->body();
 
         return trim($body) !== '' ? $body : null;
+    }
+
+    /**
+     * The hosts that are the site's own: the application's address and the written-out addresses of the Statamic sites.
+     *
+     * @return list<string>
+     */
+    protected function ownHosts(): array
+    {
+        $hosts = [];
+
+        // Only a site whose address is written out in its configuration: one that is `/` takes its host from the request in hand.
+        foreach (array_merge([(string) config('app.url')], Site::all()->map(fn ($site) => (string) $site->url())->all()) as $address) {
+            $parts = parse_url($address) ?: [];
+
+            if (isset($parts['host'])) {
+                $hosts[] = strtolower($parts['host']).(isset($parts['port']) ? ':'.$parts['port'] : '');
+            }
+        }
+
+        return array_values(array_unique($hosts));
     }
 
     /** The markup Statamic answers for the entry, or null when it is not a page (a redirect, an error, an empty answer). */
@@ -317,7 +364,8 @@ class PagePreview
 
     protected function ofTheSite(string $address, string $origin): bool
     {
-        if ($address === '' || str_starts_with($address, '//')) {
+        // A browser reads a backslash as a slash: `/\evil.example/x.css` is `//evil.example/x.css`.
+        if ($address === '' || str_starts_with($address, '//') || str_contains($address, '\\')) {
             return false;
         }
 
@@ -393,7 +441,8 @@ class PagePreview
         }
 
         // The placeholder of an embed, named in the way embeds usually are (a class or an id with `embed`, `consent` or `oembed`).
-        for ($node = $element->parentNode; $node instanceof DOMElement; $node = $node->parentNode) {
+        // The page's own wrappers (`html`, `body`, `main`) are not an embed, whatever state class they carry (`has-consent`).
+        for ($node = $element->parentNode; $node instanceof DOMElement && ! in_array(strtolower($node->tagName), ['html', 'body', 'main'], true); $node = $node->parentNode) {
             $name = strtolower($node->getAttribute('class').' '.$node->getAttribute('id').' '.$node->getAttribute('data-embed'));
 
             if (preg_match('/(^|[\s_-])(o?embed|consent|video-?placeholder|iframe-?placeholder|cookie-?banner)($|[\s_-])/', $name) === 1) {

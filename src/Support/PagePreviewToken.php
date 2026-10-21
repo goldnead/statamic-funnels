@@ -12,7 +12,7 @@ use Statamic\Facades\Token;
  * The pass that lets the server look at one of its own pages without being counted.
  *
  * A page the application builds itself (a front-end framework with server-side rendering) cannot be made from the entry,
- * so the Probelauf asks the application for it, over a request that never leaves the host. That request carries this pass
+ * so the Probelauf asks the application for it, over a request of its own to the site's address (or to the web server itself, see `page_preview.url`). That request carries this pass
  * in a header, and the middleware ({@see MarkPagePreview}) turns it into the mark
  * ({@see ProbePreview}) that everything which counts asks about.
  *
@@ -52,22 +52,32 @@ final class PagePreviewToken
         app(TokenRepository::class)->find($token)?->delete();
     }
 
+    /** No pass, or none that is good (made up, spent, expired, of another kind, not a GET): an ordinary visit. */
+    public const NONE = 'none';
+
+    /** A good pass for the path asked: the request is a look. */
+    public const GOOD = 'good';
+
+    /** A good pass, but for another path than the one asked: the request must not be served as a visit either. */
+    public const MISMATCH = 'mismatch';
+
     /**
-     * Whether the request carries a good pass for the path it asks for. Using it up is part of the answer: asked twice, it
-     * says yes once.
+     * What the pass in the request says. Using it up is part of the answer: asked twice, it says `good` once.
+     *
+     * @return self::NONE|self::GOOD|self::MISMATCH
      */
-    public static function consume(Request $request): bool
+    public static function consume(Request $request): string
     {
         $given = $request->headers->get(self::HEADER);
 
         if (! is_string($given) || $given === '' || ! $request->isMethod('GET')) {
-            return false;
+            return self::NONE;
         }
 
         $token = app(TokenRepository::class)->find($given);
 
         if ($token === null || $token->handler() !== self::HANDLER || $token->hasExpired()) {
-            return false;
+            return self::NONE;
         }
 
         $path = $token->get('path');
@@ -75,6 +85,14 @@ final class PagePreviewToken
         // One pass, one use: gone before the page is built, whatever the answer is.
         $token->delete();
 
-        return is_string($path) && $path === $request->getPathInfo();
+        return is_string($path) && self::same($path, $request->getPathInfo()) ? self::GOOD : self::MISMATCH;
+    }
+
+    /** The same page: an address is the same with its characters written out or not, and with or without a slash at the end. */
+    protected static function same(string $minted, string $asked): bool
+    {
+        $normal = fn (string $path): string => '/'.trim(rawurldecode($path), '/');
+
+        return $normal($minted) === $normal($asked);
     }
 }
