@@ -5,6 +5,7 @@ namespace Goldnead\StatamicFunnels\Http\Controllers\Cp;
 use DomainException;
 use Goldnead\BrandContext\Map\MapObjectRegistry;
 use Goldnead\BrandContext\Map\MapPeriod;
+use Goldnead\BrandContext\Simulation\PersonSources;
 use Goldnead\BrandContext\Simulation\SimAction;
 use Goldnead\BrandContext\Simulation\SimPerson;
 use Goldnead\BrandContext\Simulation\Simulator;
@@ -118,6 +119,8 @@ class LandkarteController extends CpController
             'connectUrl' => cp_route('statamic-funnels.landkarten.connections.store', $landkarte->id),
             'probelaufUrl' => class_exists(Simulator::class) ? cp_route('statamic-funnels.landkarten.probelauf', $landkarte->id) : null,
             'probelaufMailUrl' => class_exists(Simulator::class) ? cp_route('statamic-funnels.landkarten.probelauf.mail', $landkarte->id) : null,
+            // Only when a CRM (or anything else that knows real people) is there to copy a person from.
+            'probelaufPersonsUrl' => class_exists(PersonSources::class) && ! app(PersonSources::class)->isEmpty() ? cp_route('statamic-funnels.landkarten.probelauf.persons', $landkarte->id) : null,
             'showUrl' => $showUrl,
             'indexUrl' => cp_route('statamic-funnels.landkarten.index'),
             'labels' => $this->labels(),
@@ -283,6 +286,7 @@ class LandkarteController extends CpController
                 'products' => collect($built['nodes'])->where('type', 'product')->reject(fn (array $n) => $n['ghost'] ?? false)->map(fn (array $n) => ['key' => 'product:'.$n['ref_id'], 'label' => $n['label']])->values()->all(),
                 'automations' => collect($built['nodes'])->where('type', 'automation')->reject(fn (array $n) => $n['ghost'] ?? false)->map(fn (array $n) => ['id' => (string) $n['ref_id'], 'label' => $n['label']])->values()->all(),
                 'state' => [
+                    'unsubscribed' => ($who->traits['marketing.unsubscribed'] ?? false) === true,
                     'tags' => $who->traits['contact.tags'] ?? [],
                     'access' => $who->access,
                     'ran' => $who->ran,
@@ -310,6 +314,49 @@ class LandkarteController extends CpController
     }
 
     /**
+     * A real person to copy the test person from, read only. `q` searches (the CRM finds her), `like` copies: what
+     * every addon that knows her, and that this user may read, says (tags and traits, access, automations, whether
+     * she asked not to be written to). Nothing is written and nothing is kept: the answer fills the form of the page,
+     * and the way is planned from the form like any other person. No name or address is logged.
+     */
+    public function probelaufPersons(Request $request, Landkarte $landkarte)
+    {
+        $this->authorizeAccess();
+
+        abort_unless(class_exists(PersonSources::class), 404);
+
+        $data = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'like' => ['nullable', 'string', 'max:200'],
+        ]);
+
+        $sources = app(PersonSources::class);
+
+        if (($data['like'] ?? '') !== '') {
+            $who = $sources->state($data['like'], User::current());
+
+            abort_if($who === null, 404);
+
+            $traits = $who->traits;
+            $tags = is_array($traits['contact.tags'] ?? null) ? $traits['contact.tags'] : [];
+            $unsubscribed = ($traits['marketing.unsubscribed'] ?? false) === true;
+            unset($traits['contact.tags'], $traits['marketing.unsubscribed']);
+
+            return response()->json([
+                'tags' => $tags,
+                'access' => $who->access,
+                'ran' => $who->ran,
+                'unsubscribed' => $unsubscribed,
+                'traits' => $traits,
+            ]);
+        }
+
+        $q = trim((string) ($data['q'] ?? ''));
+
+        return response()->json(['persons' => mb_strlen($q) < 2 ? [] : $sources->search($q, User::current(), 8)]);
+    }
+
+    /**
      * What a request may say about the test person. Short lists of plain words and one small JSON list of
      * actions; everything is capped again when it is read ({@see personFrom()}).
      *
@@ -323,6 +370,9 @@ class LandkarteController extends CpController
             'ran' => ['nullable', 'array', 'max:20'],
             'ran.*' => ['string', 'max:191'],
             'actions' => ['nullable', 'string', 'max:6000'],
+            // Other things a condition can read (`contact.status`, custom fields), as one small JSON object.
+            'traits' => ['nullable', 'string', 'max:6000'],
+            'unsubscribed' => ['nullable', 'boolean'],
         ];
     }
 
@@ -359,10 +409,34 @@ class LandkarteController extends CpController
             }
         }
 
+        $traits = [];
+
+        if (isset($data['traits']) && $data['traits'] !== '') {
+            $decoded = json_decode((string) $data['traits'], true);
+
+            abort_unless(is_array($decoded), 422);
+
+            foreach (array_slice($decoded, 0, 40, true) as $key => $value) {
+                $isWords = is_array($value) && count($value) <= 30 && array_filter($value, fn ($w) => ! is_scalar($w)) === [];
+
+                if (is_string($key) && preg_match('/^[a-z0-9_.\-]{1,80}$/i', $key) && (is_scalar($value) || $isWords)) {
+                    $traits[$key] = is_array($value) ? array_values(array_map(fn ($w) => mb_substr((string) $w, 0, 200), $value)) : (is_string($value) ? mb_substr($value, 0, 500) : $value);
+                }
+            }
+        }
+
         $tags = $words($data['tags'] ?? null, 20);
 
+        if ($tags !== []) {
+            $traits['contact.tags'] = $tags;
+        }
+
+        if (! empty($data['unsubscribed'])) {
+            $traits['marketing.unsubscribed'] = true;
+        }
+
         return SimPerson::known(
-            $tags === [] ? [] : ['contact.tags' => $tags],
+            $traits,
             $words($data['access'] ?? null, 20),
             array_slice(array_values(array_filter(array_map(fn ($h) => is_string($h) ? mb_substr(trim($h), 0, 191) : '', (array) ($data['ran'] ?? [])))), 0, 20),
             $actions,
@@ -658,7 +732,7 @@ class LandkarteController extends CpController
             'map_disconnect', 'map_connect_conflict', 'map_dead_stub_help', 'map_details_loading', 'map_details_failed', 'map_details_restricted', 'map_details_more',
             'probe_tab_map', 'probe_tab_probe', 'probe_title', 'probe_title_test', 'probe_help', 'probe_help_test', 'probe_loading', 'probe_failed', 'probe_empty', 'probe_summary',
             'probe_unreached', 'probe_expand', 'probe_collapse', 'probe_now', 'probe_day', 'probe_hours', 'probe_minutes', 'probe_unavailable',
-            'probe_person_unknown', 'probe_person_test', 'probe_lens_label', 'probe_lens_account', 'probe_lens_pages', 'probe_account_empty', 'probe_account_access', 'probe_account_course', 'probe_account_open_unknown', 'probe_pages_empty', 'probe_pages_note', 'probe_why', 'probe_tags_label', 'probe_tags_placeholder', 'probe_access_label', 'probe_access_placeholder', 'probe_ran_label', 'probe_until_label', 'probe_until_all', 'probe_until_day', 'probe_standing', 'probe_standing_access', 'probe_standing_unsub', 'probe_action_title', 'probe_action_buy', 'probe_action_click', 'probe_action_unsub', 'probe_action_product', 'probe_action_link', 'probe_action_after', 'probe_action_days', 'probe_action_add', 'probe_action_remove', 'probe_action_no_products', 'probe_action_no_links', 'probe_action_help', 'probe_kind_action', 'probe_lens_timeline', 'probe_lens_mailbox', 'probe_mail_from_none', 'probe_mailbox_empty', 'probe_mail_select', 'probe_mail_failed', 'probe_mail_none', 'probe_mail_loading', 'probe_mail_from', 'probe_mail_subject', 'probe_mail_images_one', 'probe_mail_images_many', 'probe_mail_links', 'probe_mail_links_help', 'probe_mail_frame', 'probe_person_label', 'probe_start_label', 'probe_start_none', 'probe_timeline_empty', 'probe_timeline_summary', 'probe_kind_decision', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
+            'probe_person_unknown', 'probe_person_test', 'probe_lens_label', 'probe_who_label', 'probe_who_test', 'probe_who_real', 'probe_who_search', 'probe_who_search_hint', 'probe_who_copied', 'probe_who_reset', 'probe_who_none', 'probe_who_read_only', 'probe_unsubscribed_label', 'probe_lens_account', 'probe_lens_pages', 'probe_account_empty', 'probe_account_access', 'probe_account_course', 'probe_account_open_unknown', 'probe_pages_empty', 'probe_pages_note', 'probe_why', 'probe_tags_label', 'probe_tags_placeholder', 'probe_access_label', 'probe_access_placeholder', 'probe_ran_label', 'probe_until_label', 'probe_until_all', 'probe_until_day', 'probe_standing', 'probe_standing_access', 'probe_standing_unsub', 'probe_action_title', 'probe_action_buy', 'probe_action_click', 'probe_action_unsub', 'probe_action_product', 'probe_action_link', 'probe_action_after', 'probe_action_days', 'probe_action_add', 'probe_action_remove', 'probe_action_no_products', 'probe_action_no_links', 'probe_action_help', 'probe_kind_action', 'probe_lens_timeline', 'probe_lens_mailbox', 'probe_mail_from_none', 'probe_mailbox_empty', 'probe_mail_select', 'probe_mail_failed', 'probe_mail_none', 'probe_mail_loading', 'probe_mail_from', 'probe_mail_subject', 'probe_mail_images_one', 'probe_mail_images_many', 'probe_mail_links', 'probe_mail_links_help', 'probe_mail_frame', 'probe_person_label', 'probe_start_label', 'probe_start_none', 'probe_timeline_empty', 'probe_timeline_summary', 'probe_kind_decision', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
             'probe_kind_stop', 'probe_kind_unknown', 'probe_kind_fork', 'probe_kind_rejoin', 'probe_kind_denied', 'probe_kind_more', 'probe_kind_trait',
         ];
 

@@ -9,12 +9,12 @@
     "isEntry": true
   },
   "resources/js/cp.js": {
-    "file": "assets/cp-BkvAd6QS.js",
+    "file": "assets/cp-CnofGLGD.js",
     "name": "cp",
     "src": "resources/js/cp.js",
     "isEntry": true,
     "css": [
-      "assets/cp-933bBLbH.css"
+      "assets/cp-pthRDmeX.css"
     ]
   }
 }

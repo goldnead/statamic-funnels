@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added: Probelauf, "as for a real person" (part 4, the CRM person; read only)
+
+Besides the made-up test person the dry run can copy a real one: **Wie bei einer echten Person** finds her in the CRM
+(`GET landkarten/{id}/probelauf/persons?q=…`, at least two characters) and copies what every addon that knows her says and that
+the user may read (`?like=…`): tags and traits (status, custom fields), the access she holds, the automations she has been through, and whether she asked not
+to be written to. The copy fills the form of the test person and stays editable; the way is planned from the form. Read only:
+nothing about her is changed, sent or saved, and no name or address is logged. Each addon decides with its own right (what the user may not read from one is
+left out, the rest still comes). The "has unsubscribed" flag silences marketing mails from the start of her way. Only offered when an addon
+that knows real people is installed (brand-context 1.25; LeadHub, entitlements and automations register themselves).
+
 ### Added: Probelauf account and pages (part 5)
 
 Two more views of the test person's way. **Account** lists what she was given (access with its day) and, for each course she got into,

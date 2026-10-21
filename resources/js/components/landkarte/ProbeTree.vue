@@ -5,6 +5,7 @@ import ProbeNode from './ProbeNode.vue';
 import ProbeAccount from './ProbeAccount.vue';
 import ProbeMailbox from './ProbeMailbox.vue';
 import ProbePages from './ProbePages.vue';
+import ProbeRealPerson from './ProbeRealPerson.vue';
 import ProbeTimeline from './ProbeTimeline.vue';
 import {
     encodeActions, standing, timeInDay as timeInDayText, timeWords as timeText, untilDay,
@@ -21,6 +22,8 @@ import {
 const props = defineProps({
     url: { type: String, required: true },
     mailUrl: { type: String, default: null },
+    // Where a real person can be found and copied from; null when no addon knows real people.
+    personsUrl: { type: String, default: null },
     labels: { type: Object, default: () => ({}) },
 });
 
@@ -35,6 +38,11 @@ const ran = ref([]);
 const actions = ref([]);
 // Fast forward: the day up to which her way is shown (null: all of it).
 const until = ref(null);
+// "As for a real person": what was copied from her beyond the form's fields, and who she is for the page.
+const unsubscribed = ref(false);
+const extraTraits = ref({});
+const copiedFrom = ref(null);
+const who = ref('test');
 const products = ref([]);
 const automations = ref([]);
 const start = ref(null);
@@ -56,6 +64,8 @@ function personQuery(url) {
     if (access.value.trim() !== '') url.searchParams.set('access', access.value);
     ran.value.forEach((handle) => url.searchParams.append('ran[]', handle));
     if (actions.value.length) url.searchParams.set('actions', encodeActions(actions.value));
+    if (unsubscribed.value) url.searchParams.set('unsubscribed', '1');
+    if (Object.keys(extraTraits.value).length) url.searchParams.set('traits', JSON.stringify(extraTraits.value));
 
     return url;
 }
@@ -111,6 +121,34 @@ function chooseStart(value) {
     if (!value || value === start.value) return;
     start.value = value;
     load();
+}
+
+// What a real person said, into the form. Everything stays editable; the way is planned from the form.
+function copyPerson(data) {
+    tags.value = (data.tags ?? []).join(', ');
+    access.value = (data.access ?? []).join(', ');
+    ran.value = data.ran ?? [];
+    unsubscribed.value = Boolean(data.unsubscribed);
+    extraTraits.value = data.traits ?? {};
+    copiedFrom.value = data.label;
+    actions.value = [];
+    load();
+}
+
+function resetPerson() {
+    tags.value = '';
+    access.value = '';
+    ran.value = [];
+    unsubscribed.value = false;
+    extraTraits.value = {};
+    copiedFrom.value = null;
+    load();
+}
+
+function chooseWho(value) {
+    if (!value || value === who.value) return;
+    who.value = value;
+    if (value === 'test' && copiedFrom.value) resetPerson();
 }
 
 function toggleRan(handle, on) {
@@ -202,6 +240,21 @@ const hasContent = computed(() => (person.value === 'test' ? shown.value.length 
             </label>
         </div>
 
+        <div v-if="person === 'test' && personsUrl" class="pr-start pr-whowrap">
+            <span class="pr-start__label">{{ t('probe_who_label') }}</span>
+            <ToggleGroup :model-value="who" size="sm" :aria-label="t('probe_who_label')" data-pr-who-toggle @update:model-value="chooseWho">
+                <ToggleItem value="test" :label="t('probe_who_test')" data-pr-who-option="test" />
+                <ToggleItem value="real" :label="t('probe_who_real')" data-pr-who-option="real" />
+            </ToggleGroup>
+        </div>
+        <ProbeRealPerson
+            v-if="person === 'test' && personsUrl && who === 'real'"
+            :url="personsUrl"
+            :copied-from="copiedFrom"
+            @copy="copyPerson"
+            @reset="resetPerson"
+        />
+
         <div v-if="person === 'test'" class="pr-who" data-pr-who>
             <label class="pr-start">
                 <span class="pr-start__label">{{ t('probe_tags_label') }}</span>
@@ -211,6 +264,13 @@ const hasContent = computed(() => (person.value === 'test' ? shown.value.length 
                 <span class="pr-start__label">{{ t('probe_access_label') }}</span>
                 <Input v-model="access" size="sm" class="w-52" :placeholder="t('probe_access_placeholder')" :aria-label="t('probe_access_label')" data-pr-access />
             </label>
+            <Checkbox
+                v-model="unsubscribed"
+                :label="t('probe_unsubscribed_label')"
+                size="sm"
+                data-pr-unsubscribed
+                @update:model-value="load"
+            />
             <fieldset v-if="automations.length" class="pr-ran">
                 <legend class="pr-start__label">{{ t('probe_ran_label') }}</legend>
                 <Checkbox
@@ -286,6 +346,7 @@ const hasContent = computed(() => (person.value === 'test' ? shown.value.length 
 .pr-start { display: inline-flex; align-items: center; gap: 0.5rem; }
 .pr-start__label { font-size: 0.8rem; color: var(--color-gray-600); white-space: nowrap; }
 .dark .pr-start__label { color: var(--color-gray-400); }
+.pr-whowrap { margin: 0 0 0.75rem; }
 .pr-who { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem 1.25rem; margin: -0.25rem 0 1rem; }
 .pr-ran { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.25rem 0.9rem; margin: 0; padding: 0; border: 0; min-width: 0; }
 .pr-standing { margin: -0.4rem 0 0.9rem; font-size: 0.8rem; color: var(--color-gray-700); }

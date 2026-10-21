@@ -24,6 +24,7 @@ Route::prefix('funnels/landkarten')->name('statamic-funnels.landkarten.')->group
     Route::get('{landkarte}/details', [LandkarteController::class, 'details'])->name('details');
     Route::get('{landkarte}/probelauf', [LandkarteController::class, 'probelauf'])->name('probelauf');
     Route::get('{landkarte}/probelauf/mail', [LandkarteController::class, 'probelaufMail'])->name('probelauf.mail');
+    Route::get('{landkarte}/probelauf/persons', [LandkarteController::class, 'probelaufPersons'])->name('probelauf.persons');
     Route::post('{landkarte}/connections/preview', [LandkarteController::class, 'previewConnection'])->name('connections.preview');
     Route::post('{landkarte}/connections', [LandkarteController::class, 'connect'])->name('connections.store');
 });
