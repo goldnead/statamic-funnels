@@ -11,6 +11,7 @@ use Goldnead\StatamicFunnels\Integrations\Map\EntryMapObjects;
 use Goldnead\StatamicFunnels\Support\PagePreview;
 use Goldnead\StatamicFunnels\Tests\TestCase;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
@@ -118,7 +119,7 @@ class ProbelaufSeiteOhneRouteTest extends TestCase
     }
 
     #[Test]
-    #[\PHPUnit\Framework\Attributes\DataProvider('hostileAddresses')]
+    #[DataProvider('hostileAddresses')]
     public function an_address_that_is_no_path_of_this_site_is_not_followed(string $address): void
     {
         config(['statamic-funnels.page_preview.address_field' => 'route_path']);
