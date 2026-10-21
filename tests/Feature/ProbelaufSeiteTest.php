@@ -232,7 +232,11 @@ class ProbelaufSeiteTest extends TestCase
         $this->assertStringContainsString('data-sim-href="/!/lead-magnets/confirm/svg789"', $page['html']);
         $this->assertStringNotContainsString('javascript:', $page['html']);
         $this->assertStringContainsString('data-sim-href="/!/lead-magnets/confirm/abc123"', $page['html']);
-        $this->assertStringNotContainsString('target=', $page['html']);
+        // No link carries a target of its own (it could name the frame itself); the base element sends what is left to a new window, which
+        // a sandbox without `allow-popups` refuses.
+        $this->assertDoesNotMatchRegularExpression('/<a[^>]*target=/', $page['html']);
+        $this->assertStringContainsString('<base href="http://localhost/" target="_blank">', $page['html']);
+        $this->assertStringNotContainsString('odd111', str_replace('data-sim-href', '', $page['html']));
     }
 
     #[Test]

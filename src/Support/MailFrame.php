@@ -14,9 +14,11 @@ use DOMXPath;
  * alternative text, which is what a person who has images off sees too. Only markup that is already safe goes in and
  * comes out; nothing is added that loads or runs.
  *
- * The frame the mail sits in may read its own height (`sandbox="allow-same-origin"`, no scripts), so a second line of defence stands
- * here for what brand-context already does: a link that is not `#` and a meta that redirects are taken out again. Whatever got past
- * the first layer cannot send a same-origin frame to a page of the Control Panel.
+ * The frame the mail sits in may read its own height (`sandbox="allow-same-origin"`, no scripts), so a second line of defence
+ * stands here for what brand-context already does, and is not trusted to have worked: an address in a link or in an svg link,
+ * an element the parser reads differently from a browser ({@see DomSafety}) and a meta that redirects are taken out again, and
+ * every link that is left opens "in a new window", which a sandbox without `allow-popups` refuses. Whatever got past the first
+ * layer cannot send the frame anywhere.
  */
 final class MailFrame
 {
@@ -31,8 +33,7 @@ final class MailFrame
      */
     public static function calm(string $html, string $word): string
     {
-        // Nothing to do to a mail that has no switched-off image, no address in a link and nothing that redirects.
-        if (! str_contains($html, 'data-sim-blocked') && ! preg_match('/\shref\s*=\s*["\']?(?!#)|http-equiv\s*=\s*["\']?refresh/i', $html)) {
+        if (trim($html) === '') {
             return $html;
         }
 
@@ -42,13 +43,17 @@ final class MailFrame
         libxml_clear_errors();
         libxml_use_internal_errors($previous);
 
+        DomSafety::flattenOddElements($document);
+
         $xpath = new DOMXPath($document);
+        $blocked = 0;
 
         foreach (iterator_to_array($xpath->query('//img[@data-sim-blocked]') ?: []) as $image) {
             if (! $image instanceof DOMElement) {
                 continue;
             }
 
+            $blocked++;
             $alt = trim($image->getAttribute('alt'));
             $area = $document->createElement('div');
             $area->setAttribute('class', 'sim-img');
@@ -63,9 +68,19 @@ final class MailFrame
             $image->parentNode?->replaceChild($area, $image);
         }
 
-        foreach (iterator_to_array($xpath->query('//*[@href]') ?: []) as $link) {
-            if ($link instanceof DOMElement && trim($link->getAttribute('href')) !== '#') {
-                $link->setAttribute('href', '#');
+        foreach (iterator_to_array($xpath->query('//*') ?: []) as $element) {
+            if (! $element instanceof DOMElement) {
+                continue;
+            }
+
+            foreach (iterator_to_array($element->attributes) as $attribute) {
+                $name = strtolower($attribute->nodeName);
+
+                if ($name === 'xlink:href') {
+                    $element->removeAttribute($attribute->nodeName);
+                } elseif ($name === 'href' && trim($attribute->nodeValue ?? '') !== '#') {
+                    $element->setAttribute($attribute->nodeName, '#');
+                }
             }
         }
 
@@ -77,9 +92,15 @@ final class MailFrame
 
         $head = $xpath->query('//head')->item(0);
 
-        if ($head instanceof DOMElement && str_contains($html, 'data-sim-blocked')) {
-            $style = $document->createElement('style', self::STYLE);
-            $head->appendChild($style);
+        if ($head instanceof DOMElement) {
+            // Whatever link is left opens somewhere else, and a frame that may not open windows opens nothing.
+            $base = $document->createElement('base');
+            $base->setAttribute('target', '_blank');
+            $head->insertBefore($base, $head->firstChild);
+
+            if ($blocked > 0) {
+                $head->appendChild($document->createElement('style', self::STYLE));
+            }
         }
 
         return '<!doctype html>'.$document->saveHTML($document->documentElement);

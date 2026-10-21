@@ -174,6 +174,9 @@ class PagePreview
         libxml_clear_errors();
         libxml_use_internal_errors($previous);
 
+        // An element the parser reads as a name and a browser as a link (`<a/href=…>`) is made inert first.
+        DomSafety::flattenOddElements($document);
+
         $xpath = new DOMXPath($document);
 
         foreach (['script', 'noscript', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet', 'base', 'audio', 'video', 'source', 'track', 'portal', 'fencedframe', 'template'] as $name) {
@@ -243,6 +246,9 @@ class PagePreview
         $charset->setAttribute('charset', 'utf-8');
         $base = $document->createElement('base');
         $base->setAttribute('href', $origin.'/');
+        // Whatever link might be left opens "in a new window", which a sandbox without `allow-popups` refuses: a second line of defence
+        // behind the removal of every address.
+        $base->setAttribute('target', '_blank');
 
         // The policy first, so that it covers everything after it; the base next, so that the site's relative addresses
         // are read against the site and not against the screen that shows the frame.

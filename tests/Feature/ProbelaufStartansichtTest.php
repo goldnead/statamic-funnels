@@ -242,11 +242,34 @@ class ProbelaufStartansichtTest extends TestCase
     }
 
     #[Test]
-    public function a_mail_without_images_is_left_as_it_is(): void
+    public function a_mail_without_images_keeps_its_content_and_its_policy(): void
     {
-        $html = '<!doctype html><html><head></head><body><p>Hi</p></body></html>';
+        $html = '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'"></head><body><p>Hi</p></body></html>';
 
-        $this->assertSame($html, MailFrame::calm($html, 'Bild'));
+        $calm = MailFrame::calm($html, 'Bild');
+
+        $this->assertStringContainsString('<p>Hi</p>', $calm);
+        $this->assertStringContainsString('Content-Security-Policy', $calm);
+        $this->assertStringNotContainsString('sim-img', $calm);
+    }
+
+    #[Test]
+    public function whatever_link_got_past_the_first_layer_is_taken_out_again(): void
+    {
+        $html = '<!doctype html><html><head><meta http-equiv="refresh" content="0;url=/cp"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'"></head><body>'
+            .'<a href="https://track.example/c/1" target="_self">Go</a> <a href="#">Stay</a> <a/href="https://odd.example/">Odd</a>'
+            .'<svg><a xlink:href="https://svg.example/"><text>Svg</text></a></svg> <area href="/cp"></body></html>';
+
+        $calm = MailFrame::calm($html, 'Bild');
+
+        foreach (['track.example', 'odd.example', 'svg.example', 'url=/cp', 'refresh', 'xlink:href'] as $gone) {
+            $this->assertStringNotContainsString($gone, $calm, $gone.' is still in the mail');
+        }
+
+        // The policy stays, and every link that is left has no address but `#` and opens "in a new window", which the sandbox refuses.
+        $this->assertStringContainsString('Content-Security-Policy', $calm);
+        $this->assertStringContainsString('<base target="_blank">', $calm);
+        $this->assertSame(0, preg_match('/href="(?!#")/', $calm));
     }
 
     #[Test]

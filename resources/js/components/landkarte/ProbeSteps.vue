@@ -21,6 +21,8 @@ const probe = inject('probelauf');
 const days = computed(() => stepsByDay(props.entries));
 const firstDay = computed(() => days.value[0]?.day ?? 0);
 const summary = (group) => countsText(group.counts, probe.t);
+// Every day after the first can be fast forwarded to, except the one the way already ends on.
+const canSkip = (group) => group.day !== firstDay.value && group.day !== props.until;
 
 // Up and down move through the rows like a mailbox does; the focus follows, a row opens on Enter or click.
 function onKey(event) {
@@ -40,9 +42,13 @@ function onKey(event) {
     <div class="ps" data-ps @keydown="onKey">
         <section v-for="group in days" :key="group.day" class="ps-day" :data-ps-day="group.day">
             <header class="ps-day__head">
-                <h3>{{ probe.t('probe_day').replace(':day', group.day) }}</h3>
+                <h3>
+                    <!-- The day itself is the way to fast forward to it, as the button beside it says. -->
+                    <button v-if="canSkip(group)" type="button" class="ps-day__title" :title="probe.t('probe_skip_to')" @click="emit('skip', group.day)">{{ probe.t('probe_day').replace(':day', group.day) }}</button>
+                    <template v-else>{{ probe.t('probe_day').replace(':day', group.day) }}</template>
+                </h3>
                 <Button
-                    v-if="group.day !== firstDay && group.day !== until"
+                    v-if="canSkip(group)"
                     size="xs"
                     variant="ghost"
                     icon="arrow-right"
@@ -84,6 +90,9 @@ function onKey(event) {
 .ps-day__head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 1.5rem; margin: 0 0 0.35rem; }
 .ps-day__head h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-gray-900); }
 .dark .ps-day__head h3 { color: var(--color-gray-100); }
+.ps-day__title { padding: 0; border: 0; background: transparent; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; cursor: pointer; }
+.ps-day__title:hover { text-decoration: underline; text-underline-offset: 3px; }
+.ps-day__title:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 2px; }
 .ps-day__sum { font-size: 0.78rem; color: var(--color-gray-600); }
 .dark .ps-day__sum { color: var(--color-gray-400); }
 .ps-day__head button { color: var(--color-gray-600); }
