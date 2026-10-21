@@ -42,7 +42,16 @@ final class EntryAddress
 
         $value = trim($value);
 
-        if ($value === '' || ! str_starts_with($value, '/') || str_starts_with($value, '//') || str_contains($value, '\\') || preg_match('/[\x00-\x20\x7f]/', $value) === 1) {
+        // A path and nothing that moves it: no host (`//`), no query or fragment, no `.` or `..` segment, no backslash, no
+        // control character or space. The pass of a page is minted for exactly this path.
+        if ($value === ''
+            || ! str_starts_with($value, '/')
+            || str_starts_with($value, '//')
+            || str_contains($value, '\\')
+            || str_contains($value, '?')
+            || str_contains($value, '#')
+            || preg_match('#(^|/)\.\.?(/|$)#', $value) === 1
+            || preg_match('/[\x00-\x20\x7f]/', $value) === 1) {
             return null;
         }
 

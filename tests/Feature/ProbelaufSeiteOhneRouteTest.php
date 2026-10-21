@@ -8,6 +8,7 @@ use Goldnead\BrandContext\Simulation\SimEvent;
 use Goldnead\BrandContext\Simulation\SimPerson;
 use Goldnead\BrandContext\Simulation\Simulator;
 use Goldnead\StatamicFunnels\Integrations\Map\EntryMapObjects;
+use Goldnead\StatamicFunnels\Support\EntryAddress;
 use Goldnead\StatamicFunnels\Support\PagePreview;
 use Goldnead\StatamicFunnels\Tests\TestCase;
 use Illuminate\Support\Facades\Http;
@@ -115,6 +116,9 @@ class ProbelaufSeiteOhneRouteTest extends TestCase
             'not a path' => ['cvt-im-chor-minikurs'],
             'a control character' => ["/x\r\nHost: evil.example"],
             'empty' => ['  '],
+            'a query' => ['/cvt-im-chor-minikurs?x=1'],
+            'a fragment' => ['/cvt-im-chor-minikurs#a'],
+            'a dot segment' => ['/a/../cvt-im-chor-minikurs'],
         ];
     }
 
@@ -142,6 +146,16 @@ class ProbelaufSeiteOhneRouteTest extends TestCase
 
         $this->assertSame(PagePreview::DRAFT, $page['reason']);
         Http::assertNothingSent();
+    }
+
+    #[Test]
+    public function the_address_of_statamic_wins_over_the_field(): void
+    {
+        config(['statamic-funnels.page_preview.address_field' => 'route_path']);
+        Collection::make('pages')->routes('/seiten/{slug}')->save();
+        $entry = $this->entry('/etwas-anderes');
+
+        $this->assertSame('/seiten/cvt-im-chor-minikurs', EntryAddress::path($entry));
     }
 
     #[Test]
