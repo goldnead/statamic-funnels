@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Goldnead\BrandContext\Simulation\Effect;
 use Goldnead\BrandContext\Simulation\SimEvent;
 use Goldnead\BrandContext\Simulation\SimPerson;
+use Goldnead\StatamicFunnels\Support\EntryAddress;
 use Statamic\Entries\Entry as StatamicEntry;
 use Statamic\Facades\Entry;
 
@@ -52,9 +53,9 @@ trait SimulatesEntry
             new Effect(
                 Effect::PAGE,
                 __('statamic-funnels::messages.sim_entry_page', ['title' => (string) ($entry->get('title') ?: $entry->slug())]),
-                (string) $entry->url(),
+                (string) EntryAddress::path($entry),
                 0,
-                ['url' => (string) $entry->url(), 'entry' => (string) $entry->id()],
+                ['url' => (string) EntryAddress::path($entry), 'entry' => (string) $entry->id()],
             ),
             Effect::emit(new SimEvent(SimEvent::ENTERED)),
         ];

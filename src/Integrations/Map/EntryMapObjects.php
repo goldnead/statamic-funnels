@@ -6,6 +6,7 @@ use Goldnead\BrandContext\Contracts\ProvidesMapObjects;
 use Goldnead\BrandContext\Map\MapMetric;
 use Goldnead\BrandContext\Map\MapObject;
 use Goldnead\BrandContext\Map\MapPeriod;
+use Goldnead\StatamicFunnels\Support\EntryAddress;
 use Statamic\Entries\Entry as StatamicEntry;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
@@ -98,7 +99,7 @@ class EntryMapObjects implements ProvidesMapObjects
             return null;
         }
 
-        $url = $entry->url();
+        $url = EntryAddress::path($entry);
 
         return [['kind' => 'facts', 'title' => null, 'rows' => [
             ['label' => __('statamic-funnels::messages.map_details_title'), 'value' => (string) ($entry->get('title') ?: $entry->slug())],
@@ -117,7 +118,7 @@ class EntryMapObjects implements ProvidesMapObjects
             label: (string) ($entry->get('title') ?: $entry->slug() ?: $entry->id()),
             cpUrl: $entry->editUrl(),
             enabled: (bool) $entry->published(),
-            detail: trim(($entry->url() ?? '').' · '.($entry->collection()?->title() ?? $entry->collectionHandle()), ' ·'),
+            detail: trim((EntryAddress::path($entry) ?? '').' · '.($entry->collection()?->title() ?? $entry->collectionHandle()), ' ·'),
         );
     }
 }

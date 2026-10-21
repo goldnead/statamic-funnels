@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added: `page_preview.address_field` for pages with no route
+
+A site whose pages are served by its own controllers has collections with no route: `Entry::url()` is null and the Probelauf said "The
+page has no address" for every page. The site names the field that holds the path of an entry (adriangoldner.com: `route_path`) in
+`statamic-funnels.page_preview.address_field` (env `FUNNELS_PAGE_PREVIEW_ADDRESS_FIELD`); it is asked only when Statamic has no address
+of its own, and only a plain path of the site counts (no host, scheme, query, fragment, dot segment, backslash or control character).
+The page is rendered as before (asked of the application over the server's own request, marked as a look), and the dry run names it with
+that address. Empty setting: unchanged.
+
 ## 1.35.2 — 2026-10-21
 
 ### Changed

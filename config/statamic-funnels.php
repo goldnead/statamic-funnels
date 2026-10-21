@@ -96,6 +96,10 @@ return [
         // of the site (a staging host), the address of the web server itself, e.g. `http://127.0.0.1`; the host name is
         // still sent as the `Host` header.
         'url' => env('FUNNELS_PAGE_PREVIEW_URL'),
+        // A site whose pages are served by its own controllers has collections with no route, so Statamic has no
+        // address for an entry (`Entry::url()` is null). The name of the field that holds the entry's path, e.g.
+        // `route_path`, is asked then, and only then. Empty: Statamic's address is the only one.
+        'address_field' => env('FUNNELS_PAGE_PREVIEW_ADDRESS_FIELD'),
     ],
 
     /*
