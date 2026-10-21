@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added: Probelauf account and pages (part 5)
+
+Two more views of the test person's way. **Account** lists what she was given (access with its day) and, for each course she got into,
+its lessons with the day each one opens (the courses addon works that out with its drip schedule on an enrollment that exists only
+in memory). **Seiten** lists the pages on her way (title, address, day); a page that is a step of a funnel hands the person on into the
+funnel. The pages are listed, not rendered: a preview would be a request to the page (counted by whatever counts visits there) or a
+preview pass written to the token store, and the dry run does neither. A page entry now answers the dry run (`EntryMapObjects`:
+a live page is a page line, a draft is a 404, a missing one is unknown).
+
 ### Added: Probelauf, the test person's conditions (part 4: tags, access, purchase, unsubscribe, fast forward, why)
 
 The test person can be described: her **tags** (`contact.tags`, what a condition reads), the **access** she holds and the
