@@ -83,7 +83,7 @@ class PagePreview
             return $this->unavailable(self::GONE, null, null);
         }
 
-        $url = $entry->url();
+        $url = EntryAddress::path($entry);
 
         if (! $entry->published()) {
             return $this->unavailable(self::DRAFT, $url, $entry);
@@ -93,7 +93,7 @@ class PagePreview
             return $this->unavailable(self::NO_ADDRESS, null, $entry);
         }
 
-        $request = ProbePreview::mark(Request::create((string) $entry->absoluteUrl(), 'GET'));
+        $request = ProbePreview::mark(Request::create((string) EntryAddress::absolute($entry), 'GET'));
 
         $byApplication = ! $this->servedByStatamic($request);
 
@@ -153,7 +153,7 @@ class PagePreview
      */
     protected function fromApplication(StatamicEntry $entry, string $path): ?string
     {
-        $parts = parse_url((string) $entry->absoluteUrl()) ?: [];
+        $parts = parse_url((string) EntryAddress::absolute($entry)) ?: [];
         $host = strtolower((string) ($parts['host'] ?? '')).(isset($parts['port']) ? ':'.$parts['port'] : '');
 
         // The path of the entry, and only that: a path that is not one (a scheme-relative `//host`) is no page of this site.
@@ -621,7 +621,7 @@ class PagePreview
     /** The address as a visitor reads it: the host of the site and the path, without the scheme. */
     protected function address(StatamicEntry $entry): string
     {
-        $parts = parse_url((string) $entry->absoluteUrl()) ?: [];
+        $parts = parse_url((string) EntryAddress::absolute($entry)) ?: [];
 
         return ($parts['host'] ?? '').(isset($parts['port']) ? ':'.$parts['port'] : '').($parts['path'] ?? '');
     }
