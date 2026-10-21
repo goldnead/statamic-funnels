@@ -42,17 +42,27 @@ test('a mail with no fork of the planner keeps its children below', () => {
     const child = node('wait');
     const mail = node('mail', [child]);
 
-    assert.deepEqual(splitNode(mail), { flow: [], nested: [child] });
+    assert.deepEqual(splitNode(mail), { flow: [], nested: [child], note: null });
 });
 
 test('a wait is followed on the same level, a card opens a block', () => {
     const next = node('mail');
 
-    assert.deepEqual(splitNode(node('wait', [next])), { flow: [next], nested: [] });
-    assert.deepEqual(splitNode(node('access', [next])), { flow: [next], nested: [] });
-    assert.deepEqual(splitNode(node('enter', [next])), { flow: [], nested: [next] });
-    assert.deepEqual(splitNode(node('fork', [next])), { flow: [], nested: [next] });
-    assert.deepEqual(splitNode(node('alt', [next])), { flow: [], nested: [next] });
+    assert.deepEqual(splitNode(node('wait', [next])), { flow: [next], nested: [], note: null });
+    assert.deepEqual(splitNode(node('access', [next])), { flow: [next], nested: [], note: null });
+    assert.deepEqual(splitNode(node('enter', [next])), { flow: [], nested: [next], note: null });
+    assert.deepEqual(splitNode(node('fork', [next])), { flow: [], nested: [next], note: null });
+    assert.deepEqual(splitNode(node('alt', [next])), { flow: [], nested: [next], note: null });
+});
+
+test('a card that only says "effect unknown" says it on its own line', () => {
+    const unknown = node('unknown', [], {}, 'Wirkung unbekannt');
+    const next = node('enter', [], {}, 'Kurs');
+
+    assert.deepEqual(splitNode(node('enter', [unknown, next])), { flow: [], nested: [next], note: 'Wirkung unbekannt' });
+    // An unknown step that has something after it stays a row of its own.
+    const busy = node('unknown', [next], {}, 'Schleife');
+    assert.deepEqual(splitNode(node('enter', [busy])), { flow: [], nested: [busy], note: null });
 });
 
 test('a purchase starts folded, every other alternative open', () => {

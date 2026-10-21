@@ -9,7 +9,8 @@
  * - after a mail, the merged alternative IS the sequence going on: it continues at the mail's own level;
  *   what differs (a purchase) hangs under the mail, folded;
  * - a wait, a grant, a page or a trait is followed on the same level;
- * - a card, a fork or an alternative opens a new block.
+ * - a card, a fork or an alternative opens a new block;
+ * - a card whose only word is "effect unknown" says so on its own line instead of in a row of its own.
  */
 
 /** Effects that lead on in time and stay on the same level as what follows them. */
@@ -23,7 +24,8 @@ export function mailFork(node) {
 
 /**
  * @param {{ kind: string, children: object[], meta?: object }} node
- * @returns {{ flow: object[], nested: object[] }} `flow` follows on the node's own level, `nested` hangs below it
+ * @returns {{ flow: object[], nested: object[], note: string|null }} `flow` follows on the node's own level,
+ *          `nested` hangs below it, `note` is said on the node's own line
  */
 export function splitNode(node) {
     const fork = mailFork(node);
@@ -31,12 +33,18 @@ export function splitNode(node) {
     if (fork) {
         const same = fork.children.find((a) => a.kind === 'alt' && a.meta?.merged?.includes('opened')) ?? null;
 
-        return { flow: same?.children ?? [], nested: fork.children.filter((a) => a !== same) };
+        return { flow: same?.children ?? [], nested: fork.children.filter((a) => a !== same), note: null };
     }
 
-    return CONTINUES.includes(node.kind)
-        ? { flow: node.children, nested: [] }
-        : { flow: [], nested: node.children };
+    if (CONTINUES.includes(node.kind)) return { flow: node.children, nested: [], note: null };
+
+    if (node.kind === 'enter') {
+        const unknown = node.children.find((c) => c.kind === 'unknown' && c.children.length === 0) ?? null;
+
+        if (unknown) return { flow: [], nested: node.children.filter((c) => c !== unknown), note: unknown.label };
+    }
+
+    return { flow: [], nested: node.children, note: null };
 }
 
 /** Side ways (a purchase) start folded: the page opens on the main line of the series. */

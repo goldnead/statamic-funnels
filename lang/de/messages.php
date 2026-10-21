@@ -417,7 +417,7 @@ return [
     'probe_tab_map' => 'Karte',
     'probe_tab_probe' => 'Probelauf',
     'probe_title' => 'Alle Wege durch diese Karte',
-    'probe_help' => 'Das ist eine Simulation: Es wird nichts verschickt und nichts gespeichert. Jede Karte sagt selbst, was sie tun würde. Nach jeder Mail öffnet sich eine Gabel: geöffnet, geklickt, gekauft oder nichts. Wege, die an dieselbe Stelle führen, sind zusammengefasst.',
+    'probe_help' => 'Das ist eine Simulation: Es wird nichts verschickt und nichts gespeichert. Jede Karte sagt selbst, was sie tun würde. Nach einer Mail läuft die Folge weiter, auch wenn jemand sie nur öffnet, anklickt oder übergeht. Was sich ändert, steht eingeklappt darunter, zum Beispiel der Weg nach einem Kauf.',
     'probe_loading' => 'Plane die Wege …',
     'probe_failed' => 'Der Probelauf konnte nicht geplant werden.',
     'probe_empty' => 'Keine Karte dieser Landkarte beginnt einen Weg.',

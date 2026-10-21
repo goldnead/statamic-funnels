@@ -39,6 +39,8 @@ const ICONS = {
 const split = computed(() => splitNode(props.node));
 const flow = computed(() => split.value.flow);
 const nested = computed(() => split.value.nested);
+const note = computed(() => split.value.note);
+const bought = computed(() => props.node.kind === 'alt' && props.node.meta?.merged?.includes('bought'));
 
 const foldable = computed(() => ['enter', 'alt'].includes(props.node.kind) && nested.value.length > 0);
 const open = ref(startsOpen(props.node));
@@ -63,12 +65,13 @@ const kindWord = computed(() => probe.t(`probe_kind_${props.node.kind}`, ''));
             </button>
             <span v-else class="pr-fold pr-fold--none" aria-hidden="true" />
 
-            <span v-if="node.kind === 'alt'" class="pr-alt">{{ node.label }}</span>
+            <span v-if="node.kind === 'alt'" class="pr-alt" :class="bought ? 'pr-alt--side' : 'pr-alt--when'">{{ node.label }}</span>
             <template v-else>
                 <Icon v-if="icon" :name="icon" class="pr-icon size-4" :title="kindWord" />
                 <span v-if="node.kind === 'enter'" class="pr-type">{{ node.detail }}</span>
                 <span class="pr-label">{{ node.label }}</span>
                 <span v-if="node.kind !== 'enter' && node.detail" class="pr-detail">{{ node.detail }}</span>
+                <span v-if="note" class="pr-detail pr-note">{{ note }}</span>
             </template>
 
             <span v-if="node.kind === 'alt' && node.count > 1" class="pr-detail">{{ probe.t('probe_merged').replace(':count', node.count) }}</span>
@@ -108,11 +111,12 @@ const kindWord = computed(() => probe.t(`probe_kind_${props.node.kind}`, ''));
 .dark .pr-node--quiet > .pr-row { color: var(--color-gray-400); }
 .pr-node--quiet .pr-label { font-weight: 400; }
 .pr-node--stop > .pr-row, .pr-node--unknown > .pr-row { color: var(--color-gray-700); }
-.pr-node--fork > .pr-row { color: var(--color-gray-600); font-size: 0.8rem; }
-.dark .pr-node--fork > .pr-row { color: var(--color-gray-400); }
-
-.pr-alt { display: inline-block; padding: 0.05rem 0.55rem; border: 1px solid var(--color-gray-300); border-radius: 999px; font-size: 0.8rem; color: var(--color-gray-800); background: var(--color-white); }
-.dark .pr-alt { border-color: var(--color-gray-600); color: var(--color-gray-200); background: transparent; }
+.pr-alt { display: inline-block; font-size: 0.875rem; }
+.pr-alt--when { font-weight: 500; color: var(--color-gray-800); }
+.dark .pr-alt--when { color: var(--color-gray-200); }
+.pr-alt--side { padding: 0.05rem 0.55rem; border: 1px solid var(--color-gray-200); border-radius: 999px; font-size: 0.8rem; color: var(--color-gray-600); }
+.dark .pr-alt--side { border-color: var(--color-gray-700); color: var(--color-gray-400); }
+.pr-node--fork > .pr-row .pr-label { font-weight: 500; }
 
 .pr-children { margin: 0 0 0 0.6rem; padding: 0 0 0 0.9rem; border-left: 1px solid var(--color-gray-200); }
 .dark .pr-children { border-left-color: var(--color-gray-700); }

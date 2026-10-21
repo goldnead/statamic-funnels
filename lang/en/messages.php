@@ -415,7 +415,7 @@ return [
     'probe_tab_map' => 'Map',
     'probe_tab_probe' => 'Dry run',
     'probe_title' => 'Every way through this map',
-    'probe_help' => 'This is a simulation: nothing is sent and nothing is saved. Each card says for itself what it would do. After every mail a fork opens: opened, clicked, bought or nothing. Ways that lead to the same place are merged.',
+    'probe_help' => 'This is a simulation: nothing is sent and nothing is saved. Each card says for itself what it would do. After a mail the sequence goes on, even if someone only opens it, clicks it or ignores it. What changes is folded underneath, for example the way after a purchase.',
     'probe_loading' => 'Planning the ways …',
     'probe_failed' => 'The dry run could not be planned.',
     'probe_empty' => 'No card on this map begins a way.',

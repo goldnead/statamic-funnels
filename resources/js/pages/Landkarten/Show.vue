@@ -6,7 +6,7 @@ import { VueFlow, Panel as FlowPanel, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { ControlBar } from '@goldnead/flow-canvas';
 import {
-    Header, Button, Badge, Select, Input, Stack, Field, Heading, Icon, Description, Popover, Panel, Card, Alert, ConfirmationModal,
+    Header, Button, Badge, Select, ToggleGroup, ToggleItem, Input, Stack, Field, Heading, Icon, Description, Popover, Panel, Card, Alert, ConfirmationModal,
 } from '@statamic/cms/ui';
 import MapNode from '../../components/landkarte/MapNode.vue';
 import MapLane from '../../components/landkarte/MapLane.vue';
@@ -792,7 +792,7 @@ const helpLines = computed(() => [
         <Head :title="[landkarte.name, t('landkarten_title', 'Maps')]" />
 
         <Header :title="landkarte.name" icon="travel-map">
-            <span class="lk-save" :class="`lk-save--${saveState}`" role="status" aria-live="polite" data-lk-save-state>
+            <span class="lk-save" :class="[`lk-save--${saveState}`, view !== 'map' && 'lk-off']" role="status" aria-live="polite" data-lk-save-state>
                 {{ saveState === 'saving' ? t('map_saving', 'Saving…') : saveState === 'conflict' || saveState === 'error' ? t('map_not_saved', 'Not saved') : t('map_saved_state', 'Saved') }}
             </span>
             <Popover align="end" class="w-80">
@@ -811,35 +811,22 @@ const helpLines = computed(() => [
                     <p class="text-xs text-gray-600 dark:text-gray-400">{{ mainText }}</p>
                 </div>
             </Popover>
-            <div v-if="probelaufUrl" class="lk-views" role="group" :aria-label="t('probe_title')" data-lk-views>
-                <Button
-                    size="sm"
-                    :variant="view === 'map' ? 'default' : 'ghost'"
-                    :text="t('probe_tab_map')"
-                    :aria-pressed="view === 'map'"
-                    data-lk-view="map"
-                    @click="view = 'map'"
-                />
-                <Button
-                    size="sm"
-                    :variant="view === 'probe' ? 'default' : 'ghost'"
-                    :text="t('probe_tab_probe')"
-                    :aria-pressed="view === 'probe'"
-                    data-lk-view="probe"
-                    @click="view = 'probe'"
-                />
-            </div>
+            <ToggleGroup v-if="probelaufUrl" v-model="view" size="sm" :aria-label="t('probe_title')" data-lk-views>
+                <ToggleItem value="map" :label="t('probe_tab_map')" data-lk-view="map" />
+                <ToggleItem value="probe" :label="t('probe_tab_probe')" data-lk-view="probe" />
+            </ToggleGroup>
             <Select
-                v-if="view === 'map'"
                 class="w-44"
+                :class="view !== 'map' && 'lk-off'"
+                :inert="view !== 'map'"
                 :model-value="period.days"
                 :options="periodOptions"
                 :disabled="isDirty || saving"
                 :aria-label="t('map_period', 'Period')"
                 @update:model-value="setPeriod"
             />
-            <Button v-if="view === 'map'" :text="t('map_note_edge', 'Note arrow')" icon="link" :disabled="!displayNodes.length" @click="openLink()" />
-            <Button v-if="view === 'map'" :text="t('map_add_stage', 'Add phase')" icon="plus" @click="openLane()" />
+            <Button :class="view !== 'map' && 'lk-off'" :inert="view !== 'map'" :text="t('map_note_edge', 'Note arrow')" icon="link" :disabled="!displayNodes.length" @click="openLink()" />
+            <Button :class="view !== 'map' && 'lk-off'" :inert="view !== 'map'" :text="t('map_add_stage', 'Add phase')" icon="plus" @click="openLane()" />
         </Header>
 
         <Description :text="t('landkarten_description')" class="mb-4" />
@@ -1173,7 +1160,7 @@ const helpLines = computed(() => [
 .toasted-container .toasted.lk-toast button.action:hover { color: var(--color-gray-600); }
 .dark .toasted-container .toasted.lk-toast button.action { color: var(--color-white); }
 
-.lk-views { display: inline-flex; gap: 0.25rem; }
+.lk-off { visibility: hidden; }
 .lk-save { font-size: 0.8rem; color: var(--color-gray-600); }
 .dark .lk-save { color: var(--color-gray-400); }
 .lk-save--conflict, .lk-save--error { color: var(--color-red-600); }
