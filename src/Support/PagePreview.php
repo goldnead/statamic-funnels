@@ -379,7 +379,7 @@ class PagePreview
     }
 
     /** The most of font and vector data that one page takes into itself, in bytes, and the most of one file. */
-    private const INLINE_BUDGET = 1_200_000;
+    private const INLINE_BUDGET = 900_000;
 
     private const INLINE_FILE = 300_000;
 
@@ -462,7 +462,11 @@ class PagePreview
             // Whatever is not taken in stays a link to the site, written out in full so that it means the same wherever the style sits.
             $stays = 'url("'.$origin.$file.'")';
 
-            if ($type === null || $this->inlined >= self::INLINE_BUDGET) {
+            // A font package ships one file per script (`-latin-ext-`, `-cyrillic-`, ...) and the browser asks only for the ones whose
+            // characters a page uses; the page of a German site uses Latin. The others stay links (they would not load, and are not needed).
+            $otherScript = preg_match('/-(latin-ext|cyrillic(-ext)?|greek(-ext)?|vietnamese|hebrew|arabic|devanagari|thai)-/i', basename($file)) === 1;
+
+            if ($type === null || $otherScript || $this->inlined >= self::INLINE_BUDGET) {
                 return $stays;
             }
 

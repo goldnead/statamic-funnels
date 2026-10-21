@@ -313,7 +313,7 @@ class ProbelaufSeiteTest extends TestCase
         Http::fake(function ($request) use (&$seen) {
             // The site's own files: a stylesheet that names a font and a mask image (one of them relative), and the files.
             if (str_ends_with($request->url(), '/build/app.css')) {
-                return Http::response('@font-face{font-family:A;src:url(/fonts/a.woff2) format("woff2")} .s{mask-image:url(../img/s.svg)} .h{background:url(/img/hero.jpg)} .x{background:url(https://evil.example/t.png)}', 200, ['Content-Type' => 'text/css']);
+                return Http::response('@font-face{font-family:A;src:url(/fonts/a.woff2) format("woff2")} @font-face{font-family:A;src:url(/fonts/a-latin-ext-400-normal.woff2)} .s{mask-image:url(../img/s.svg)} .h{background:url(/img/hero.jpg)} .x{background:url(https://evil.example/t.png)}', 200, ['Content-Type' => 'text/css']);
             }
 
             if (str_ends_with($request->url(), '/fonts/a.woff2')) {
@@ -350,6 +350,8 @@ class ProbelaufSeiteTest extends TestCase
         $this->assertStringContainsString('url("data:image/svg+xml;base64,', $page['html']);
         $this->assertStringContainsString('url("http://localhost/img/hero.jpg")', $page['html']);
         $this->assertStringContainsString('https://evil.example/t.png', $page['html']);
+        // A font of another script (`-latin-ext-`) is not fetched and not taken in: it stays a link (and costs the page nothing).
+        $this->assertStringContainsString('url("http://localhost/fonts/a-latin-ext-400-normal.woff2")', $page['html']);
         $this->assertSame([['text' => 'Kontakt', 'url' => '/kontakt']], $page['links']);
 
         // Asked at the entry's own path on the site's own host, with a pass for that path, and nothing else.
