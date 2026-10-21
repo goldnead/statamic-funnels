@@ -395,7 +395,7 @@ class PagePreview
 
         // The list is the links of the page's own content. What an embed brings along (the privacy notice of a video host, in the
         // placeholder that stands where the video would load) is not one of them, and a place that is linked twice is listed once.
-        if ($this->ofAnEmbed($element, $shown)) {
+        if ($this->ofAnEmbed($element, $shown) || $this->ofTheSiteFrame($element)) {
             return;
         }
 
@@ -451,6 +451,31 @@ class PagePreview
         }
 
         return false;
+    }
+
+    /**
+     * Whether the link belongs to the site's frame (its menu, the header above the content, the footer) and not to the page's own
+     * content: a person who reads the page reads those links on every page, and they would fill the list before the page's own do.
+     * A `header` inside the content (`main`, `article`, `section`) is the page's own and stays.
+     */
+    protected function ofTheSiteFrame(DOMElement $element): bool
+    {
+        $header = false;
+        $content = false;
+
+        for ($node = $element->parentNode; $node instanceof DOMElement; $node = $node->parentNode) {
+            $tag = strtolower($node->tagName);
+            $role = strtolower($node->getAttribute('role'));
+
+            if ($tag === 'nav' || $tag === 'footer' || in_array($role, ['navigation', 'contentinfo'], true)) {
+                return true;
+            }
+
+            $header = $header || $tag === 'header' || $role === 'banner';
+            $content = $content || in_array($tag, ['main', 'article', 'section'], true);
+        }
+
+        return $header && ! $content;
     }
 
     /** The place a link leads to, as one string: the same place linked with a slash or a fragment more is the same place. */

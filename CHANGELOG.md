@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.35.1 — 2026-10-21
+
+### Changed
+
+- **"Links on this page"** leaves out the site's frame: links in a `nav`, a `footer`, a `role="navigation"`/`contentinfo` area and in a
+  `header` that stands outside the content (`main`, `article`, `section`). On a framework page the menu and the footer were 35 of 40
+  entries and pushed the page's own links (the button, the second way) out of the list. A `header` inside the content stays.
+
 ## 1.35.0 — 2026-10-21
 
 ### Added: the Probelauf shows the real page of an application route too (server-side rendering), and a look still counts nothing

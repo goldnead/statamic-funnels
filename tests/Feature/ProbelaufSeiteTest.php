@@ -237,6 +237,10 @@ class ProbelaufSeiteTest extends TestCase
             ['text' => 'Download', 'url' => '/!/lead-magnets/download/abc123'],
             ['text' => 'Smartlink', 'url' => '/go/xyz'],
             ['text' => 'Bild-Link', 'url' => '/!/lead-magnets/confirm/svg789'],
+            // The menu, the header above the content and the footer are the site's frame, not the page: left out. A header inside
+            // `main` is the page's own.
+            ['text' => 'Zum Angebot', 'url' => '/angebot-hier'],
+            ['text' => 'Zweiter Weg', 'url' => '/zweiter-weg'],
             ['text' => 'Ressource', 'url' => 'https://example.org/ressource'],
         ], $page['links']);
 
@@ -758,7 +762,7 @@ class ProbelaufSeiteTest extends TestCase
         $this->assertSame('rendered', $json['state']);
         $this->assertSame('/masterclass', $json['url']);
         $this->assertStringContainsString('<h1>Masterclass</h1>', $json['html']);
-        $this->assertCount(5, $json['links']);
+        $this->assertCount(7, $json['links']);
         $this->assertSame($before, $this->counts());
         // Nothing asked of the network: no link of the page, no tracking host, no stylesheet.
         Http::assertNothingSent();
