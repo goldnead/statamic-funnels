@@ -114,15 +114,18 @@ const hasContent = computed(() => (person.value === 'test' ? timeline.value.entr
             <Heading :text="person === 'test' ? t('probe_title_test') : t('probe_title')" size="base" />
             <span v-if="state === 'ready' && hasContent" class="pr-summary" data-pr-summary>{{ summary }}</span>
         </div>
-        <Description :text="t('probe_help')" class="pr-help" />
+        <Description :text="person === 'test' ? t('probe_help_test') : t('probe_help')" class="pr-help" />
 
         <div class="pr-controls">
-            <ToggleGroup :model-value="person" size="sm" :aria-label="t('probe_person_label')" data-pr-person @update:model-value="choosePerson">
-                <ToggleItem v-for="option in personOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-person-option="option.value" />
-            </ToggleGroup>
+            <span class="pr-start">
+                <span class="pr-start__label">{{ t('probe_person_label') }}</span>
+                <ToggleGroup :model-value="person" size="sm" :aria-label="t('probe_person_label')" data-pr-person @update:model-value="choosePerson">
+                    <ToggleItem v-for="option in personOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-person-option="option.value" />
+                </ToggleGroup>
+            </span>
             <label v-if="person === 'test' && startOptions.length" class="pr-start">
                 <span class="pr-start__label">{{ t('probe_start_label') }}</span>
-                <Select class="w-[34rem] max-w-full" :model-value="start" :options="startOptions" :aria-label="t('probe_start_label')" data-pr-start @update:model-value="chooseStart" />
+                <Select class="w-96 max-w-full" size="sm" :model-value="start" :options="startOptions" :aria-label="t('probe_start_label')" data-pr-start @update:model-value="chooseStart" />
             </label>
         </div>
 

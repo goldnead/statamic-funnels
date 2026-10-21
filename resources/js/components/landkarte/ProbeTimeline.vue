@@ -32,6 +32,7 @@ const QUIET = ['wait', 'decision', 'unknown', 'denied', 'stop', 'rejoin', 'more'
                     <span v-if="entry.kind === 'enter'" class="pt-type">{{ entry.detail }}</span>
                     <span class="pt-label">{{ entry.label }}</span>
                     <span v-if="entry.kind !== 'enter' && entry.detail" class="pt-detail">{{ entry.detail }}</span>
+                    <span v-if="entry.note" class="pt-detail">{{ entry.note }}</span>
                     <span v-if="probe.timeInDay(entry.at)" class="pt-time">{{ probe.timeInDay(entry.at) }}</span>
                 </li>
             </ul>
@@ -58,7 +59,8 @@ const QUIET = ['wait', 'decision', 'unknown', 'denied', 'stop', 'rejoin', 'more'
 .dark .pt-detail { color: var(--color-gray-400); }
 .pt-time { margin-left: auto; padding-left: 1rem; font-size: 0.75rem; color: var(--color-gray-600); white-space: nowrap; }
 .dark .pt-time { color: var(--color-gray-400); }
-.pt-row--enter { padding-top: 0.55rem; }
+.pt-row { padding-left: 1.4rem; }
+.pt-row--enter { padding-top: 0.55rem; padding-left: 0; }
 .pt-row--enter .pt-label { font-weight: 600; }
 .pt-row--quiet { color: var(--color-gray-600); }
 .dark .pt-row--quiet { color: var(--color-gray-400); }

@@ -515,7 +515,7 @@ class LandkarteController extends CpController
             'map_connect_pair', 'map_connect_allowed', 'map_connect_forbidden', 'map_connect_failed', 'map_connect_title',
             'map_disconnect_title', 'map_connect_do', 'map_disconnect_do', 'map_connected', 'map_disconnected', 'map_undo', 'map_undone',
             'map_disconnect', 'map_connect_conflict', 'map_dead_stub_help', 'map_details_loading', 'map_details_failed', 'map_details_restricted', 'map_details_more',
-            'probe_tab_map', 'probe_tab_probe', 'probe_title', 'probe_title_test', 'probe_help', 'probe_loading', 'probe_failed', 'probe_empty', 'probe_summary',
+            'probe_tab_map', 'probe_tab_probe', 'probe_title', 'probe_title_test', 'probe_help', 'probe_help_test', 'probe_loading', 'probe_failed', 'probe_empty', 'probe_summary',
             'probe_unreached', 'probe_expand', 'probe_collapse', 'probe_now', 'probe_day', 'probe_hours', 'probe_minutes', 'probe_unavailable',
             'probe_person_unknown', 'probe_person_test', 'probe_person_label', 'probe_start_label', 'probe_start_none', 'probe_timeline_empty', 'probe_timeline_summary', 'probe_kind_decision', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
             'probe_kind_stop', 'probe_kind_unknown', 'probe_kind_fork', 'probe_kind_rejoin', 'probe_kind_denied', 'probe_kind_more', 'probe_kind_trait',

@@ -94,17 +94,32 @@ export const ICONS = {
 /**
  * The entries of a known person's way, grouped by the day they fall on, in order.
  *
- * @param {{ day: number }[]} entries
+ * Two lines say nothing the page does not already say and are folded away: a wait that ends exactly on
+ * a day boundary (the day header is that wait), and "effect unknown" right behind a card, which joins
+ * the card's own line as a note, as it does in the tree.
+ *
+ * @param {{ day: number, at: number, kind: string, label: string }[]} entries
  * @returns {{ day: number, entries: object[] }[]}
  */
 export function groupByDay(entries) {
     const days = [];
+    let previous = null;
 
     for (const entry of entries) {
+        if (entry.kind === 'wait' && entry.at % 86400 === 0) continue;
+
+        if (entry.kind === 'unknown' && previous && previous.kind === 'enter') {
+            previous.note = entry.label;
+            continue;
+        }
+
+        const shown = { ...entry };
         const last = days[days.length - 1];
 
-        if (last && last.day === entry.day) last.entries.push(entry);
-        else days.push({ day: entry.day, entries: [entry] });
+        if (last && last.day === shown.day) last.entries.push(shown);
+        else days.push({ day: shown.day, entries: [shown] });
+
+        previous = shown;
     }
 
     return days;

@@ -1,6 +1,6 @@
 {
   "resources/css/cp.css": {
-    "file": "assets/cp-Da2XZ2Vi.css",
+    "file": "assets/cp-B7ZSM3Fh.css",
     "name": "cp",
     "names": [
       "cp.css"
@@ -9,12 +9,12 @@
     "isEntry": true
   },
   "resources/js/cp.js": {
-    "file": "assets/cp-CSbRNH5i.js",
+    "file": "assets/cp-DJsmwjt0.js",
     "name": "cp",
     "src": "resources/js/cp.js",
     "isEntry": true,
     "css": [
-      "assets/cp-Byw5KV1J.css"
+      "assets/cp-CKhD4EFs.css"
     ]
   }
 }
