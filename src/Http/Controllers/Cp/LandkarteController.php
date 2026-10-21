@@ -116,6 +116,7 @@ class LandkarteController extends CpController
             'previewUrl' => cp_route('statamic-funnels.landkarten.connections.preview', $landkarte->id),
             'connectUrl' => cp_route('statamic-funnels.landkarten.connections.store', $landkarte->id),
             'probelaufUrl' => class_exists(Simulator::class) ? cp_route('statamic-funnels.landkarten.probelauf', $landkarte->id) : null,
+            'probelaufMailUrl' => class_exists(Simulator::class) ? cp_route('statamic-funnels.landkarten.probelauf.mail', $landkarte->id) : null,
             'showUrl' => $showUrl,
             'indexUrl' => cp_route('statamic-funnels.landkarten.index'),
             'labels' => $this->labels(),
@@ -249,21 +250,7 @@ class LandkarteController extends CpController
         ]);
 
         $built = $this->graph->build($landkarte, MapPeriod::lastDays(30));
-
-        $nodes = collect($built['nodes'])
-            ->reject(fn (array $n) => $n['ghost'] ?? false)
-            ->map(fn (array $n) => ['type' => $n['type'], 'id' => (string) $n['ref_id']])
-            ->values()
-            ->all();
-
-        $edges = collect($built['edges'])
-            ->map(function (array $e) {
-                [$fromType, $fromId] = explode(':', $e['source'], 2);
-                [$toType, $toId] = explode(':', $e['target'], 2);
-
-                return ['from_type' => $fromType, 'from_id' => $fromId, 'to_type' => $toType, 'to_id' => $toId, 'kind' => $e['kind']];
-            })
-            ->all();
+        [$nodes, $edges] = $this->probeInput($built);
 
         $simulator = new Simulator($this->registry);
         $person = $data['person'] ?? 'unknown';
@@ -307,6 +294,87 @@ class LandkarteController extends CpController
             'starts' => $starts,
             'roots' => $tree['roots'],
             'stats' => [...$tree['stats'], 'unreached' => $unreached],
+        ]);
+    }
+
+    /**
+     * The map as the planner reads it: the objects (without the ghosts of things that are gone) and the
+     * connections between them.
+     *
+     * @param  array<string, mixed>  $built  {@see LandkarteGraph::build()}
+     * @return array{0: list<array{type: string, id: string}>, 1: list<array{from_type: string, from_id: string, to_type: string, to_id: string, kind: string}>}
+     */
+    protected function probeInput(array $built): array
+    {
+        $nodes = collect($built['nodes'])
+            ->reject(fn (array $n) => $n['ghost'] ?? false)
+            ->map(fn (array $n) => ['type' => $n['type'], 'id' => (string) $n['ref_id']])
+            ->values()
+            ->all();
+
+        $edges = collect($built['edges'])
+            ->map(function (array $e) {
+                [$fromType, $fromId] = explode(':', $e['source'], 2);
+                [$toType, $toId] = explode(':', $e['target'], 2);
+
+                return ['from_type' => $fromType, 'from_id' => $fromId, 'to_type' => $toType, 'to_id' => $toId, 'kind' => $e['kind']];
+            })
+            ->all();
+
+        return [$nodes, $edges];
+    }
+
+    /**
+     * One mail of the test person's way, as she would read it. Looked at, not delivered: the owning addon
+     * writes it for her, and the registry makes it safe (no script, no remote image, no live link) and
+     * frames it for an iframe with an empty `sandbox`. The entry is named by its place in the way the server
+     * plans itself, never by what the client says about it, and only a mail the user may see is written.
+     */
+    public function probelaufMail(Request $request, Landkarte $landkarte)
+    {
+        $this->authorizeAccess();
+
+        abort_unless(class_exists(Simulator::class), 404);
+
+        $data = $request->validate([
+            'start' => ['required', 'string', 'max:300'],
+            'entry' => ['required', 'string', 'regex:/^e\d{1,5}$/'],
+            // What the client saw under that entry. The way is planned again for every request, so an entry's
+            // place can move if the map changed in between: a mail under another name is not handed out.
+            'label' => ['required', 'string', 'max:300'],
+        ]);
+
+        $built = $this->graph->build($landkarte, MapPeriod::lastDays(30));
+        [$nodes, $edges] = $this->probeInput($built);
+        $simulator = new Simulator($this->registry);
+
+        $chosen = collect($simulator->starts($nodes, $edges))
+            ->first(fn (array $s) => "{$s['type']}:{$s['id']}:{$s['event']}" === $data['start']);
+
+        abort_if($chosen === null, 422);
+
+        $person = SimPerson::known();
+        $timeline = $simulator->timeline($nodes, $edges, ['type' => $chosen['type'], 'id' => $chosen['id'], 'event' => $chosen['event']], $person, User::current());
+        $entry = collect($timeline['entries'])->firstWhere('id', $data['entry']);
+
+        abort_if($entry === null || $entry['kind'] !== 'mail' || ! is_string($entry['owner']), 404);
+        abort_if($entry['label'] !== $data['label'], 409);
+
+        [$type, $id] = explode(':', $entry['owner'], 2);
+
+        abort_unless($this->registry->simulationAllowed($type, $id, User::current()), 403);
+
+        $mail = $this->registry->mailPreview($type, $id, $entry['meta'] ?? [], $person);
+
+        abort_if($mail === null, 404);
+
+        return response()->json([
+            'entry' => $entry['id'],
+            'subject' => $mail['subject'] !== '' ? $mail['subject'] : $entry['label'],
+            'from' => $mail['from'],
+            'html' => $mail['html'],
+            'links' => $mail['links'],
+            'blocked_images' => $mail['blocked_images'],
         ]);
     }
 
@@ -517,7 +585,7 @@ class LandkarteController extends CpController
             'map_disconnect', 'map_connect_conflict', 'map_dead_stub_help', 'map_details_loading', 'map_details_failed', 'map_details_restricted', 'map_details_more',
             'probe_tab_map', 'probe_tab_probe', 'probe_title', 'probe_title_test', 'probe_help', 'probe_help_test', 'probe_loading', 'probe_failed', 'probe_empty', 'probe_summary',
             'probe_unreached', 'probe_expand', 'probe_collapse', 'probe_now', 'probe_day', 'probe_hours', 'probe_minutes', 'probe_unavailable',
-            'probe_person_unknown', 'probe_person_test', 'probe_person_label', 'probe_start_label', 'probe_start_none', 'probe_timeline_empty', 'probe_timeline_summary', 'probe_kind_decision', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
+            'probe_person_unknown', 'probe_person_test', 'probe_lens_label', 'probe_lens_timeline', 'probe_lens_mailbox', 'probe_mail_from_none', 'probe_mailbox_empty', 'probe_mail_select', 'probe_mail_failed', 'probe_mail_none', 'probe_mail_loading', 'probe_mail_from', 'probe_mail_subject', 'probe_mail_images_one', 'probe_mail_images_many', 'probe_mail_links', 'probe_mail_links_help', 'probe_mail_frame', 'probe_person_label', 'probe_start_label', 'probe_start_none', 'probe_timeline_empty', 'probe_timeline_summary', 'probe_kind_decision', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
             'probe_kind_stop', 'probe_kind_unknown', 'probe_kind_fork', 'probe_kind_rejoin', 'probe_kind_denied', 'probe_kind_more', 'probe_kind_trait',
         ];
 
