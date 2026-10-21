@@ -1,5 +1,5 @@
 <script setup>
-import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 import { Alert } from '@statamic/cms/ui';
 import { postJson } from '../../support/landkarteRequest.js';
 import ProbeActions from './ProbeActions.vue';
@@ -9,9 +9,9 @@ import ProbeActions from './ProbeActions.vue';
  *
  * The mail is looked at, not delivered. The server writes it for her and makes it safe (no script, no remote image, no live
  * link, every image switched off and left as a quiet area with its alternative text). Here it sits in an iframe whose
- * `sandbox` has no `allow-scripts`: nothing in it runs, and the policy inside the document lets it fetch nothing.
- * `allow-same-origin` is given for one reason only, to read the height of the finished document so the frame is as tall as
- * the mail and not a box with a scroll bar; without scripts a same-origin document can read nothing and do nothing.
+ * `sandbox` is EMPTY: no script, no same-origin, no forms, no popups, no navigation; and the policy inside the document lets it
+ * fetch nothing. Because the frame has no origin it cannot be asked how tall the mail is, so it is a window of a fixed, good
+ * height and the mail scrolls inside it.
  */
 const props = defineProps({
     entry: { type: Object, required: true },
@@ -31,8 +31,6 @@ const probe = inject('probelauf');
 
 const state = ref('loading');
 const mail = ref(null);
-const frame = ref(null);
-const height = ref(240);
 
 let ticket = 0;
 
@@ -74,32 +72,6 @@ async function load() {
 // The same mail again (the person changed a little, an action was added) is read again only when it is another moment.
 watch(() => `${props.entry.id}|${props.entry.at}|${props.entry.label}|${props.start}|${props.personSig}`, load, { immediate: true });
 
-// --- the frame is as tall as the mail ------------------------------------------------------------------------------------
-
-function measure() {
-    const body = frame.value?.contentDocument?.documentElement;
-
-    if (body) height.value = Math.max(120, Math.ceil(body.scrollHeight));
-}
-
-let observer = null;
-
-function watchSize() {
-    observer?.disconnect();
-
-    const doc = frame.value?.contentDocument?.documentElement;
-
-    measure();
-
-    if (doc && typeof ResizeObserver !== 'undefined') {
-        observer = new ResizeObserver(measure);
-        observer.observe(doc);
-    }
-}
-
-onBeforeUnmount(() => observer?.disconnect());
-watch(mail, () => nextTick(measure));
-
 const imagesNote = computed(() => {
     const n = mail.value?.blocked_images ?? 0;
 
@@ -135,18 +107,14 @@ const mailKey = computed(() => props.entry.meta?.mail_key ?? null);
                 @delay="emit('delay', mailKey, $event)"
             />
 
-            <!-- No script, no popups, no forms, no navigation. Same-origin only to read the height (see above). -->
+            <!-- Empty sandbox: no script, no same-origin, no forms, no popups, no navigation. A fixed window; the mail scrolls in it. -->
             <iframe
-                ref="frame"
                 class="pv-mail"
-                sandbox="allow-same-origin"
+                sandbox=""
                 referrerpolicy="no-referrer"
-                scrolling="no"
                 :srcdoc="mail.html"
-                :style="{ height: `${height}px` }"
                 :title="probe.t('probe_mail_frame')"
                 data-pm-frame
-                @load="watchSize"
             />
 
             <p v-if="imagesNote" class="pv-foot" data-pm-images>{{ imagesNote }}</p>
@@ -164,7 +132,7 @@ const mailKey = computed(() => props.entry.meta?.mail_key ?? null);
 .pv-head__subject { font-weight: 600; }
 .pv-head__none { color: var(--color-gray-600) !important; font-style: italic; }
 .dark .pv-head__none { color: var(--color-gray-400) !important; }
-.pv-mail { display: block; width: 100%; overflow: hidden; border: 1px solid var(--color-gray-200); border-radius: 0.5rem; background: #fff; }
+.pv-mail { display: block; width: 100%; height: 40rem; max-height: 70vh; min-height: 18rem; border: 1px solid var(--color-gray-200); border-radius: 0.5rem; background: #fff; }
 .dark .pv-mail { border-color: var(--color-gray-700); }
 .pv-foot { margin: 0.5rem 0 0; font-size: 0.78rem; color: var(--color-gray-600); }
 .dark .pv-foot { color: var(--color-gray-400); }

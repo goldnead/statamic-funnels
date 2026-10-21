@@ -9,6 +9,7 @@ use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Facade;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\FileViewFinder;
 use Statamic\Entries\Entry as StatamicEntry;
@@ -32,10 +33,15 @@ use Throwable;
  * - every link is kept as text with its target remembered (`data-sim-href`) and has no `href` left, so a click does
  *   nothing: the lead magnet's confirmation link, a download counter and a smartlink are never followed, only shown.
  *
- * Not every page can be rendered here. A page that the application serves through a route of its own (a controller
- * that builds it with a front-end framework) is no Statamic response and is not requested over the network to find
- * out; that, a draft, a protected page and a render that fails answer `unavailable` with the reason, and the caller
- * shows what it has instead (the picture of a funnel step that names the entry, the address).
+ * A page that the application serves through a route of its own (a controller that builds it with a front-end
+ * framework, as most pages of adriangoldner.com) is no Statamic response. It is asked of the application itself
+ * ({@see fromApplication()}): a request that never leaves the host, marked as a look by a pass that only the server holds
+ * ({@see PagePreviewToken}), answered with the markup the application's server-side rendering produces. That markup goes
+ * through the same safety as any other: it is shown without a single script (the page the person sees is the page as the
+ * server drew it, not as a browser would redraw it).
+ *
+ * A draft, a protected page, a render that fails and an application page where this is switched off answer `unavailable`
+ * with the reason, and the caller shows what it has instead (the picture of a funnel step that names the entry, the address).
  *
  * One limit: the render runs in the process of the Control Panel request, so what a template reads of "the user" or the
  * session (`{{ user }}`, a CSRF field) is the Control Panel user's, not an anonymous visitor's. The page is shown to that
@@ -87,12 +93,14 @@ class PagePreview
 
         $request = ProbePreview::mark(Request::create((string) $entry->absoluteUrl(), 'GET'));
 
-        if (! $this->servedByStatamic($request)) {
+        $byApplication = ! $this->servedByStatamic($request);
+
+        if ($byApplication && ! config('statamic-funnels.page_preview.app_pages', true)) {
             return $this->unavailable(self::APP_ROUTE, $url, $entry);
         }
 
         try {
-            $html = $this->response($entry, $request);
+            $html = $byApplication ? $this->fromApplication($entry, $url) : $this->response($entry, $request);
         } catch (Throwable $e) {
             // The class and the entry, not the message: a template error can quote whatever it was rendering.
             Log::info('statamic-funnels: a page could not be rendered for the dry run.', ['entry' => $entryId, 'exception' => $e::class]);
@@ -121,6 +129,54 @@ class PagePreview
         } catch (Throwable) {
             return false;
         }
+    }
+
+    /**
+     * The markup the application answers for the page it builds itself (a front-end framework with server-side rendering),
+     * or null when it is not a page.
+     *
+     * Asked over a request of its own, as a separate process step: the application's own routes, middleware and renderer
+     * run exactly as for a visitor, and none of it shares the request, the session or the user of the Control Panel. The
+     * request is marked as a look by a pass that only this server holds ({@see PagePreviewToken}); redirects are not
+     * followed, because a redirect is no page, and the pass is gone when the answer is in. The address is the entry's own
+     * path on the site's own host (or on `page_preview.url`, with the host as the `Host` header): nothing a person typed.
+     */
+    protected function fromApplication(StatamicEntry $entry, string $path): ?string
+    {
+        $absolute = (string) $entry->absoluteUrl();
+        $parts = parse_url($absolute) ?: [];
+        $host = (string) ($parts['host'] ?? '').(isset($parts['port']) ? ':'.$parts['port'] : '');
+
+        // The path of the entry, and only that: a path that is not one (a scheme-relative `//host`) is no page of this site.
+        if ($host === '' || ! str_starts_with($path, '/') || str_starts_with($path, '//')) {
+            return null;
+        }
+
+        $base = rtrim((string) (config('statamic-funnels.page_preview.url') ?: ($parts['scheme'] ?? 'https').'://'.$host), '/');
+        $token = PagePreviewToken::mint($path);
+
+        try {
+            $response = Http::withHeaders([
+                PagePreviewToken::HEADER => $token,
+                'Host' => $host,
+                'X-Forwarded-Proto' => (string) ($parts['scheme'] ?? 'https'),
+                'X-Forwarded-Host' => $host,
+                'Accept' => 'text/html',
+            ])
+                ->withoutRedirecting()
+                ->timeout(20)
+                ->get($base.$path);
+        } finally {
+            PagePreviewToken::forget($token);
+        }
+
+        if ($response->status() !== 200 || ! str_contains(strtolower((string) $response->header('Content-Type')), 'text/html')) {
+            return null;
+        }
+
+        $body = $response->body();
+
+        return trim($body) !== '' ? $body : null;
     }
 
     /** The markup Statamic answers for the entry, or null when it is not a page (a redirect, an error, an empty answer). */
@@ -216,7 +272,7 @@ class PagePreview
             foreach (iterator_to_array($element->attributes) as $attribute) {
                 $name = strtolower($attribute->nodeName);
 
-                if (str_starts_with($name, 'on') || in_array($name, ['srcdoc', 'ping', 'formaction', 'action', 'poster'], true)) {
+                if (str_starts_with($name, 'on') || in_array($name, ['srcdoc', 'ping', 'formaction', 'action', 'poster', 'data-page'], true)) {
                     $element->removeAttribute($attribute->nodeName);
                 }
             }
@@ -287,20 +343,73 @@ class PagePreview
 
         $element->setAttribute('data-sim-href', $target);
 
-        if (count($links) >= self::LINKS) {
+        $shown = str_starts_with($target, $origin.'/') ? substr($target, strlen($origin)) : $target;
+
+        // The list is the links of the page's own content. What an embed brings along (the privacy notice of a video host, in the
+        // placeholder that stands where the video would load) is not one of them, and a place that is linked twice is listed once.
+        if ($this->ofAnEmbed($element, $shown)) {
             return;
         }
 
         $text = trim(preg_replace('/\s+/', ' ', $element->textContent) ?? '');
-        $shown = str_starts_with($target, $origin.'/') ? substr($target, strlen($origin)) : $target;
+        $text = $text !== '' ? mb_strimwidth($text, 0, 120, '…') : $shown;
+        $key = $this->destination($shown);
 
         foreach ($links as $known) {
-            if ($known['url'] === $shown && $known['text'] === ($text !== '' ? mb_strimwidth($text, 0, 120, '…') : $shown)) {
+            if ($this->destination($known['url']) === $key) {
                 return;
             }
         }
 
-        $links[] = ['text' => $text !== '' ? mb_strimwidth($text, 0, 120, '…') : $shown, 'url' => $shown];
+        if (count($links) >= self::LINKS) {
+            return;
+        }
+
+        $links[] = ['text' => $text, 'url' => $shown];
+    }
+
+    /** The notices an embedded service puts on a page (privacy, terms), which no page of the site wrote. Host, then path. */
+    private const EMBED_NOTICES = [
+        ['policies.google.com', '~.*~'],
+        ['google.com', '~^/(policies|intl/[^/]+/policies)~'],
+        ['vimeo.com', '~^/(privacy|terms|cookie_policy)~'],
+        ['player.vimeo.com', '~.*~'],
+        ['youtube.com', '~^/(t/(privacy|terms)|static|howyoutubeworks|about/policies)~'],
+        ['youtube-nocookie.com', '~.*~'],
+        ['spotify.com', '~^/(legal|[a-z-]+/legal)~'],
+        ['soundcloud.com', '~^/(pages|terms-of-use)~'],
+    ];
+
+    /** Whether the link belongs to an embedded service: it is the service's own notice, or it sits in an embed's placeholder. */
+    protected function ofAnEmbed(DOMElement $element, string $target): bool
+    {
+        $host = (string) preg_replace('/^www\./', '', strtolower((string) parse_url($target, PHP_URL_HOST)));
+        $path = (string) parse_url($target, PHP_URL_PATH);
+
+        foreach (self::EMBED_NOTICES as [$known, $paths]) {
+            if (($host === $known || str_ends_with($host, '.'.$known)) && preg_match($paths, $path === '' ? '/' : $path) === 1) {
+                return true;
+            }
+        }
+
+        // The placeholder of an embed, named in the way embeds usually are (a class or an id with `embed`, `consent` or `oembed`).
+        for ($node = $element->parentNode; $node instanceof DOMElement; $node = $node->parentNode) {
+            $name = strtolower($node->getAttribute('class').' '.$node->getAttribute('id').' '.$node->getAttribute('data-embed'));
+
+            if (preg_match('/(^|[\s_-])(o?embed|consent|video-?placeholder|iframe-?placeholder|cookie-?banner)($|[\s_-])/', $name) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** The place a link leads to, as one string: the same place linked with a slash or a fragment more is the same place. */
+    protected function destination(string $address): string
+    {
+        $address = (string) preg_replace('/#.*$/', '', $address);
+
+        return strtolower(rtrim($address, '/')) ?: '/';
     }
 
     /** @return array{state: 'unavailable', reason: string, url: string|null, address: string|null, thumbnail: string|null} */

@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+## 1.35.0 — 2026-10-21
+
+### Added: the Probelauf shows the real page of an application route too (server-side rendering), and a look still counts nothing
+
+Pages that the application builds itself (a front-end framework, as most of adriangoldner.com) used to show only their reason and the
+picture of a funnel step. They are now shown as the server draws them: the Probelauf asks the application for the page over a request
+that never leaves the host, takes the markup its server-side rendering answers, and runs it through the same safety as every page
+(no script, no `<noscript>`, no frame, no form action, no link address, a policy that loads from the site itself and nowhere else).
+The frame is still `sandbox=""`: nothing in it runs, so the page is the page as the server drew it (an element that only a script
+would fade in stays as the server wrote it).
+
+- **The pass** (`Support\PagePreviewToken`): minted by the server for one path, sent in the header `X-Funnels-Page-Preview` (not in an
+  address), never handed to a browser, deleted as soon as it has been used once or the answer is in, and good for two minutes at most.
+  It marks only a plain GET for the path it was minted for.
+- **The mark** (`Http\Middleware\MarkPagePreview`, first in the `web` and `statamic.web` groups): a request with a good pass is a look
+  ({@see ProbePreview}), keeps its session in memory, sets no cookie, is not cached or indexed, and shares `probe_preview` and
+  `preview` with the views, so a template can leave its analytics script out. A made-up, spent, expired or wrongly placed pass marks
+  nothing.
+- **Config** `page_preview.app_pages` (default on) and `page_preview.url` (`FUNNELS_PAGE_PREVIEW_URL`: the web server itself, with the
+  site's host as the `Host` header, for a host with a login in front of its public address). Off: such a page shows its picture and the
+  reason, as before.
+- A site that counts visits must ask `Goldnead\StatamicFunnels\Support\ProbePreview::active()` (or the `preview` / `probe_preview`
+  view variable) before it counts: a middleware that remembers where a visit came from, an analytics tag in the layout.
+
+### Changed
+
+- **The mail frame is sealed completely:** `sandbox=""` (no `allow-same-origin` any more). Without an origin the frame cannot be asked
+  how tall the mail is, so it is a window of a fixed height (40rem, at most 70% of the screen) and the mail scrolls inside it.
+- **"Links on this page"** lists the links of the page's own content: the notices of an embedded service (the privacy page of a video
+  host, a placeholder of an embed) are left out, and a place that is linked twice is listed once (`/go/x`, `/go/x/` and `/go/x#a` are
+  one).
+
 ## 1.34.0 — 2026-10-21
 
 ### Changed: the Probelauf opens on one person ("[Person] gets [Lead magnet]"), not on a developer's list of switches

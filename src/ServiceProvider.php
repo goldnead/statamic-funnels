@@ -9,6 +9,7 @@ use Goldnead\StatamicFunnels\Contracts\ThumbnailRenderer;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelActionsController;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelsController;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\LandkarteController;
+use Goldnead\StatamicFunnels\Http\Middleware\MarkPagePreview;
 use Goldnead\StatamicFunnels\Integrations\Insights\Completed;
 use Goldnead\StatamicFunnels\Integrations\Insights\CompletionRate;
 use Goldnead\StatamicFunnels\Integrations\Insights\StepEvents;
@@ -98,6 +99,12 @@ class ServiceProvider extends AddonServiceProvider
         parent::boot();
 
         app(SettingsRegistry::class)->register(Settings::class);
+
+        // The page the Probelauf asks of the site itself is a look, not a visit. First in the group, ahead of the session and of
+        // anything the site adds after it; `statamic.web` is the group of the catch-all that serves entries.
+        foreach (['web', 'statamic.web'] as $group) {
+            $this->app['router']->prependMiddlewareToGroup($group, MarkPagePreview::class);
+        }
 
         // What the funnel map can point at from here: funnels, their steps and
         // Statamic entries. The other addons register their own.
