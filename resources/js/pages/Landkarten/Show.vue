@@ -44,6 +44,7 @@ const props = defineProps({
     period: { type: Object, required: true },
     saveUrl: { type: String, required: true },
     objectsUrl: { type: String, required: true },
+    detailsUrl: { type: String, required: true },
     connectionRules: { type: Array, default: () => [] },
     previewUrl: { type: String, default: '' },
     connectUrl: { type: String, default: '' },
@@ -325,6 +326,39 @@ const connections = computed(() => {
 });
 
 const metricRule = computed(() => (selected.value?.metric ? `${selected.value.metric.what}, ${selected.value.metric.period}` : null));
+
+// What the owning addon adds for the open card (a course's lessons, an automation's
+// mails, a price). Asked once per card and period when its panel opens, never for the
+// whole map; a failed ask leaves the panel as it was.
+const detailsCache = ref({});
+const detailsKey = computed(() => (selected.value?.status === 'found' && !selected.value.ghost
+    ? `${selected.value.type}:${selected.value.ref_id}:${props.period.days}`
+    : null));
+const details = computed(() => (detailsKey.value ? detailsCache.value[detailsKey.value] ?? null : null));
+
+watch(detailsKey, async (key) => {
+    if (!key || detailsCache.value[key]) return;
+
+    const { type, ref_id: refId } = selected.value;
+    detailsCache.value = { ...detailsCache.value, [key]: { loading: true, failed: false, blocks: [] } };
+
+    let result = { loading: false, failed: true, blocks: [] };
+
+    try {
+        const url = new URL(props.detailsUrl, window.location.origin);
+        url.searchParams.set('type', type);
+        url.searchParams.set('ref_id', refId);
+        url.searchParams.set('days', props.period.days);
+
+        const response = await fetch(url, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+        if (response.ok) result = { loading: false, failed: false, blocks: (await response.json()).blocks ?? [] };
+        else if (response.status === 403) result = { loading: false, failed: false, restricted: true, blocks: [] };
+    } catch {
+        // keep the failed result
+    }
+
+    detailsCache.value = { ...detailsCache.value, [key]: result };
+}, { immediate: true });
 
 function drill(node) {
     if (node?.drill_url) router.visit(node.drill_url);
@@ -884,6 +918,35 @@ const helpLines = computed(() => [
                                 <dd v-if="metricRule" class="text-xs text-gray-600 dark:text-gray-400">{{ t('map_panel_rule').replace(':rule', metricRule) }}</dd>
                             </div>
                         </dl>
+                    </Card>
+                </Panel>
+
+                <p v-if="details?.loading" class="text-sm text-gray-600 dark:text-gray-400" data-lk-details-loading>{{ t('map_details_loading') }}</p>
+                <p v-else-if="details?.restricted" class="text-sm text-gray-600 dark:text-gray-400" data-lk-details-restricted>{{ t('map_details_restricted') }}</p>
+                <p v-else-if="details?.failed" class="text-sm text-gray-600 dark:text-gray-400">{{ t('map_details_failed') }}</p>
+                <Panel v-for="(block, i) in details?.blocks ?? []" :key="i" :heading="block.title || undefined" data-lk-details>
+                    <Card>
+                        <dl v-if="block.kind === 'facts'" class="space-y-3 text-sm">
+                            <div v-for="row in block.rows" :key="row.label">
+                                <dt class="text-xs text-gray-600 dark:text-gray-400">{{ row.label }}</dt>
+                                <dd class="break-words">
+                                    <a v-if="row.href" :href="row.href" target="_blank" rel="noopener" class="hover:underline">{{ row.value }}</a>
+                                    <template v-else>{{ row.value }}</template>
+                                </dd>
+                            </div>
+                        </dl>
+                        <template v-else-if="block.kind === 'list'">
+                            <ol class="space-y-3 text-sm">
+                                <li v-for="(item, n) in block.items" :key="n" class="flex items-start gap-3">
+                                    <img v-if="item.image" :src="item.image" alt="" loading="lazy" class="h-12 w-20 shrink-0 rounded border border-gray-200 object-cover object-top dark:border-gray-700" />
+                                    <div class="min-w-0">
+                                        <div class="font-medium break-words">{{ item.title }}</div>
+                                        <div v-if="item.meta" class="text-xs text-gray-600 dark:text-gray-400">{{ item.meta }}</div>
+                                    </div>
+                                </li>
+                            </ol>
+                            <p v-if="block.more" class="mt-3 text-xs text-gray-600 dark:text-gray-400">{{ t('map_details_more').replace(':count', block.more) }}</p>
+                        </template>
                     </Card>
                 </Panel>
 
