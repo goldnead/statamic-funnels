@@ -213,3 +213,48 @@ export function encodeActions(actions) {
         type: a.type, mail: a.mail, product: a.product ?? null, url: a.url ?? null, after_seconds: a.after_seconds ?? 0,
     })));
 }
+
+/**
+ * What the person has, read off her way: the access she was given (with the day) and, for each course she
+ * got into, its lessons with the day each one opens.
+ *
+ * A course is any entry that names `meta.course`; its lessons name the same `meta.course` and `meta.lesson`.
+ * A lesson of unknown opening (after a payment, paused) is `later: null`.
+ *
+ * @param {{ kind: string, label: string, detail: string|null, day: number, at: number, meta?: object }[]} entries
+ * @returns {{ access: { slug: string, label: string, day: number }[], courses: { id: string, title: string, day: number, lessons: object[] }[] }}
+ */
+export function accountOf(entries) {
+    const access = [];
+    const courses = new Map();
+
+    for (const e of entries) {
+        const course = e.meta?.course;
+
+        if (e.kind === 'access' && e.meta?.slug && !access.some((a) => a.slug === e.meta.slug)) {
+            access.push({ slug: e.meta.slug, label: e.label, day: e.day });
+        }
+
+        if (!course) continue;
+
+        if (e.kind === 'access' && !courses.has(course)) {
+            courses.set(course, { id: course, title: e.label, day: e.day, lessons: [] });
+        } else if (e.meta?.lesson) {
+            if (!courses.has(course)) courses.set(course, { id: course, title: course, day: e.day, lessons: [] });
+            courses.get(course).lessons.push({
+                slug: e.meta.lesson,
+                title: e.label,
+                detail: e.detail,
+                // A lesson whose opening is not known (after a payment, paused) is an unknown line: no day.
+                day: e.kind === 'page' ? e.day : null,
+            });
+        }
+    }
+
+    return { access, courses: [...courses.values()] };
+}
+
+/** The pages on the way: a page line that is no lesson. */
+export function pagesOf(entries) {
+    return entries.filter((e) => e.kind === 'page' && !e.meta?.lesson);
+}

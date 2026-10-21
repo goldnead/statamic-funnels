@@ -2,7 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import { Alert, Checkbox, Description, Heading, Input, Select, ToggleGroup, ToggleItem } from '@statamic/cms/ui';
 import ProbeNode from './ProbeNode.vue';
+import ProbeAccount from './ProbeAccount.vue';
 import ProbeMailbox from './ProbeMailbox.vue';
+import ProbePages from './ProbePages.vue';
 import ProbeTimeline from './ProbeTimeline.vue';
 import {
     encodeActions, standing, timeInDay as timeInDayText, timeWords as timeText, untilDay,
@@ -139,6 +141,8 @@ onMounted(load);
 const lensOptions = computed(() => [
     { value: 'timeline', label: t('probe_lens_timeline') },
     { value: 'mailbox', label: t('probe_lens_mailbox') },
+    { value: 'account', label: t('probe_lens_account') },
+    { value: 'pages', label: t('probe_lens_pages') },
 ]);
 
 const untilOptions = computed(() => [
@@ -189,7 +193,7 @@ const hasContent = computed(() => (person.value === 'test' ? shown.value.length 
                     <ToggleItem v-for="option in personOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-person-option="option.value" />
                 </ToggleGroup>
             </span>
-            <ToggleGroup v-if="person === 'test' && mailUrl" v-model="lens" size="sm" :aria-label="t('probe_lens_label')" data-pr-lens>
+            <ToggleGroup v-if="person === 'test'" v-model="lens" size="sm" :aria-label="t('probe_lens_label')" data-pr-lens>
                 <ToggleItem v-for="option in lensOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-lens-option="option.value" />
             </ToggleGroup>
             <label v-if="person === 'test' && startOptions.length" class="pr-start">
@@ -254,6 +258,8 @@ const hasContent = computed(() => (person.value === 'test' ? shown.value.length 
             @add-action="addAction"
             @remove-action="removeAction"
         />
+        <ProbeAccount v-else-if="person === 'test' && lens === 'account'" :entries="shown" />
+        <ProbePages v-else-if="person === 'test' && lens === 'pages'" :entries="shown" />
         <ProbeTimeline v-else-if="person === 'test'" :entries="shown" />
         <ul v-else class="pr-tree" data-pr-tree>
             <ProbeNode v-for="root in tree.roots" :key="root.id" :node="root" />
