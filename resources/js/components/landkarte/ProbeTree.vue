@@ -29,6 +29,8 @@ const props = defineProps({
 });
 
 const state = ref('loading');
+// Once there is something to show, planning again does not take it away.
+const loadedOnce = ref(false);
 const person = ref('unknown');
 // For the test person: her way as a timeline, or the mails of it as a mailbox.
 const lens = ref('timeline');
@@ -115,6 +117,7 @@ async function load() {
         }
 
         state.value = 'ready';
+        loadedOnce.value = true;
     } catch {
         if (mine === ticket) state.value = 'failed';
     }
@@ -123,6 +126,8 @@ async function load() {
 function choosePerson(value) {
     if (!value || value === person.value) return;
     person.value = value;
+    // The other way of looking has nothing of its own to keep on screen yet.
+    loadedOnce.value = false;
     load();
 }
 
@@ -333,8 +338,11 @@ const hasContent = computed(() => (person.value === 'test' ? shown.value.length 
         </p>
 
         <p v-if="state === 'loading'" class="pr-status" role="status" data-pr-loading>{{ t('probe_loading') }}</p>
-        <Alert v-else-if="state === 'failed'" variant="warning" data-pr-failed>{{ t('probe_failed') }}</Alert>
-        <p v-else-if="person === 'test' && !startOptions.length" class="pr-status" data-pr-empty>{{ t('probe_start_none') }}</p>
+        <Alert v-if="state === 'failed'" variant="warning" data-pr-failed>{{ t('probe_failed') }}</Alert>
+
+        <!-- The body stays where it is while the way is planned again: a mail that is open, a line whose reasons are open. -->
+        <template v-if="state === 'ready' || (state === 'loading' && loadedOnce)">
+        <p v-if="person === 'test' && !startOptions.length" class="pr-status" data-pr-empty>{{ t('probe_start_none') }}</p>
         <p v-else-if="!hasContent" class="pr-status" data-pr-empty>{{ person === 'test' ? t('probe_timeline_empty') : t('probe_empty') }}</p>
 
         <ProbeMailbox
@@ -355,6 +363,7 @@ const hasContent = computed(() => (person.value === 'test' ? shown.value.length 
         <ul v-else class="pr-tree" data-pr-tree>
             <ProbeNode v-for="root in tree.roots" :key="root.id" :node="root" />
         </ul>
+        </template>
 
         <p v-if="state === 'ready' && person === 'unknown' && tree.stats.unreached.length" class="pr-unreached" data-pr-unreached>
             <strong>{{ t('probe_unreached') }}:</strong>
