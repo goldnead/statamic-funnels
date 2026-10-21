@@ -75,6 +75,8 @@ class PagePreview
      */
     public function render(string $entryId): array
     {
+        $this->inlined = 0;
+
         $entry = Entry::find($entryId);
 
         if (! $entry instanceof StatamicEntry) {
@@ -308,6 +310,20 @@ class PagePreview
 
             if (! str_contains($rel, 'stylesheet') || ! $this->ofTheSite($href, $origin)) {
                 $node->parentNode?->removeChild($node);
+
+                continue;
+            }
+
+            // The frame has no origin (an empty `sandbox`), and a browser fetches a font or a mask image of another origin only when
+            // that origin allows it with a CORS header, which a site's static files do not send: the page would show in a fallback
+            // font and without its drawn strokes. So the site's own stylesheet is read here and put into the page, with the fonts and
+            // the vector images it names as data. If that does not work the link stays as it is (the page shows, a little plainer).
+            $inline = $this->inlineStylesheet($href, $origin);
+
+            if ($inline !== null) {
+                $style = $document->createElement('style');
+                $style->appendChild($document->createTextNode($inline));
+                $node->parentNode?->replaceChild($style, $node);
             }
         }
 
@@ -362,6 +378,106 @@ class PagePreview
         return ['html' => '<!doctype html>'.$document->saveHTML($document->documentElement), 'links' => $links];
     }
 
+    /** The most of font and vector data that one page takes into itself, in bytes, and the most of one file. */
+    private const INLINE_BUDGET = 1_200_000;
+
+    private const INLINE_FILE = 300_000;
+
+    private const INLINE_TYPES = ['woff2' => 'font/woff2', 'woff' => 'font/woff', 'ttf' => 'font/ttf', 'otf' => 'font/otf', 'svg' => 'image/svg+xml'];
+
+    private int $inlined = 0;
+
+    /** One file of the site, by its path, over the same road as the page itself (see {@see fromApplication()}). Null when it is not there. */
+    protected function siteFile(string $path, string $origin, ?string $contentType = null): ?string
+    {
+        $parts = parse_url($origin) ?: [];
+        $host = strtolower((string) ($parts['host'] ?? '')).(isset($parts['port']) ? ':'.$parts['port'] : '');
+
+        if (! str_starts_with($path, '/') || str_starts_with($path, '//') || str_contains($path, '\\') || ! in_array($host, $this->ownHosts(), true)) {
+            return null;
+        }
+
+        $base = rtrim((string) (config('statamic-funnels.page_preview.url') ?: $origin), '/');
+
+        try {
+            $response = Http::withHeaders(['Host' => $host])->withoutRedirecting()->timeout(8)->get($base.$path);
+        } catch (Throwable) {
+            return null;
+        }
+
+        if ($response->status() !== 200 || $response->body() === '') {
+            return null;
+        }
+
+        if ($contentType !== null && ! str_contains(strtolower((string) $response->header('Content-Type')), $contentType)) {
+            return null;
+        }
+
+        return $response->body();
+    }
+
+    /** The stylesheet at this address with every font and vector image it names written into it as data; null when it cannot be read. */
+    protected function inlineStylesheet(string $href, string $origin): ?string
+    {
+        $path = str_starts_with($href, '/') ? $href : substr($href, strlen($origin));
+        $css = $this->siteFile($path, $origin, 'text/css');
+
+        // A stylesheet has no use for `</`, and inside a `<style>` it is the one thing that ends the element and lets what follows
+        // become markup: a file that carries it is not put into the page.
+        if ($css === null || strlen($css) > 600_000 || str_contains($css, '</') || str_contains($css, '<!--')) {
+            return null;
+        }
+
+        $directory = dirname((string) parse_url($path, PHP_URL_PATH));
+
+        return preg_replace_callback('/url\(\s*(["\']?)([^)"\']+)\1\s*\)/', function (array $match) use ($directory, $origin) {
+            $ref = trim($match[2]);
+
+            if ($ref === '' || str_starts_with($ref, 'data:') || str_starts_with($ref, '#') || str_starts_with($ref, '//')) {
+                return $match[0];
+            }
+
+            if (str_starts_with($ref, $origin.'/')) {
+                $ref = substr($ref, strlen($origin));
+            } elseif (preg_match('~^[a-z][a-z0-9+.-]*:~i', $ref) === 1 || str_contains($ref, '\\')) {
+                // Another origin: left as it is, the page's policy does not let it load.
+                return $match[0];
+            }
+
+            $target = str_starts_with($ref, '/') ? $ref : $directory.'/'.$ref;
+            $file = (string) parse_url($target, PHP_URL_PATH);
+            $segments = [];
+
+            foreach (explode('/', $file) as $segment) {
+                if ($segment === '..') {
+                    array_pop($segments);
+                } elseif ($segment !== '' && $segment !== '.') {
+                    $segments[] = $segment;
+                }
+            }
+
+            $file = '/'.implode('/', $segments);
+            $type = self::INLINE_TYPES[strtolower(pathinfo($file, PATHINFO_EXTENSION))] ?? null;
+
+            // Whatever is not taken in stays a link to the site, written out in full so that it means the same wherever the style sits.
+            $stays = 'url("'.$origin.$file.'")';
+
+            if ($type === null || $this->inlined >= self::INLINE_BUDGET) {
+                return $stays;
+            }
+
+            $data = $this->siteFile($file, $origin);
+
+            if ($data === null || strlen($data) > self::INLINE_FILE || $this->inlined + strlen($data) > self::INLINE_BUDGET) {
+                return $stays;
+            }
+
+            $this->inlined += strlen($data);
+
+            return 'url("data:'.$type.';base64,'.base64_encode($data).'")';
+        }, $css);
+    }
+
     protected function ofTheSite(string $address, string $origin): bool
     {
         // A browser reads a backslash as a slash: `/\evil.example/x.css` is `//evil.example/x.css`.
@@ -395,7 +511,7 @@ class PagePreview
 
         // The list is the links of the page's own content. What an embed brings along (the privacy notice of a video host, in the
         // placeholder that stands where the video would load) is not one of them, and a place that is linked twice is listed once.
-        if ($this->ofAnEmbed($element, $shown)) {
+        if ($this->ofAnEmbed($element, $shown) || $this->ofTheSiteFrame($element)) {
             return;
         }
 
@@ -451,6 +567,31 @@ class PagePreview
         }
 
         return false;
+    }
+
+    /**
+     * Whether the link belongs to the site's frame (its menu, the header above the content, the footer) and not to the page's own
+     * content: a person who reads the page reads those links on every page, and they would fill the list before the page's own do.
+     * A `header` inside the content (`main`, `article`, `section`) is the page's own and stays.
+     */
+    protected function ofTheSiteFrame(DOMElement $element): bool
+    {
+        $header = false;
+        $content = false;
+
+        for ($node = $element->parentNode; $node instanceof DOMElement; $node = $node->parentNode) {
+            $tag = strtolower($node->tagName);
+            $role = strtolower($node->getAttribute('role'));
+
+            if ($tag === 'nav' || $tag === 'footer' || in_array($role, ['navigation', 'contentinfo'], true)) {
+                return true;
+            }
+
+            $header = $header || $tag === 'header' || $role === 'banner';
+            $content = $content || in_array($tag, ['main', 'article', 'section'], true);
+        }
+
+        return $header && ! $content;
     }
 
     /** The place a link leads to, as one string: the same place linked with a slash or a fragment more is the same place. */

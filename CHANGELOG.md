@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 1.35.1 — 2026-10-21
+
+### Fixed: the page of the Probelauf showed in a fallback font and without its drawn strokes
+
+The frame has no origin (an empty `sandbox`), and a browser fetches a web font or a mask image from another origin only when that
+origin sends a CORS header, which a site's static files do not. So the page showed in a system font (a headline broke at 390 px) and
+the strokes a stylesheet draws with `mask-image` were gone. The site's own stylesheet is now read on the server and put into the page
+as a `<style>`, with the fonts (`woff2`, `woff`, `ttf`, `otf`) and vector images (`svg`) it names written in as `data:` URLs (at most
+300 KB a file, 1.2 MB a page); every other address in it is written out in full. A stylesheet that is not `text/css`, or that holds
+`</` or `<!--` (the only things that can end a `<style>` element), is left as the link it was.
+
+### Changed
+
+- **"Links on this page"** leaves out the site's frame: links in a `nav`, a `footer`, a `role="navigation"`/`contentinfo` area and in a
+  `header` that stands outside the content (`main`, `article`, `section`). On a framework page the menu and the footer were 35 of 40
+  entries and pushed the page's own links (the button, the second way) out of the list. A `header` inside the content stays.
+
 ## 1.35.0 — 2026-10-21
 
 ### Added: the Probelauf shows the real page of an application route too (server-side rendering), and a look still counts nothing
