@@ -456,7 +456,7 @@ async function showTree() {
 .dark .pr-hint { color: var(--color-gray-400); }
 .pr-link { padding: 0; border: 0; background: transparent; font-size: 0.85rem; color: var(--color-gray-700); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .pr-link:hover { color: var(--color-gray-900); }
-.pr-link:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 2px; }
+.pr-link:focus-visible { outline: 2px solid var(--color-blue-400, var(--color-primary)); outline-offset: 2px; border-radius: 2px; }
 .dark .pr-link { color: var(--color-gray-300); }
 .dark .pr-link:hover { color: var(--color-gray-100); }
 .pr-cols { display: grid; grid-template-columns: minmax(16rem, 20.5rem) minmax(0, 1fr); gap: 1.75rem; align-items: start; }

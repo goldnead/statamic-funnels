@@ -138,10 +138,10 @@ const addTag = (name) => emit('patch', { tags: [...new Set([...props.tags, name]
         </StackContent>
         <StackFooter>
             <template #start>
-                <Button variant="ghost" :text="probe.t('probe_reset')" data-pk-reset @click="emit('reset')" />
+                <Button :text="probe.t('probe_reset')" data-pk-reset @click="emit('reset')" />
             </template>
             <template #end>
-                <Button variant="primary" :text="probe.t('probe_done')" data-pk-done @click="emit('update:open', false)" />
+                <Button :text="probe.t('probe_done')" data-pk-done @click="emit('update:open', false)" />
             </template>
         </StackFooter>
     </Stack>
@@ -158,7 +158,7 @@ const addTag = (name) => emit('patch', { tags: [...new Set([...props.tags, name]
 .dark .pk-free { color: var(--color-gray-400); }
 .pk-chip { padding: 0.1rem 0.55rem; border: 1px solid var(--color-gray-300); border-radius: 0.375rem; background: var(--color-white); font-size: 0.8rem; color: var(--color-gray-900); cursor: pointer; }
 .pk-chip:hover { background: var(--color-gray-50); }
-.pk-chip:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.pk-chip:focus-visible { outline: 2px solid var(--color-blue-400, var(--color-primary)); outline-offset: 1px; }
 .dark .pk-chip { border-color: var(--color-gray-600); background: var(--color-gray-800); color: var(--color-gray-100); }
 .dark .pk-chip:hover { background: var(--color-gray-700); }
 .pk-list { margin: 0; padding: 0; list-style: none; }

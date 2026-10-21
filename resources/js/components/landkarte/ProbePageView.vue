@@ -103,7 +103,7 @@ const deviceStyle = computed(() => ({
 const address = computed(() => page.value?.address ?? '');
 const deviceOptions = computed(() => [
     { value: 'desktop', label: probe.t('probe_page_desktop'), icon: 'computer-desktop' },
-    { value: 'phone', label: probe.t('probe_page_phone'), icon: 'phone-telephone-call' },
+    { value: 'phone', label: probe.t('probe_page_phone'), icon: 'phone-lock' },
 ]);
 const reason = computed(() => probe.t(`probe_page_unavailable_${page.value?.reason}`, probe.t('probe_page_unavailable_failed')));
 const goal = (url) => url.replace(/^https?:\/\//i, '');
@@ -157,8 +157,8 @@ const links = computed(() => {
                         :title="probe.t('probe_page_frame')"
                         data-pg-frame
                     />
+                    <span class="pg-fade" aria-hidden="true" />
                 </div>
-                <span class="pg-fade" aria-hidden="true" />
             </div>
 
             <section v-if="links.length" class="pg-links" data-pg-links>
@@ -204,8 +204,8 @@ const links = computed(() => {
 .pg-device--phone { border: 1px solid var(--color-gray-300); border-radius: 0.75rem; box-shadow: 0 1px 2px rgb(0 0 0 / 0.06); }
 .dark .pg-device--phone { border-color: var(--color-gray-600); }
 .pg-frame { display: block; border: 0; background: #fff; transform-origin: top left; }
-.pg-fade { position: absolute; left: 0; right: 0; bottom: 0; height: 3rem; pointer-events: none; background: linear-gradient(to bottom, transparent, var(--color-gray-100)); }
-.dark .pg-fade { background: linear-gradient(to bottom, transparent, var(--color-gray-950, var(--color-gray-900))); }
+/* The page runs on past the window: its last lines fade into the page's own white, not into the stage. */
+.pg-fade { position: absolute; left: 0; right: 0; bottom: 0; height: 2.5rem; pointer-events: none; background: linear-gradient(to bottom, rgb(255 255 255 / 0), rgb(255 255 255 / 0.92)); }
 
 .pg-links { margin-top: 1rem; }
 .pg-links h4 { margin: 0 0 0.25rem; font-size: 0.8rem; font-weight: 600; color: var(--color-gray-900); }

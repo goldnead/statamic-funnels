@@ -92,7 +92,7 @@ function onKey(event) {
 .dark .ps-day__head h3 { color: var(--color-gray-100); }
 .ps-day__title { padding: 0; border: 0; background: transparent; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; cursor: pointer; }
 .ps-day__title:hover { text-decoration: underline; text-underline-offset: 3px; }
-.ps-day__title:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 2px; }
+.ps-day__title:focus-visible { outline: 2px solid var(--color-blue-400, var(--color-primary)); outline-offset: 2px; border-radius: 2px; }
 .ps-day__sum { font-size: 0.78rem; color: var(--color-gray-600); }
 .dark .ps-day__sum { color: var(--color-gray-400); }
 .ps-day__head button { color: var(--color-gray-600); }
@@ -105,7 +105,7 @@ function onKey(event) {
 .dark .ps-row { color: var(--color-gray-100); }
 .ps-row:hover { background: var(--color-gray-50); }
 .dark .ps-row:hover { background: color-mix(in srgb, var(--color-gray-800) 55%, transparent); }
-.ps-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.ps-row:focus-visible { outline: 2px solid var(--color-blue-400, var(--color-primary)); outline-offset: -2px; }
 .ps-row--on, .ps-row--on:hover { background: var(--color-gray-100); font-weight: 500; }
 .dark .ps-row--on, .dark .ps-row--on:hover { background: var(--color-gray-800); }
 .ps-icon { flex: none; color: var(--color-gray-500); }

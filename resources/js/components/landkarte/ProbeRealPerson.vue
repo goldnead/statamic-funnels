@@ -116,7 +116,7 @@ async function pick(person) {
 .dark .rp-pick { color: var(--color-gray-100); }
 .rp-pick:hover { background: var(--color-gray-50); }
 .dark .rp-pick:hover { background: var(--color-gray-800); }
-.rp-pick:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.rp-pick:focus-visible { outline: 2px solid var(--color-blue-400, var(--color-primary)); outline-offset: -2px; }
 .rp-note--warn { color: var(--color-gray-900) !important; font-weight: 500; }
 .dark .rp-note--warn { color: var(--color-gray-100) !important; }
 .rp-note { margin: 0; font-size: 0.78rem; color: var(--color-gray-600); }
