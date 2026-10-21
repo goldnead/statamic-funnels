@@ -31,6 +31,8 @@ a day (mails received, access, purchases). **Why?** under a line lists what it w
 The person lives in the request and nowhere else: nothing about her is stored and no real person is read (the person from
 the CRM is not part of this part). The mail is written for the same person the way was planned for. Needs brand-context 1.24.
 
+## 1.32.0 — 2026-10-21
+
 ### Added: Probelauf mailbox (part 3: the mails the test person gets)
 
 Next to the timeline the test person has a **Postfach**: every mail that goes out on her way, in order, and the one she
