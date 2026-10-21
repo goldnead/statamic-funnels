@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.34.0 — 2026-10-21
+
 ### Changed: the Probelauf opens on one person ("[Person] gets [Lead magnet]"), not on a developer's list of switches
 
 The tab used to open on "every way through the map" with ten controls above it. It now answers the question an operator
