@@ -1,10 +1,12 @@
 <script setup>
-import { computed, onMounted, provide, ref } from 'vue';
-import { Alert, Description, Heading, Select, ToggleGroup, ToggleItem } from '@statamic/cms/ui';
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
+import { Alert, Checkbox, Description, Heading, Input, Select, ToggleGroup, ToggleItem } from '@statamic/cms/ui';
 import ProbeNode from './ProbeNode.vue';
 import ProbeMailbox from './ProbeMailbox.vue';
 import ProbeTimeline from './ProbeTimeline.vue';
-import { timeInDay as timeInDayText, timeWords as timeText } from '../../support/probelauf.js';
+import {
+    encodeActions, standing, timeInDay as timeInDayText, timeWords as timeText, untilDay,
+} from '../../support/probelauf.js';
 
 /**
  * The dry run of a Landkarte ("Probelauf").
@@ -24,6 +26,15 @@ const state = ref('loading');
 const person = ref('unknown');
 // For the test person: her way as a timeline, or the mails of it as a mailbox.
 const lens = ref('timeline');
+// The test person: what the page lets the operator say about her. She lives in the query and nowhere else.
+const tags = ref('');
+const access = ref('');
+const ran = ref([]);
+const actions = ref([]);
+// Fast forward: the day up to which her way is shown (null: all of it).
+const until = ref(null);
+const products = ref([]);
+const automations = ref([]);
 const start = ref(null);
 const starts = ref([]);
 const tree = ref({ roots: [], stats: { nodes: 0, leaves: 0, cut: 0, unreached: [] } });
@@ -37,6 +48,16 @@ provide('probelauf', {
     timeInDay: (seconds) => timeInDayText(seconds, t),
 });
 
+// Everything that makes her this person, onto a request: the way and her mail are planned from the same query.
+function personQuery(url) {
+    if (tags.value.trim() !== '') url.searchParams.set('tags', tags.value);
+    if (access.value.trim() !== '') url.searchParams.set('access', access.value);
+    ran.value.forEach((handle) => url.searchParams.append('ran[]', handle));
+    if (actions.value.length) url.searchParams.set('actions', encodeActions(actions.value));
+
+    return url;
+}
+
 let ticket = 0;
 
 async function load() {
@@ -47,6 +68,7 @@ async function load() {
         const url = new URL(props.url, window.location.origin);
         url.searchParams.set('person', person.value);
         if (person.value === 'test' && start.value) url.searchParams.set('start', start.value);
+        if (person.value === 'test') personQuery(url);
 
         const response = await fetch(url, {
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -64,6 +86,8 @@ async function load() {
         if (data.person === 'test') {
             timeline.value = { entries: data.entries, stats: data.stats };
             start.value = data.start;
+            products.value = data.products ?? [];
+            automations.value = data.automations ?? [];
         } else {
             tree.value = { roots: data.roots, stats: data.stats };
         }
@@ -87,12 +111,43 @@ function chooseStart(value) {
     load();
 }
 
+function toggleRan(handle, on) {
+    ran.value = on ? [...ran.value, handle] : ran.value.filter((h) => h !== handle);
+    load();
+}
+
+function addAction(action) {
+    actions.value = [...actions.value, action];
+    load();
+}
+
+function removeAction(index) {
+    actions.value = actions.value.filter((_, i) => i !== index);
+    load();
+}
+
+// Typing in a field plans again once the typing pauses, not at every key.
+let pause = null;
+watch([tags, access], () => {
+    clearTimeout(pause);
+    pause = setTimeout(load, 450);
+});
+onBeforeUnmount(() => clearTimeout(pause));
+
 onMounted(load);
 
 const lensOptions = computed(() => [
     { value: 'timeline', label: t('probe_lens_timeline') },
     { value: 'mailbox', label: t('probe_lens_mailbox') },
 ]);
+
+const untilOptions = computed(() => [
+    { value: 'all', label: t('probe_until_all') },
+    ...timeline.value.stats.days.map((d) => ({ value: String(d), label: t('probe_until_day').replace(':day', d) })),
+]);
+
+const shown = computed(() => untilDay(timeline.value.entries, until.value));
+const where = computed(() => standing(shown.value));
 
 const personOptions = computed(() => [
     { value: 'unknown', label: t('probe_person_unknown') },
@@ -107,8 +162,8 @@ const startOptions = computed(() => starts.value.map((s) => ({
 const summary = computed(() => {
     if (person.value === 'test') {
         return t('probe_timeline_summary')
-            .replace(':entries', timeline.value.stats.entries)
-            .replace(':days', timeline.value.stats.days.length);
+            .replace(':entries', shown.value.length)
+            .replace(':days', new Set(shown.value.map((e) => e.day)).size);
     }
 
     return t('probe_summary')
@@ -116,7 +171,7 @@ const summary = computed(() => {
         .replace(':steps', tree.value.stats.nodes);
 });
 
-const hasContent = computed(() => (person.value === 'test' ? timeline.value.entries.length > 0 : tree.value.roots.length > 0));
+const hasContent = computed(() => (person.value === 'test' ? shown.value.length > 0 : tree.value.roots.length > 0));
 </script>
 
 <template>
@@ -143,13 +198,63 @@ const hasContent = computed(() => (person.value === 'test' ? timeline.value.entr
             </label>
         </div>
 
+        <div v-if="person === 'test'" class="pr-who" data-pr-who>
+            <label class="pr-start">
+                <span class="pr-start__label">{{ t('probe_tags_label') }}</span>
+                <Input v-model="tags" size="sm" class="w-52" :placeholder="t('probe_tags_placeholder')" :aria-label="t('probe_tags_label')" data-pr-tags />
+            </label>
+            <label class="pr-start">
+                <span class="pr-start__label">{{ t('probe_access_label') }}</span>
+                <Input v-model="access" size="sm" class="w-52" :placeholder="t('probe_access_placeholder')" :aria-label="t('probe_access_label')" data-pr-access />
+            </label>
+            <fieldset v-if="automations.length" class="pr-ran">
+                <legend class="pr-start__label">{{ t('probe_ran_label') }}</legend>
+                <Checkbox
+                    v-for="a in automations"
+                    :key="a.id"
+                    :model-value="ran.includes(a.id)"
+                    :label="a.label"
+                    size="sm"
+                    :data-pr-ran="a.id"
+                    @update:model-value="toggleRan(a.id, $event)"
+                />
+            </fieldset>
+            <label v-if="timeline.stats.days.length > 1" class="pr-start">
+                <span class="pr-start__label">{{ t('probe_until_label') }}</span>
+                <Select
+                    :model-value="until === null ? 'all' : String(until)"
+                    size="sm"
+                    class="w-44"
+                    :options="untilOptions"
+                    :aria-label="t('probe_until_label')"
+                    data-pr-until
+                    @update:model-value="until = $event === 'all' ? null : Number($event)"
+                />
+            </label>
+        </div>
+        <p v-if="person === 'test' && state === 'ready' && until !== null" class="pr-standing" data-pr-standing>
+            {{ t('probe_standing').replace(':day', until).replace(':mails', where.mails).replace(':purchases', where.purchases) }}
+            <template v-if="where.access.length"> {{ t('probe_standing_access') }} {{ where.access.join(', ') }}.</template>
+            <template v-if="where.unsubscribed"> {{ t('probe_standing_unsub') }}</template>
+        </p>
+
         <p v-if="state === 'loading'" class="pr-status" role="status" data-pr-loading>{{ t('probe_loading') }}</p>
         <Alert v-else-if="state === 'failed'" variant="warning" data-pr-failed>{{ t('probe_failed') }}</Alert>
         <p v-else-if="person === 'test' && !startOptions.length" class="pr-status" data-pr-empty>{{ t('probe_start_none') }}</p>
         <p v-else-if="!hasContent" class="pr-status" data-pr-empty>{{ person === 'test' ? t('probe_timeline_empty') : t('probe_empty') }}</p>
 
-        <ProbeMailbox v-else-if="person === 'test' && lens === 'mailbox' && mailUrl" :entries="timeline.entries" :mail-url="mailUrl" :start="start" />
-        <ProbeTimeline v-else-if="person === 'test'" :entries="timeline.entries" />
+        <ProbeMailbox
+            v-else-if="person === 'test' && lens === 'mailbox' && mailUrl"
+            :entries="shown"
+            :mail-url="mailUrl"
+            :start="start"
+            :person-query="personQuery"
+            :products="products"
+            :actions="actions"
+            @add-action="addAction"
+            @remove-action="removeAction"
+        />
+        <ProbeTimeline v-else-if="person === 'test'" :entries="shown" />
         <ul v-else class="pr-tree" data-pr-tree>
             <ProbeNode v-for="root in tree.roots" :key="root.id" :node="root" />
         </ul>
@@ -175,6 +280,10 @@ const hasContent = computed(() => (person.value === 'test' ? timeline.value.entr
 .pr-start { display: inline-flex; align-items: center; gap: 0.5rem; }
 .pr-start__label { font-size: 0.8rem; color: var(--color-gray-600); white-space: nowrap; }
 .dark .pr-start__label { color: var(--color-gray-400); }
+.pr-who { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem 1.25rem; margin: -0.25rem 0 1rem; }
+.pr-ran { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.25rem 0.9rem; margin: 0; padding: 0; border: 0; min-width: 0; }
+.pr-standing { margin: -0.4rem 0 0.9rem; font-size: 0.8rem; color: var(--color-gray-700); }
+.dark .pr-standing { color: var(--color-gray-300); }
 .pr-status { font-size: 0.875rem; color: var(--color-gray-600); }
 .pr-tree { margin: 0; padding: 0; }
 .pr-tree > .pr-node { padding-bottom: 0.4rem; margin-bottom: 0.4rem; border-bottom: 1px solid var(--color-gray-100); }

@@ -89,7 +89,17 @@ export const ICONS = {
     more: 'dots',
     fork: 'split-window',
     decision: 'git',
+    action: 'user-avatar',
 };
+
+const ACTION_ICONS = { buy: 'shopping-cart', click: 'link', unsubscribe: 'x' };
+
+/** The icon of one line: by its kind, and for what the person does by what she does. */
+export function iconFor(entry) {
+    if (entry.kind === 'action') return ACTION_ICONS[entry.meta?.action] ?? ICONS.action;
+
+    return ICONS[entry.kind] ?? null;
+}
 
 /**
  * The entries of a known person's way, grouped by the day they fall on, in order.
@@ -158,4 +168,48 @@ export function linkTarget(url) {
     }
 
     return { goal: url, wrapped: null };
+}
+
+/**
+ * The entries up to and including a day: "fast forward" to where the person stands on that day.
+ *
+ * @param {{ day: number }[]} entries
+ * @param {number|null} day null is the whole way
+ */
+export function untilDay(entries, day) {
+    return day === null || day === undefined ? entries : entries.filter((e) => e.day <= day);
+}
+
+/**
+ * Where the person stands after these entries: the mails she has got, the access she was given, the
+ * purchases and unsubscribes she made.
+ *
+ * @param {{ kind: string, meta?: object, label: string }[]} entries
+ */
+export function standing(entries) {
+    const access = [];
+    let mails = 0;
+    let purchases = 0;
+    let unsubscribed = false;
+
+    for (const e of entries) {
+        if (e.kind === 'mail') mails++;
+        if (e.kind === 'access' && e.meta?.slug && !access.includes(e.meta.slug)) access.push(e.meta.slug);
+        if (e.kind === 'action' && e.meta?.action === 'buy') purchases++;
+        if (e.kind === 'action' && e.meta?.action === 'unsubscribe') unsubscribed = true;
+    }
+
+    return { mails, access, purchases, unsubscribed };
+}
+
+/** Plain words from a comma list, as the person editor sends them. */
+export function words(list) {
+    return String(list ?? '').split(',').map((w) => w.trim()).filter(Boolean);
+}
+
+/** The actions as the server reads them: what she does after which mail. */
+export function encodeActions(actions) {
+    return JSON.stringify(actions.map((a) => ({
+        type: a.type, mail: a.mail, product: a.product ?? null, url: a.url ?? null, after_seconds: a.after_seconds ?? 0,
+    })));
 }

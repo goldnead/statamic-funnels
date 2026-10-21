@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added: Probelauf, the test person's conditions (part 4: tags, access, purchase, unsubscribe, fast forward, why)
+
+The test person can be described: her **tags** (`contact.tags`, what a condition reads), the **access** she holds and the
+automations she has **already been through**; her way is planned again. In the mailbox the operator lets her do something
+after a mail: **buy** a product of the map (handed to the product, which hands its access on), **click** a link, or
+**unsubscribe** (marketing mails after it do not go out). **Fast forward** ("Stand nach Tag n") shows where she stands on
+a day (mails received, access, purchases). **Why?** under a line lists what it was reached through and what was decided.
+The person lives in the request and nowhere else: nothing about her is stored and no real person is read (the person from
+the CRM is not part of this part). The mail is written for the same person the way was planned for. Needs brand-context 1.24.
+
 ### Added: Probelauf mailbox (part 3: the mails the test person gets)
 
 Next to the timeline the test person has a **Postfach**: every mail that goes out on her way, in order, and the one she

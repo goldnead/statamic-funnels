@@ -5,6 +5,7 @@ namespace Goldnead\StatamicFunnels\Http\Controllers\Cp;
 use DomainException;
 use Goldnead\BrandContext\Map\MapObjectRegistry;
 use Goldnead\BrandContext\Map\MapPeriod;
+use Goldnead\BrandContext\Simulation\SimAction;
 use Goldnead\BrandContext\Simulation\SimPerson;
 use Goldnead\BrandContext\Simulation\Simulator;
 use Goldnead\StatamicFunnels\Models\Landkarte;
@@ -247,6 +248,7 @@ class LandkarteController extends CpController
         $data = $request->validate([
             'person' => ['nullable', 'in:unknown,test'],
             'start' => ['nullable', 'string', 'max:300'],
+            ...$this->personRules(),
         ]);
 
         $built = $this->graph->build($landkarte, MapPeriod::lastDays(30));
@@ -266,8 +268,9 @@ class LandkarteController extends CpController
 
             abort_if($chosen === null && ($data['start'] ?? null) !== null, 422);
 
+            $who = $this->personFrom($data);
             $timeline = $chosen
-                ? $simulator->timeline($nodes, $edges, ['type' => $chosen['type'], 'id' => $chosen['id'], 'event' => $chosen['event']], SimPerson::known(), User::current())
+                ? $simulator->timeline($nodes, $edges, ['type' => $chosen['type'], 'id' => $chosen['id'], 'event' => $chosen['event']], $who, User::current())
                 : ['entries' => [], 'stats' => ['entries' => 0, 'days' => [], 'cut' => 0]];
 
             return response()->json([
@@ -276,6 +279,15 @@ class LandkarteController extends CpController
                 'start' => $chosen['key'] ?? null,
                 'entries' => $timeline['entries'],
                 'stats' => $timeline['stats'],
+                // What the page may offer the person to do or to have: the products and automations the map shows.
+                'products' => collect($built['nodes'])->where('type', 'product')->reject(fn (array $n) => $n['ghost'] ?? false)->map(fn (array $n) => ['key' => 'product:'.$n['ref_id'], 'label' => $n['label']])->values()->all(),
+                'automations' => collect($built['nodes'])->where('type', 'automation')->reject(fn (array $n) => $n['ghost'] ?? false)->map(fn (array $n) => ['id' => (string) $n['ref_id'], 'label' => $n['label']])->values()->all(),
+                'state' => [
+                    'tags' => $who->traits['contact.tags'] ?? [],
+                    'access' => $who->access,
+                    'ran' => $who->ran,
+                    'actions' => array_map(fn (SimAction $a) => $a->toArray(), $who->actions),
+                ],
             ]);
         }
 
@@ -298,11 +310,71 @@ class LandkarteController extends CpController
     }
 
     /**
+     * What a request may say about the test person. Short lists of plain words and one small JSON list of
+     * actions; everything is capped again when it is read ({@see personFrom()}).
+     *
+     * @return array<string, list<string>>
+     */
+    protected function personRules(): array
+    {
+        return [
+            'tags' => ['nullable', 'string', 'max:500'],
+            'access' => ['nullable', 'string', 'max:500'],
+            'ran' => ['nullable', 'array', 'max:20'],
+            'ran.*' => ['string', 'max:191'],
+            'actions' => ['nullable', 'string', 'max:6000'],
+        ];
+    }
+
+    /**
+     * The test person the request describes: her tags (`contact.tags`, what a condition reads), the access she
+     * holds, the automations she has been through, and what she does after which mail. The person lives in
+     * the request and in nobody's database: nothing about her is stored, and no real person is read.
+     *
+     * @param  array<string, mixed>  $data  validated by {@see personRules()}
+     */
+    protected function personFrom(array $data): SimPerson
+    {
+        $words = fn (?string $list, int $max) => collect(explode(',', (string) $list))
+            ->map(fn (string $w) => mb_substr(trim($w), 0, 64))
+            ->filter()
+            ->unique()
+            ->take($max)
+            ->values()
+            ->all();
+
+        $actions = [];
+
+        if (isset($data['actions']) && $data['actions'] !== '') {
+            $decoded = json_decode((string) $data['actions'], true);
+
+            abort_unless(is_array($decoded), 422);
+
+            foreach (array_slice($decoded, 0, SimAction::MAX) as $row) {
+                $action = is_array($row) ? SimAction::fromArray($row) : null;
+
+                if ($action !== null) {
+                    $actions[] = $action;
+                }
+            }
+        }
+
+        $tags = $words($data['tags'] ?? null, 20);
+
+        return SimPerson::known(
+            $tags === [] ? [] : ['contact.tags' => $tags],
+            $words($data['access'] ?? null, 20),
+            array_slice(array_values(array_filter(array_map(fn ($h) => is_string($h) ? mb_substr(trim($h), 0, 191) : '', (array) ($data['ran'] ?? [])))), 0, 20),
+            $actions,
+        );
+    }
+
+    /**
      * The map as the planner reads it: the objects (without the ghosts of things that are gone) and the
      * connections between them.
      *
      * @param  array<string, mixed>  $built  {@see LandkarteGraph::build()}
-     * @return array{0: list<array{type: string, id: string}>, 1: list<array{from_type: string, from_id: string, to_type: string, to_id: string, kind: string}>}
+     * @return array{0: list<array{type: string, id: string}>, 1: list<array{from_type: string, from_id: string, to_type: string, to_id: string, kind: string, label: string}>}
      */
     protected function probeInput(array $built): array
     {
@@ -317,7 +389,7 @@ class LandkarteController extends CpController
                 [$fromType, $fromId] = explode(':', $e['source'], 2);
                 [$toType, $toId] = explode(':', $e['target'], 2);
 
-                return ['from_type' => $fromType, 'from_id' => $fromId, 'to_type' => $toType, 'to_id' => $toId, 'kind' => $e['kind']];
+                return ['from_type' => $fromType, 'from_id' => $fromId, 'to_type' => $toType, 'to_id' => $toId, 'kind' => $e['kind'], 'label' => (string) ($e['label'] ?? '')];
             })
             ->all();
 
@@ -342,6 +414,7 @@ class LandkarteController extends CpController
             // What the client saw under that entry. The way is planned again for every request, so an entry's
             // place can move if the map changed in between: a mail under another name is not handed out.
             'label' => ['required', 'string', 'max:300'],
+            ...$this->personRules(),
         ]);
 
         $built = $this->graph->build($landkarte, MapPeriod::lastDays(30));
@@ -353,7 +426,7 @@ class LandkarteController extends CpController
 
         abort_if($chosen === null, 422);
 
-        $person = SimPerson::known();
+        $person = $this->personFrom($data);
         $timeline = $simulator->timeline($nodes, $edges, ['type' => $chosen['type'], 'id' => $chosen['id'], 'event' => $chosen['event']], $person, User::current());
         $entry = collect($timeline['entries'])->firstWhere('id', $data['entry']);
 
@@ -585,7 +658,7 @@ class LandkarteController extends CpController
             'map_disconnect', 'map_connect_conflict', 'map_dead_stub_help', 'map_details_loading', 'map_details_failed', 'map_details_restricted', 'map_details_more',
             'probe_tab_map', 'probe_tab_probe', 'probe_title', 'probe_title_test', 'probe_help', 'probe_help_test', 'probe_loading', 'probe_failed', 'probe_empty', 'probe_summary',
             'probe_unreached', 'probe_expand', 'probe_collapse', 'probe_now', 'probe_day', 'probe_hours', 'probe_minutes', 'probe_unavailable',
-            'probe_person_unknown', 'probe_person_test', 'probe_lens_label', 'probe_lens_timeline', 'probe_lens_mailbox', 'probe_mail_from_none', 'probe_mailbox_empty', 'probe_mail_select', 'probe_mail_failed', 'probe_mail_none', 'probe_mail_loading', 'probe_mail_from', 'probe_mail_subject', 'probe_mail_images_one', 'probe_mail_images_many', 'probe_mail_links', 'probe_mail_links_help', 'probe_mail_frame', 'probe_person_label', 'probe_start_label', 'probe_start_none', 'probe_timeline_empty', 'probe_timeline_summary', 'probe_kind_decision', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
+            'probe_person_unknown', 'probe_person_test', 'probe_lens_label', 'probe_why', 'probe_tags_label', 'probe_tags_placeholder', 'probe_access_label', 'probe_access_placeholder', 'probe_ran_label', 'probe_until_label', 'probe_until_all', 'probe_until_day', 'probe_standing', 'probe_standing_access', 'probe_standing_unsub', 'probe_action_title', 'probe_action_buy', 'probe_action_click', 'probe_action_unsub', 'probe_action_product', 'probe_action_link', 'probe_action_after', 'probe_action_days', 'probe_action_add', 'probe_action_remove', 'probe_action_no_products', 'probe_action_no_links', 'probe_action_help', 'probe_kind_action', 'probe_lens_timeline', 'probe_lens_mailbox', 'probe_mail_from_none', 'probe_mailbox_empty', 'probe_mail_select', 'probe_mail_failed', 'probe_mail_none', 'probe_mail_loading', 'probe_mail_from', 'probe_mail_subject', 'probe_mail_images_one', 'probe_mail_images_many', 'probe_mail_links', 'probe_mail_links_help', 'probe_mail_frame', 'probe_person_label', 'probe_start_label', 'probe_start_none', 'probe_timeline_empty', 'probe_timeline_summary', 'probe_kind_decision', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
             'probe_kind_stop', 'probe_kind_unknown', 'probe_kind_fork', 'probe_kind_rejoin', 'probe_kind_denied', 'probe_kind_more', 'probe_kind_trait',
         ];
 

@@ -2,6 +2,7 @@
 import { computed, inject, ref, watch } from 'vue';
 import { Alert, Icon } from '@statamic/cms/ui';
 import { linkTarget } from '../../support/probelauf.js';
+import ProbeActions from './ProbeActions.vue';
 
 /**
  * The mailbox of the test person: every mail that goes out on her way, in order, and the one she opens.
@@ -14,12 +15,19 @@ const props = defineProps({
     entries: { type: Array, default: () => [] },
     mailUrl: { type: String, required: true },
     start: { type: String, default: null },
+    // The person as the page describes her: the query that plans her way is also the one that writes her mail.
+    personQuery: { type: Function, default: () => (url) => url },
+    products: { type: Array, default: () => [] },
+    actions: { type: Array, default: () => [] },
 });
+
+const emit = defineEmits(['add-action', 'remove-action']);
 
 const probe = inject('probelauf');
 
 const mails = computed(() => props.entries.filter((e) => e.kind === 'mail'));
 const selected = ref(null);
+const selectedKey = ref(null);
 const state = ref('idle');
 const mail = ref(null);
 
@@ -27,12 +35,14 @@ let ticket = 0;
 
 async function open(entry) {
     selected.value = entry.id;
+    selectedKey.value = entry.meta?.mail_key ?? null;
     const mine = ++ticket;
     state.value = 'loading';
     mail.value = null;
 
     try {
         const url = new URL(props.mailUrl, window.location.origin);
+        props.personQuery(url);
         url.searchParams.set('start', props.start ?? '');
         url.searchParams.set('entry', entry.id);
         url.searchParams.set('label', entry.label);
@@ -61,10 +71,21 @@ async function open(entry) {
     }
 }
 
-// A new way (another start) is another mailbox: nothing stays open that is not in it.
+// The way is planned again after every change of the person. What was open stays open when the same mail is still
+// on the way (by its name in the simulation); a mail that is gone is closed.
 watch(() => props.entries, () => {
+    const key = selectedKey.value;
+    const again = key ? mails.value.find((e) => e.meta?.mail_key === key) : null;
+
+    if (again) {
+        open(again);
+
+        return;
+    }
+
     ticket++;
     selected.value = null;
+    selectedKey.value = null;
     mail.value = null;
     state.value = 'idle';
 });
@@ -149,6 +170,16 @@ const imagesNote = computed(() => {
                             </li>
                         </ul>
                     </div>
+
+                    <ProbeActions
+                        v-if="selectedKey"
+                        :mail-key="selectedKey"
+                        :links="mail.links"
+                        :products="products"
+                        :actions="actions"
+                        @add="emit('add-action', $event)"
+                        @remove="emit('remove-action', $event)"
+                    />
                 </template>
             </div>
         </template>

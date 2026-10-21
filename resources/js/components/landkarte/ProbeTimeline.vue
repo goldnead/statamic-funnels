@@ -1,7 +1,7 @@
 <script setup>
-import { computed, inject } from 'vue';
+import { computed, inject, ref } from 'vue';
 import { Icon } from '@statamic/cms/ui';
-import { ICONS, groupByDay } from '../../support/probelauf.js';
+import { groupByDay, iconFor } from '../../support/probelauf.js';
 
 /**
  * The way of one known person, as a timeline: every step in the order it happens, under the day it
@@ -13,7 +13,12 @@ const props = defineProps({
 
 const probe = inject('probelauf');
 const days = computed(() => groupByDay(props.entries));
+// Which lines have their reasons open.
+const open = ref({});
+const toggle = (id) => { open.value = { ...open.value, [id]: !open.value[id] }; };
 const QUIET = ['wait', 'decision', 'unknown', 'denied', 'stop', 'rejoin', 'more'];
+// Only what the person did or what was done for her has reasons worth asking for.
+const asksWhy = (entry) => entry.why?.length > 0 && !['enter', 'wait', 'more'].includes(entry.kind);
 </script>
 
 <template>
@@ -28,12 +33,23 @@ const QUIET = ['wait', 'decision', 'unknown', 'denied', 'stop', 'rejoin', 'more'
                     :class="[`pt-row--${entry.kind}`, QUIET.includes(entry.kind) && 'pt-row--quiet']"
                     :data-pt-kind="entry.kind"
                 >
-                    <Icon v-if="ICONS[entry.kind]" :name="ICONS[entry.kind]" class="pt-icon size-4" :title="probe.t(`probe_kind_${entry.kind}`, '')" />
+                    <Icon v-if="iconFor(entry)" :name="iconFor(entry)" class="pt-icon size-4" :title="probe.t(`probe_kind_${entry.kind}`, '')" />
                     <span v-if="entry.kind === 'enter'" class="pt-type">{{ entry.detail }}</span>
                     <span class="pt-label">{{ entry.label }}</span>
                     <span v-if="entry.kind !== 'enter' && entry.detail" class="pt-detail">{{ entry.detail }}</span>
                     <span v-if="entry.note" class="pt-detail">{{ entry.note }}</span>
+                    <button
+                        v-if="asksWhy(entry)"
+                        type="button"
+                        class="pt-why"
+                        :aria-expanded="Boolean(open[entry.id])"
+                        :data-pt-why="entry.id"
+                        @click="toggle(entry.id)"
+                    >{{ probe.t('probe_why') }}</button>
                     <span v-if="probe.timeInDay(entry.at)" class="pt-time">{{ probe.timeInDay(entry.at) }}</span>
+                    <ol v-if="open[entry.id]" class="pt-reasons" data-pt-reasons>
+                        <li v-for="(reason, i) in entry.why" :key="i">{{ reason }}</li>
+                    </ol>
                 </li>
             </ul>
         </li>
@@ -60,6 +76,13 @@ const QUIET = ['wait', 'decision', 'unknown', 'denied', 'stop', 'rejoin', 'more'
 .pt-time { margin-left: auto; padding-left: 1rem; font-size: 0.75rem; color: var(--color-gray-600); white-space: nowrap; }
 .dark .pt-time { color: var(--color-gray-400); }
 .pt-row { padding-left: 1.4rem; }
+.pt-why { padding: 0 0.2rem; background: transparent; border: 0; font-size: 0.75rem; color: var(--color-gray-600); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.pt-why:hover { color: var(--color-gray-900); }
+.dark .pt-why { color: var(--color-gray-400); }
+.dark .pt-why:hover { color: var(--color-gray-100); }
+.pt-why:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; border-radius: 2px; }
+.pt-reasons { flex-basis: 100%; margin: 0.2rem 0 0.2rem 1.5rem; padding: 0 0 0 1rem; font-size: 0.78rem; color: var(--color-gray-600); border-left: 1px solid var(--color-gray-200); }
+.dark .pt-reasons { color: var(--color-gray-400); border-left-color: var(--color-gray-700); }
 .pt-row--enter { padding-top: 0.55rem; padding-left: 0; }
 .pt-row--enter .pt-label { font-weight: 600; }
 .pt-row--quiet { color: var(--color-gray-600); }

@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { groupByDay, linkTarget, mailFork, splitNode, startsOpen, timeInDay, timeWords } from '../../resources/js/support/probelauf.js';
+import { encodeActions, groupByDay, linkTarget, mailFork, splitNode, standing, startsOpen, timeInDay, timeWords, untilDay, words as plainWords } from '../../resources/js/support/probelauf.js';
 
 const words = {
     probe_now: 'sofort',
@@ -140,4 +140,36 @@ test('a tracked link shows its goal, the wrapper only as a note', () => {
     assert.deepEqual(linkTarget('mailto:hallo@site.test'), { goal: 'mailto:hallo@site.test', wrapped: null });
     // A parameter that is not an address is no goal.
     assert.deepEqual(linkTarget('https://site.test/a?to=berlin'), { goal: 'https://site.test/a?to=berlin', wrapped: null });
+});
+
+test('fast forward keeps what happened up to a day, and none means the whole way', () => {
+    const entries = [{ day: 0, id: 'a' }, { day: 2, id: 'b' }, { day: 5, id: 'c' }];
+
+    assert.deepEqual(untilDay(entries, 2).map((e) => e.id), ['a', 'b']);
+    assert.deepEqual(untilDay(entries, 0).map((e) => e.id), ['a']);
+    assert.equal(untilDay(entries, null).length, 3);
+});
+
+test('where the person stands: mails, access, purchases, unsubscribed', () => {
+    const entries = [
+        { kind: 'mail', label: 'a' }, { kind: 'mail', label: 'b' },
+        { kind: 'access', meta: { slug: 'kurs' } }, { kind: 'access', meta: { slug: 'kurs' } }, { kind: 'access', meta: { slug: 'extra' } },
+        { kind: 'action', meta: { action: 'buy' } }, { kind: 'action', meta: { action: 'click' } }, { kind: 'action', meta: { action: 'unsubscribe' } },
+    ];
+
+    assert.deepEqual(standing(entries), { mails: 2, access: ['kurs', 'extra'], purchases: 1, unsubscribed: true });
+    assert.deepEqual(standing([]), { mails: 0, access: [], purchases: 0, unsubscribed: false });
+});
+
+test('a comma list becomes plain words', () => {
+    assert.deepEqual(plainWords(' chor , solo,, '), ['chor', 'solo']);
+    assert.deepEqual(plainWords(''), []);
+    assert.deepEqual(plainWords(null), []);
+});
+
+test('actions go to the server in the shape it reads', () => {
+    assert.equal(
+        encodeActions([{ type: 'buy', mail: 'a|b', product: 'product:p', after_seconds: 86400, extra: 'dropped' }]),
+        '[{"type":"buy","mail":"a|b","product":"product:p","url":null,"after_seconds":86400}]',
+    );
 });
