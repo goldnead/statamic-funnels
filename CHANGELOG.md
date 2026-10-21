@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.36.0 — 2026-10-21
+
 ### Added: `page_preview.address_field` for pages with no route
 
 A site whose pages are served by its own controllers has collections with no route: `Entry::url()` is null and the Probelauf said "The
