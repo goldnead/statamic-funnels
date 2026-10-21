@@ -311,6 +311,19 @@ class ProbelaufSeiteTest extends TestCase
         $seen = [];
 
         Http::fake(function ($request) use (&$seen) {
+            // The site's own files: a stylesheet that names a font and a mask image (one of them relative), and the files.
+            if (str_ends_with($request->url(), '/build/app.css')) {
+                return Http::response('@font-face{font-family:A;src:url(/fonts/a.woff2) format("woff2")} .s{mask-image:url(../img/s.svg)} .h{background:url(/img/hero.jpg)} .x{background:url(https://evil.example/t.png)}', 200, ['Content-Type' => 'text/css']);
+            }
+
+            if (str_ends_with($request->url(), '/fonts/a.woff2')) {
+                return Http::response('FONTDATA', 200, ['Content-Type' => 'font/woff2']);
+            }
+
+            if (str_ends_with($request->url(), '/img/s.svg')) {
+                return Http::response('<svg xmlns="http://www.w3.org/2000/svg"/>', 200, ['Content-Type' => 'image/svg+xml']);
+            }
+
             // What the application's server-side rendering answers: the page drawn, its own script, the data it hydrates from.
             $seen = ['url' => $request->url(), 'host' => $request->header('Host')[0] ?? null, 'pass' => $request->header(PagePreviewToken::HEADER)[0] ?? null];
 
@@ -329,7 +342,14 @@ class ProbelaufSeiteTest extends TestCase
         $this->assertStringNotContainsString('modulepreload', $page['html']);
         $this->assertStringNotContainsString('data-page', $page['html']);
         $this->assertStringNotContainsString('geheim', $page['html']);
-        $this->assertStringContainsString('href="/build/app.css"', $page['html']);
+        // The stylesheet is in the page, with the font and the vector image as data (the frame has no origin, so a CORS-less font would
+        // not load); a raster image stays a link to the site, another origin's file is left alone.
+        $this->assertStringNotContainsString('href="/build/app.css"', $page['html']);
+        $this->assertStringContainsString('<style>', $page['html']);
+        $this->assertStringContainsString('url("data:font/woff2;base64,'.base64_encode('FONTDATA').'")', $page['html']);
+        $this->assertStringContainsString('url("data:image/svg+xml;base64,', $page['html']);
+        $this->assertStringContainsString('url("http://localhost/img/hero.jpg")', $page['html']);
+        $this->assertStringContainsString('https://evil.example/t.png', $page['html']);
         $this->assertSame([['text' => 'Kontakt', 'url' => '/kontakt']], $page['links']);
 
         // Asked at the entry's own path on the site's own host, with a pass for that path, and nothing else.
@@ -337,7 +357,9 @@ class ProbelaufSeiteTest extends TestCase
         $this->assertSame('localhost', $seen['host']);
         $this->assertIsString($seen['pass']);
         $this->assertNotSame('', $seen['pass']);
-        Http::assertSentCount(1);
+        // The page itself, the stylesheet, the font and the vector image: four requests, all of them to the site.
+        Http::assertSentCount(4);
+        Http::assertSent(fn ($request) => str_starts_with($request->url(), 'http://localhost/'));
 
         // The pass is gone when the answer is in; and no visit, no event.
         $this->assertSame($before, $this->counts());
@@ -449,6 +471,37 @@ class ProbelaufSeiteTest extends TestCase
         $status = 404;
         $this->assertSame(PagePreview::NOT_A_PAGE, app(PagePreview::class)->render($app->id())['reason']);
         $this->assertSame($tokens, $this->counts()['tokens']);
+    }
+
+    #[Test]
+    public function a_stylesheet_that_could_end_its_style_element_or_is_not_css_is_not_put_into_the_page(): void
+    {
+        $this->page('app-seite');
+        $app = Entry::query()->where('slug', 'app-seite')->first();
+
+        $now = [];
+
+        // One fake for the whole test (a second `Http::fake()` would not replace the first); `$now` says what it answers.
+        Http::fake(function ($request) use (&$now) {
+            return str_ends_with($request->url(), $now[0])
+                ? Http::response($now[1], 200, ['Content-Type' => $now[2]])
+                : Http::response('<html><head><link rel="stylesheet" href="'.$now[0].'"></head><body><p>Seite</p></body></html>', 200, ['Content-Type' => 'text/html']);
+        });
+
+        foreach ([
+            ['/b/hostile.css', 'body{color:red}</style><img src=x onerror=alert(1)><style>', 'text/css'],
+            ['/b/comment.css', 'body{color:red}<!-- x', 'text/css'],
+            ['/b/html.css', '<html>not css</html>', 'text/html'],
+        ] as [$href, $body, $type]) {
+            $now = [$href, $body, $type];
+
+            $page = app(PagePreview::class)->render($app->id());
+
+            // Not taken in: the link stays as it was (the frame loads it as a plain stylesheet), and nothing of the file is in the page.
+            $this->assertStringContainsString('href="'.$href.'"', $page['html'], $href);
+            $this->assertStringNotContainsString('<style>', $page['html'], $href);
+            $this->assertStringNotContainsString('onerror', $page['html'], $href);
+        }
     }
 
     #[Test]
@@ -764,8 +817,9 @@ class ProbelaufSeiteTest extends TestCase
         $this->assertStringContainsString('<h1>Masterclass</h1>', $json['html']);
         $this->assertCount(7, $json['links']);
         $this->assertSame($before, $this->counts());
-        // Nothing asked of the network: no link of the page, no tracking host, no stylesheet.
-        Http::assertNothingSent();
+        // Nothing asked of the network but the site's own stylesheet: no link of the page, no tracking host.
+        Http::assertSent(fn ($request) => str_starts_with($request->url(), 'http://localhost/'));
+        $this->assertCount(0, Http::recorded(fn ($request) => ! str_starts_with($request->url(), 'http://localhost/')));
         $this->assertSame([], $writes);
     }
 

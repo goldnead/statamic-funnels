@@ -570,8 +570,9 @@ class LandkarteController extends CpController
     }
 
     /**
-     * One page of the test person's way, as she would see it. Rendered on the server from the Statamic entry the way
-     * names, never requested over the network, and on a request that is only a look: it is no visit, no step event, no
+     * One page of the test person's way, as she would see it. Rendered on the server: a Statamic entry in the process,
+     * a page the application builds itself (server-side rendering) over a request of its own to the site with a pass that
+     * marks it as a look; either way on a request that is only a look: it is no visit, no step event, no
      * share-out of a split test, and no tracking code reaches the page (see {@see PagePreview}). The markup comes back
      * made safe, for an iframe with an empty `sandbox`; a page that cannot be built that way answers what it can say
      * instead (its address, the picture of a funnel step that shows it) and why.
