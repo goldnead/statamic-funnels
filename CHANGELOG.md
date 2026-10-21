@@ -13,6 +13,8 @@ itself, never by what the client says, and only a mail the user may see is writt
 Shown in a real browser with a hostile mail: zero requests with the policy and sandbox, six without them (image, script,
 stylesheet, fetch, frame, click). Mails of lead magnets have no preview yet ("no preview in the dry run yet").
 
+## 1.31.0 — 2026-10-21
+
 ### Added: Probelauf with a test person (part 2: the way by day)
 
 The Probelauf tab has a second view: **Testperson**. Pick a start (a lead magnet asked for, a product bought, or a
