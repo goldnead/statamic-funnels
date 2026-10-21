@@ -89,7 +89,17 @@ export const ICONS = {
     more: 'dots',
     fork: 'split-window',
     decision: 'git',
+    action: 'user-avatar',
 };
+
+const ACTION_ICONS = { buy: 'shopping-cart', click: 'link', unsubscribe: 'x' };
+
+/** The icon of one line: by its kind, and for what the person does by what she does. */
+export function iconFor(entry) {
+    if (entry.kind === 'action') return ACTION_ICONS[entry.meta?.action] ?? ICONS.action;
+
+    return ICONS[entry.kind] ?? null;
+}
 
 /**
  * The entries of a known person's way, grouped by the day they fall on, in order.
@@ -158,4 +168,96 @@ export function linkTarget(url) {
     }
 
     return { goal: url, wrapped: null };
+}
+
+/**
+ * The entries up to and including a day: "fast forward" to where the person stands on that day.
+ *
+ * @param {{ day: number }[]} entries
+ * @param {number|null} day null is the whole way
+ */
+export function untilDay(entries, day) {
+    return day === null || day === undefined ? entries : entries.filter((e) => e.day <= day);
+}
+
+/**
+ * Where the person stands after these entries: the mails she has got, the access she was given, the
+ * purchases and unsubscribes she made.
+ *
+ * @param {{ kind: string, meta?: object, label: string }[]} entries
+ */
+export function standing(entries) {
+    const access = [];
+    let mails = 0;
+    let purchases = 0;
+    let unsubscribed = false;
+
+    for (const e of entries) {
+        if (e.kind === 'mail') mails++;
+        if (e.kind === 'access' && e.meta?.slug && !access.includes(e.meta.slug)) access.push(e.meta.slug);
+        if (e.kind === 'action' && e.meta?.action === 'buy') purchases++;
+        if (e.kind === 'action' && e.meta?.action === 'unsubscribe') unsubscribed = true;
+    }
+
+    return { mails, access, purchases, unsubscribed };
+}
+
+/** Plain words from a comma list, as the person editor sends them. */
+export function words(list) {
+    return String(list ?? '').split(',').map((w) => w.trim()).filter(Boolean);
+}
+
+/** The actions as the server reads them: what she does after which mail. */
+export function encodeActions(actions) {
+    return JSON.stringify(actions.map((a) => ({
+        type: a.type, mail: a.mail, product: a.product ?? null, url: a.url ?? null, after_seconds: a.after_seconds ?? 0,
+    })));
+}
+
+/**
+ * What the person has, read off her way: the access she was given (with the day) and, for each course she
+ * got into, its lessons with the day each one opens.
+ *
+ * A course is any entry that names `meta.course`; its lessons name the same `meta.course` and `meta.lesson`.
+ * A lesson of unknown opening (after a payment, paused) is `later: null`.
+ *
+ * @param {{ kind: string, label: string, detail: string|null, day: number, at: number, meta?: object }[]} entries
+ * @returns {{ access: { slug: string, label: string, day: number }[], courses: { id: string, title: string, day: number, lessons: object[] }[] }}
+ */
+export function accountOf(entries) {
+    const access = [];
+    const courses = new Map();
+
+    for (const e of entries) {
+        const course = e.meta?.course;
+
+        // Access she was given: by its slug, else by what the line says (an access line of an addon that names no slug is still access).
+        if (e.kind === 'access' && !course) {
+            const slug = e.meta?.slug ?? e.label;
+
+            if (!access.some((a) => a.slug === slug)) access.push({ slug, label: e.label, day: e.day });
+        }
+
+        if (!course) continue;
+
+        if (e.kind === 'access' && !courses.has(course)) {
+            courses.set(course, { id: course, title: e.label, day: e.day, lessons: [] });
+        } else if (e.meta?.lesson) {
+            if (!courses.has(course)) courses.set(course, { id: course, title: course, day: e.day, lessons: [] });
+            courses.get(course).lessons.push({
+                slug: e.meta.lesson,
+                title: e.label,
+                detail: e.detail,
+                // A lesson whose opening is not known (after a payment, paused) is an unknown line: no day.
+                day: e.kind === 'page' ? e.day : null,
+            });
+        }
+    }
+
+    return { access, courses: [...courses.values()] };
+}
+
+/** The pages on the way: a page line that is no lesson. */
+export function pagesOf(entries) {
+    return entries.filter((e) => e.kind === 'page' && !e.meta?.lesson);
 }

@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### Added: Probelauf, "as for a real person" (part 4, the CRM person; read only)
+
+Besides the made-up test person the dry run can copy a real one: **Wie bei einer echten Person** finds her in the CRM
+(`GET landkarten/{id}/probelauf/persons?q=…`, at least two characters) and copies what every addon that knows her says and that
+the user may read (`?like=…`): tags and traits (status, custom fields), the access she holds, the automations she has been through, and whether she asked not
+to be written to. The copy fills the form of the test person and stays editable; the way is planned from the form. Read only:
+nothing about her is changed, sent or saved, and no name or address is logged. Each addon decides with its own right (what the user may not read from one is
+left out, the rest still comes). The "has unsubscribed" flag silences marketing mails from the start of her way. Only offered when an addon
+that knows real people is installed (brand-context 1.25; LeadHub, entitlements and automations register themselves).
+
+### Added: Probelauf account and pages (part 5)
+
+Two more views of the test person's way. **Account** lists what she was given (access with its day) and, for each course she got into,
+its lessons with the day each one opens (the courses addon works that out with its drip schedule on an enrollment that exists only
+in memory). **Seiten** lists the pages on her way (title, address, day); a page that is a step of a funnel hands the person on into the
+funnel. The pages are listed, not rendered: a preview would be a request to the page (counted by whatever counts visits there) or a
+preview pass written to the token store, and the dry run does neither. A page entry now answers the dry run (`EntryMapObjects`:
+a live page is a page line, a draft is a 404, a missing one is unknown).
+
+### Added: Probelauf, the test person's conditions (part 4: tags, access, purchase, unsubscribe, fast forward, why)
+
+The test person can be described: her **tags** (`contact.tags`, what a condition reads), the **access** she holds and the
+automations she has **already been through**; her way is planned again. In the mailbox the operator lets her do something
+after a mail: **buy** a product of the map (handed to the product, which hands its access on), **click** a link, or
+**unsubscribe** (marketing mails after it do not go out). **Fast forward** ("Stand nach Tag n") shows where she stands on
+a day (mails received, access, purchases). **Why?** under a line lists what it was reached through and what was decided.
+The person lives in the request and nowhere else: nothing about her is stored and no real person is read (copying one from the CRM is the next entry). The mail is written for the same person the way was planned for. Needs brand-context 1.24.
+
 ## 1.32.0 — 2026-10-21
 
 ### Added: Probelauf mailbox (part 3: the mails the test person gets)

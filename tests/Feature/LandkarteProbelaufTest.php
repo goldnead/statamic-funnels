@@ -5,12 +5,14 @@ namespace Goldnead\StatamicFunnels\Tests\Feature;
 use Carbon\CarbonImmutable;
 use Goldnead\BrandContext\Contracts\ProvidesMapEdges;
 use Goldnead\BrandContext\Contracts\ProvidesMapObjects;
+use Goldnead\BrandContext\Contracts\ProvidesSimPersons;
 use Goldnead\BrandContext\Map\MapEdge;
 use Goldnead\BrandContext\Map\MapMetric;
 use Goldnead\BrandContext\Map\MapObject;
 use Goldnead\BrandContext\Map\MapObjectRegistry;
 use Goldnead\BrandContext\Map\MapPeriod;
 use Goldnead\BrandContext\Simulation\Effect;
+use Goldnead\BrandContext\Simulation\PersonSources;
 use Goldnead\BrandContext\Simulation\SimEvent;
 use Goldnead\BrandContext\Simulation\SimPerson;
 use Goldnead\BrandContext\Simulation\Simulator;
@@ -18,6 +20,7 @@ use Goldnead\StatamicFunnels\Models\Landkarte;
 use Goldnead\StatamicFunnels\Tests\TestCase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
@@ -91,9 +94,23 @@ class ProbeAutomations extends ProbeFakeObjects implements ProvidesMapEdges
 
     public function react(string $id, SimEvent $event, SimPerson $person, CarbonImmutable $at): array
     {
-        return $id === 'welcome'
-            ? Effect::chain([Effect::mail('Welcome', null, 0, ['node' => 'm1']), Effect::wait('after 2 days', 2 * 86400), Effect::mail('Follow-up', null, 0, ['node' => 'm2'])])
-            : [Effect::mail('Thank you', null, 0, ['node' => 'm3'])];
+        if ($id !== 'welcome') {
+            return [Effect::mail('Thank you', null, 0, ['node' => 'm3'])];
+        }
+
+        // Nobody known: the way as it was. A known person gets one more mail that a tag decides.
+        if (! $person->isKnown()) {
+            return Effect::chain([Effect::mail('Welcome', null, 0, ['node' => 'm1']), Effect::wait('after 2 days', 2 * 86400), Effect::mail('Follow-up', null, 0, ['node' => 'm2'])]);
+        }
+
+        $choir = in_array('chor', (array) $person->trait('contact.tags', []), true);
+
+        return Effect::chain([
+            Effect::mail('Welcome', null, 0, ['node' => 'm1']),
+            Effect::wait('after 2 days', 2 * 86400),
+            Effect::mail('Follow-up', null, 0, ['node' => 'm2']),
+            Effect::decision('Choir or not?', $choir ? 'tag chor' : 'no tag', [Effect::mail($choir ? 'For choirs' : 'For everyone', null, 0, ['node' => 'm4', 'marketing' => true])]),
+        ]);
     }
 
     public function mailPreview(string $id, array $meta, SimPerson $person): ?array
@@ -128,6 +145,40 @@ class ProbeProducts extends ProbeFakeObjects
     }
 }
 
+/** A CRM that knows Lena: she is a choir leader, holds an access, went through an automation, and asked not to be written to. */
+class ProbeCrm implements ProvidesSimPersons
+{
+    public function personSourceId(): string
+    {
+        return 'crm';
+    }
+
+    public function personsAuthorized($user): bool
+    {
+        return $user !== null && $user->can('see probe');
+    }
+
+    public function searchPersons(string $query, int $limit): array
+    {
+        return str_contains('lena probe', strtolower($query)) ? [['key' => '7', 'label' => 'Lena Probe']] : [];
+    }
+
+    public function identifyPerson(string $key): ?array
+    {
+        return $key === '7' ? ['email' => 'lena@example.test', 'id' => 7] : null;
+    }
+
+    public function personFacet(array $identity): array
+    {
+        return [
+            'traits' => ['contact.tags' => ['chor'], 'contact.status' => 'customer'],
+            'access' => ['kurs-stimme'],
+            'ran' => ['welcome'],
+            'unsubscribed' => true,
+        ];
+    }
+}
+
 /** The dry run of a map: the tree of every way, planned from what the owners say they would do. */
 class LandkarteProbelaufTest extends TestCase
 {
@@ -142,6 +193,11 @@ class LandkarteProbelaufTest extends TestCase
         }
 
         Permission::register('see probe');
+
+        if (class_exists(PersonSources::class)) {
+            $sources = app(PersonSources::class);
+            $sources->register(ProbeCrm::class);
+        }
 
         $registry = app(MapObjectRegistry::class);
 
@@ -348,6 +404,8 @@ class LandkarteProbelaufTest extends TestCase
             '0 mail:Welcome',
             '2 wait:after 2 days',
             '2 mail:Follow-up',
+            '2 decision:Choir or not?',
+            '2 mail:For everyone',
         ], array_map(fn ($e) => $e['day'].' '.$e['kind'].':'.$e['label'], $json['entries']));
         $this->assertSame([0, 2], $json['stats']['days']);
     }
@@ -502,6 +560,216 @@ class LandkarteProbelaufTest extends TestCase
         Mail::assertNothingSent();
         Queue::assertNothingPushed();
         $this->assertSame([], $writes);
+    }
+
+    protected function walk(Landkarte $landkarte, string $query): array
+    {
+        return $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&start=lead_magnet:freebie:requested&{$query}")->assertOk()->json();
+    }
+
+    #[Test]
+    public function the_tags_of_the_test_person_decide_what_the_automation_does(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+        $mails = fn (array $json) => array_values(array_map(fn ($e) => $e['label'], array_filter($json['entries'], fn ($e) => $e['kind'] === 'mail')));
+
+        $none = $this->walk($landkarte, '');
+        $choir = $this->walk($landkarte, 'tags=chor,+solo+');
+
+        $this->assertContains('For everyone', $mails($none));
+        $this->assertContains('For choirs', $mails($choir));
+        $this->assertNotContains('For everyone', $mails($choir));
+        // The answer says who she was: trimmed, in the order given.
+        $this->assertSame(['chor', 'solo'], $choir['state']['tags']);
+    }
+
+    #[Test]
+    public function what_the_person_holds_and_has_run_is_taken_over_and_capped(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+
+        $json = $this->walk($landkarte, 'access='.implode(',', range(1, 80)).'&ran[]=welcome&ran[]=thanks');
+
+        $this->assertCount(50, $json['state']['access']);
+        $this->assertSame(['welcome', 'thanks'], $json['state']['ran']);
+    }
+
+    #[Test]
+    public function the_person_buys_after_a_mail_and_the_purchase_is_handed_to_the_product(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+        $actions = json_encode([['type' => 'buy', 'mail' => 'lead_magnet:freebie|Please confirm', 'product' => 'product:masterclass', 'after_seconds' => 86400]]);
+
+        $json = $this->walk($landkarte, 'actions='.urlencode($actions));
+        $lines = array_map(fn ($e) => $e['day'].' '.$e['kind'].':'.$e['label'], $json['entries']);
+
+        $this->assertContains('1 action:buys: Product masterclass', $lines);
+        $this->assertContains('1 access:Access to the course', $lines);
+        $this->assertCount(1, $json['state']['actions']);
+        $this->assertSame([['key' => 'product:masterclass', 'label' => 'Product masterclass']], $json['products']);
+    }
+
+    #[Test]
+    public function an_action_in_a_shape_that_is_none_is_dropped_and_broken_json_is_refused(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+
+        $json = $this->walk($landkarte, 'actions='.urlencode(json_encode([['type' => 'launch', 'mail' => 'x'], ['type' => 'buy', 'mail' => 'x'], 'not an action'])));
+
+        $this->assertSame([], $json['state']['actions']);
+
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&actions=%7Bnot+json")->assertStatus(422);
+    }
+
+    #[Test]
+    public function every_step_says_why_it_is_on_the_way(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+
+        $json = $this->walk($landkarte, 'tags=chor');
+        $welcome = collect($json['entries'])->firstWhere('label', 'Welcome');
+
+        $this->assertSame([
+            'Lead_magnet “Lead_magnet freebie”: asked for',
+            'Automation “Automation welcome”: reached over the connection “starts”',
+        ], $welcome['why']);
+        $this->assertContains('Choir or not?: tag chor', collect($json['entries'])->firstWhere('label', 'For choirs')['why']);
+    }
+
+    #[Test]
+    public function the_mail_is_written_for_the_same_person_the_entries_were_planned_for(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+        $query = 'start=lead_magnet:freebie:requested&tags=chor';
+        $id = collect($this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&{$query}")->json('entries'))->firstWhere('label', 'Welcome')['id'];
+
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?{$query}&entry={$id}&label=Welcome")->assertOk();
+    }
+
+    #[Test]
+    public function a_real_person_is_found_and_copied_read_only(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+        $base = "/cp/funnels/landkarten/{$landkarte->id}/probelauf/persons";
+
+        $this->postJson($base, ['q' => 'lena'])->assertOk()->assertExactJson(['persons' => [['key' => 'crm|7', 'label' => 'Lena Probe']]]);
+        $this->postJson($base, ['q' => 'l'])->assertOk()->assertExactJson(['persons' => []]);
+
+        $copy = $this->postJson($base, ['like' => 'crm|7'])->assertOk()->json();
+
+        $this->assertSame(['chor'], $copy['tags']);
+        $this->assertSame(['kurs-stimme'], $copy['access']);
+        $this->assertSame(['welcome'], $copy['ran']);
+        $this->assertTrue($copy['unsubscribed']);
+        $this->assertSame(['contact.status' => 'customer'], $copy['traits']);
+
+        $this->postJson($base, ['like' => 'crm|999'])->assertNotFound();
+        $this->postJson($base, ['like' => 'nope|7'])->assertNotFound();
+
+        // A person is looked up in a body: the route takes no GET, whose query would sit in every access log.
+        $this->assertContains($this->getJson("{$base}?q=lena")->getStatusCode(), [404, 405]);
+    }
+
+    #[Test]
+    public function a_real_person_is_not_found_by_someone_who_may_not_read_her(): void
+    {
+        $landkarte = $this->landkarte();
+        Role::make('plain')->title('Plain')->permissions(['access cp', 'access funnels utility'])->save();
+        $this->actingAs(tap(User::make()->email('plain3@example.com')->assignRole('plain'))->save());
+        $base = "/cp/funnels/landkarten/{$landkarte->id}/probelauf/persons";
+
+        $this->postJson($base, ['q' => 'lena'])->assertOk()->assertExactJson(['persons' => []]);
+        $this->postJson($base, ['like' => 'crm|7'])->assertNotFound();
+    }
+
+    #[Test]
+    public function finding_and_copying_a_person_writes_nothing_and_logs_nobody(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+
+        $writes = [];
+        DB::listen(function ($query) use (&$writes) {
+            if (! preg_match('/^\s*(select|pragma)\b/i', $query->sql)) {
+                $writes[] = $query->sql;
+            }
+        });
+
+        $logged = [];
+        Log::listen(function ($message) use (&$logged) {
+            $logged[] = $message->message.json_encode($message->context);
+        });
+
+        $this->postJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/persons", ['q' => 'lena'])->assertOk();
+        $this->postJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/persons", ['like' => 'crm|7'])->assertOk();
+
+        $this->assertSame([], $writes);
+        // Nobody is named in the log: not the search, not her address, not her name.
+        foreach ($logged as $line) {
+            $this->assertStringNotContainsStringIgnoringCase('lena', $line);
+        }
+    }
+
+    #[Test]
+    public function a_person_posted_as_json_is_planned_like_one_in_a_query(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+
+        $json = $this->postJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf", [
+            'person' => 'test',
+            'start' => 'lead_magnet:freebie:requested',
+            'tags' => ['chor', 'solo'],
+            'access' => ['kurs-stimme'],
+            'ran' => ['welcome'],
+            'traits' => ['contact.status' => 'customer', 'bad key!' => 'x', 'nested' => ['a' => ['b']]],
+            'actions' => [['type' => 'buy', 'mail' => 'lead_magnet:freebie|Please confirm', 'product' => 'product:masterclass', 'after_seconds' => 0]],
+        ])->assertOk()->json();
+
+        $this->assertSame(['chor', 'solo'], $json['state']['tags']);
+        $this->assertSame(['kurs-stimme'], $json['state']['access']);
+        $this->assertSame(['welcome'], $json['state']['ran']);
+        $this->assertContains('For choirs', collect($json['entries'])->pluck('label')->all());
+        $this->assertContains('0 action:buys: Product masterclass', array_map(fn ($e) => $e['day'].' '.$e['kind'].':'.$e['label'], $json['entries']));
+    }
+
+    #[Test]
+    public function a_person_is_capped_to_what_the_sources_hand_over_not_refused(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+
+        $json = $this->postJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf", [
+            'person' => 'test',
+            'tags' => array_map(fn ($i) => "tag{$i}", range(1, 45)),
+            'access' => array_map(fn ($i) => "acc{$i}", range(1, 80)),
+            'ran' => array_map(fn ($i) => "run{$i}", range(1, 80)),
+        ])->assertOk()->json();
+
+        $this->assertCount(30, $json['state']['tags']);
+        $this->assertCount(50, $json['state']['access']);
+        $this->assertCount(50, $json['state']['ran']);
+    }
+
+    #[Test]
+    public function the_unsubscribe_of_a_copied_person_silences_the_marketing_mails_from_the_start(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+        $kinds = fn (array $json) => collect($json['entries'])->whereIn('label', ['For everyone', 'Unsubscribed: this marketing mail does not go out'])->pluck('kind')->all();
+
+        $this->assertSame(['mail'], $kinds($this->walk($landkarte, '')));
+        $this->assertSame(['stop'], $kinds($this->walk($landkarte, 'unsubscribed=1')));
+
+        // A trait that is no word, and one that is not scalar, are left out; the rest is read.
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&traits=%7Bbroken")->assertStatus(422);
     }
 
     #[Test]

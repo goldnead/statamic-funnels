@@ -22,8 +22,11 @@ Route::prefix('funnels/landkarten')->name('statamic-funnels.landkarten.')->group
     Route::delete('{landkarte}', [LandkarteController::class, 'destroy'])->name('destroy');
     Route::get('{landkarte}/objects', [LandkarteController::class, 'objects'])->name('objects');
     Route::get('{landkarte}/details', [LandkarteController::class, 'details'])->name('details');
-    Route::get('{landkarte}/probelauf', [LandkarteController::class, 'probelauf'])->name('probelauf');
-    Route::get('{landkarte}/probelauf/mail', [LandkarteController::class, 'probelaufMail'])->name('probelauf.mail');
+    // GET for a way without a person; POST for one with a person, so what describes her (tags, address-bearing traits, a search
+    // for her name) travels in the body and not in a URL that every access log keeps.
+    Route::match(['get', 'post'], '{landkarte}/probelauf', [LandkarteController::class, 'probelauf'])->name('probelauf');
+    Route::match(['get', 'post'], '{landkarte}/probelauf/mail', [LandkarteController::class, 'probelaufMail'])->name('probelauf.mail');
+    Route::post('{landkarte}/probelauf/persons', [LandkarteController::class, 'probelaufPersons'])->name('probelauf.persons');
     Route::post('{landkarte}/connections/preview', [LandkarteController::class, 'previewConnection'])->name('connections.preview');
     Route::post('{landkarte}/connections', [LandkarteController::class, 'connect'])->name('connections.store');
 });

@@ -2,6 +2,8 @@
 import { computed, inject, ref, watch } from 'vue';
 import { Alert, Icon } from '@statamic/cms/ui';
 import { linkTarget } from '../../support/probelauf.js';
+import { postJson } from '../../support/landkarteRequest.js';
+import ProbeActions from './ProbeActions.vue';
 
 /**
  * The mailbox of the test person: every mail that goes out on her way, in order, and the one she opens.
@@ -14,32 +16,39 @@ const props = defineProps({
     entries: { type: Array, default: () => [] },
     mailUrl: { type: String, required: true },
     start: { type: String, default: null },
+    // The person as the page describes her: the query that plans her way is also the one that writes her mail.
+    personBody: { type: Function, default: () => ({}) },
+    maxActions: { type: Number, default: 12 },
+    products: { type: Array, default: () => [] },
+    actions: { type: Array, default: () => [] },
 });
+
+const emit = defineEmits(['add-action', 'remove-action']);
 
 const probe = inject('probelauf');
 
 const mails = computed(() => props.entries.filter((e) => e.kind === 'mail'));
 const selected = ref(null);
+const selectedKey = ref(null);
 const state = ref('idle');
 const mail = ref(null);
 
 let ticket = 0;
+let openAt = null;
+let openLabel = null;
 
 async function open(entry) {
     selected.value = entry.id;
+    openAt = entry.at;
+    openLabel = entry.label;
+    selectedKey.value = entry.meta?.mail_key ?? null;
     const mine = ++ticket;
     state.value = 'loading';
     mail.value = null;
 
     try {
-        const url = new URL(props.mailUrl, window.location.origin);
-        url.searchParams.set('start', props.start ?? '');
-        url.searchParams.set('entry', entry.id);
-        url.searchParams.set('label', entry.label);
-
-        const response = await fetch(url, {
-            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            credentials: 'same-origin',
+        const response = await postJson(props.mailUrl, {
+            ...props.personBody(), start: props.start ?? '', entry: entry.id, label: entry.label,
         });
 
         if (response.status === 404) {
@@ -51,20 +60,33 @@ async function open(entry) {
 
         if (!response.ok) throw new Error(String(response.status));
 
-        const data = await response.json();
         if (mine !== ticket) return;
 
-        mail.value = data;
+        mail.value = response.data;
         state.value = 'ready';
     } catch {
         if (mine === ticket) state.value = 'failed';
     }
 }
 
-// A new way (another start) is another mailbox: nothing stays open that is not in it.
+// The way is planned again after every change of the person. What was open stays open when the same mail is still
+// on the way (by its name in the simulation); a mail that is gone is closed.
 watch(() => props.entries, () => {
+    const key = selectedKey.value;
+    const again = key ? mails.value.find((e) => e.meta?.mail_key === key) : null;
+
+    if (again) {
+        // The same mail at the same moment (a change of the fast forward, an action on another mail) is not read again.
+        if (again.id === selected.value && again.at === openAt && again.label === openLabel && state.value === 'ready') return;
+
+        open(again);
+
+        return;
+    }
+
     ticket++;
     selected.value = null;
+    selectedKey.value = null;
     mail.value = null;
     state.value = 'idle';
 });
@@ -149,6 +171,17 @@ const imagesNote = computed(() => {
                             </li>
                         </ul>
                     </div>
+
+                    <ProbeActions
+                        v-if="selectedKey"
+                        :mail-key="selectedKey"
+                        :links="mail.links"
+                        :products="products"
+                        :actions="actions"
+                        :max-actions="maxActions"
+                        @add="emit('add-action', $event)"
+                        @remove="emit('remove-action', $event)"
+                    />
                 </template>
             </div>
         </template>

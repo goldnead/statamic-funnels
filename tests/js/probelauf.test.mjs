@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { groupByDay, linkTarget, mailFork, splitNode, startsOpen, timeInDay, timeWords } from '../../resources/js/support/probelauf.js';
+import { accountOf, encodeActions, groupByDay, linkTarget, mailFork, splitNode, standing, startsOpen, timeInDay, timeWords, untilDay, pagesOf, words as plainWords } from '../../resources/js/support/probelauf.js';
 
 const words = {
     probe_now: 'sofort',
@@ -140,4 +140,69 @@ test('a tracked link shows its goal, the wrapper only as a note', () => {
     assert.deepEqual(linkTarget('mailto:hallo@site.test'), { goal: 'mailto:hallo@site.test', wrapped: null });
     // A parameter that is not an address is no goal.
     assert.deepEqual(linkTarget('https://site.test/a?to=berlin'), { goal: 'https://site.test/a?to=berlin', wrapped: null });
+});
+
+test('fast forward keeps what happened up to a day, and none means the whole way', () => {
+    const entries = [{ day: 0, id: 'a' }, { day: 2, id: 'b' }, { day: 5, id: 'c' }];
+
+    assert.deepEqual(untilDay(entries, 2).map((e) => e.id), ['a', 'b']);
+    assert.deepEqual(untilDay(entries, 0).map((e) => e.id), ['a']);
+    assert.equal(untilDay(entries, null).length, 3);
+});
+
+test('where the person stands: mails, access, purchases, unsubscribed', () => {
+    const entries = [
+        { kind: 'mail', label: 'a' }, { kind: 'mail', label: 'b' },
+        { kind: 'access', meta: { slug: 'kurs' } }, { kind: 'access', meta: { slug: 'kurs' } }, { kind: 'access', meta: { slug: 'extra' } },
+        { kind: 'action', meta: { action: 'buy' } }, { kind: 'action', meta: { action: 'click' } }, { kind: 'action', meta: { action: 'unsubscribe' } },
+    ];
+
+    assert.deepEqual(standing(entries), { mails: 2, access: ['kurs', 'extra'], purchases: 1, unsubscribed: true });
+    assert.deepEqual(standing([]), { mails: 0, access: [], purchases: 0, unsubscribed: false });
+});
+
+test('a comma list becomes plain words', () => {
+    assert.deepEqual(plainWords(' chor , solo,, '), ['chor', 'solo']);
+    assert.deepEqual(plainWords(''), []);
+    assert.deepEqual(plainWords(null), []);
+});
+
+test('actions go to the server in the shape it reads', () => {
+    assert.equal(
+        encodeActions([{ type: 'buy', mail: 'a|b', product: 'product:p', after_seconds: 86400, extra: 'dropped' }]),
+        '[{"type":"buy","mail":"a|b","product":"product:p","url":null,"after_seconds":86400}]',
+    );
+});
+
+test('the account: access with its day, a course with its lessons and the day each opens', () => {
+    const entries = [
+        { kind: 'access', label: 'Zugang v4-kurs-grant wird gewährt', day: 0, at: 0, meta: { slug: 'v4-kurs-grant' } },
+        { kind: 'access', label: 'Kurs ist freigeschaltet: Stimme zuerst', day: 0, at: 0, meta: { course: 'stimme' } },
+        { kind: 'page', label: 'Lektion 1', detail: 'öffnet sofort', day: 0, at: 0, meta: { course: 'stimme', lesson: 'l1' } },
+        { kind: 'page', label: 'Lektion 2', detail: 'öffnet nach 7 Tagen', day: 7, at: 7 * 86400, meta: { course: 'stimme', lesson: 'l2' } },
+        { kind: 'unknown', label: 'Lektion 3', detail: 'öffnet nach einer Zahlung', day: 7, at: 7 * 86400, meta: { course: 'stimme', lesson: 'l3' } },
+        { kind: 'access', label: 'Zugang v4-kurs-grant wird gewährt', day: 3, at: 3 * 86400, meta: { slug: 'v4-kurs-grant' } },
+    ];
+    const { access, courses } = accountOf(entries);
+
+    assert.deepEqual(access.map((a) => [a.slug, a.day]), [['v4-kurs-grant', 0]]);
+    assert.equal(courses.length, 1);
+    assert.equal(courses[0].title, 'Kurs ist freigeschaltet: Stimme zuerst');
+    assert.deepEqual(courses[0].lessons.map((l) => [l.slug, l.day]), [['l1', 0], ['l2', 7], ['l3', null]]);
+});
+
+test('an access line that names no slug is still access', () => {
+    const { access } = accountOf([{ kind: 'access', label: 'Zugang freischalten', day: 0, at: 0, meta: {} }]);
+
+    assert.deepEqual(access.map((a) => [a.slug, a.day]), [['Zugang freischalten', 0]]);
+});
+
+test('the pages on the way are the page lines that are no lessons', () => {
+    const entries = [
+        { kind: 'page', label: 'Seite A', meta: {} },
+        { kind: 'page', label: 'Lektion', meta: { lesson: 'l1' } },
+        { kind: 'mail', label: 'Mail', meta: {} },
+    ];
+
+    assert.deepEqual(pagesOf(entries).map((e) => e.label), ['Seite A']);
 });

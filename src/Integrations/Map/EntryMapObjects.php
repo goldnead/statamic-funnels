@@ -21,6 +21,8 @@ use Statamic\Stache\Query\EntryQueryBuilder;
  */
 class EntryMapObjects implements ProvidesMapObjects
 {
+    use SimulatesEntry;
+
     public function type(): string
     {
         return 'entry';
