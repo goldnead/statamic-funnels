@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.30.0 — 2026-10-21
+
 ### Added: "Probelauf", the dry run of a Landkarte (part 1: the tree of every way)
 
 A second view next to the map: **Probelauf** shows the tree of every way through the Landkarte, planned by
