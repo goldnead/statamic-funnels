@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mailFork, splitNode, startsOpen, timeWords } from '../../resources/js/support/probelauf.js';
+import { groupByDay, mailFork, splitNode, startsOpen, timeInDay, timeWords } from '../../resources/js/support/probelauf.js';
 
 const words = {
     probe_now: 'sofort',
@@ -90,4 +90,17 @@ test('time reads as day, hours and minutes', () => {
     assert.equal(timeWords(3 * 3600, t), '3 Std.');
     assert.equal(timeWords(2 * 86400, t), 'Tag 2');
     assert.equal(timeWords(2 * 86400 + 3 * 3600, t), 'Tag 2, 3 Std.');
+});
+
+test('the known person\'s way is grouped by day, in order', () => {
+    const entries = [{ day: 0, id: 'a' }, { day: 0, id: 'b' }, { day: 2, id: 'c' }, { day: 5, id: 'd' }];
+
+    assert.deepEqual(groupByDay(entries).map((g) => [g.day, g.entries.map((e) => e.id)]), [[0, ['a', 'b']], [2, ['c']], [5, ['d']]]);
+    assert.deepEqual(groupByDay([]), []);
+});
+
+test('the time inside a day is said, midnight of it is not', () => {
+    assert.equal(timeInDay(0, t), null);
+    assert.equal(timeInDay(2 * 86400, t), null);
+    assert.equal(timeInDay(2 * 86400 + 3 * 3600, t), '3 Std.');
 });

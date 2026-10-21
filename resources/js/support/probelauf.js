@@ -73,3 +73,46 @@ export function timeWords(seconds, t) {
 
     return hours > 0 ? `${days}, ${t('probe_hours').replace(':count', hours)}` : days;
 }
+
+/** The icon of each kind of line, from Statamic's own set. */
+export const ICONS = {
+    enter: 'arrow-right',
+    mail: 'mail',
+    wait: 'time-clock',
+    access: 'key',
+    page: 'page',
+    trait: 'tag-new',
+    stop: 'x',
+    unknown: 'warning-diamond',
+    denied: 'eye-slash',
+    rejoin: 'arrow-up',
+    more: 'dots',
+    fork: 'split-window',
+    decision: 'git',
+};
+
+/**
+ * The entries of a known person's way, grouped by the day they fall on, in order.
+ *
+ * @param {{ day: number }[]} entries
+ * @returns {{ day: number, entries: object[] }[]}
+ */
+export function groupByDay(entries) {
+    const days = [];
+
+    for (const entry of entries) {
+        const last = days[days.length - 1];
+
+        if (last && last.day === entry.day) last.entries.push(entry);
+        else days.push({ day: entry.day, entries: [entry] });
+    }
+
+    return days;
+}
+
+/** The time of day inside a day ("3 Std."), or null at midnight of it: the day header already says it. */
+export function timeInDay(seconds, t) {
+    const inDay = seconds % 86400;
+
+    return inDay === 0 ? null : timeWords(inDay, t);
+}
