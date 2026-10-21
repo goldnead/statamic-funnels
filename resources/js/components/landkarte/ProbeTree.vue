@@ -77,6 +77,8 @@ function choosePerson(value) {
 }
 
 function chooseStart(value) {
+    // A cleared select is no choice: the start stays what it was.
+    if (!value || value === start.value) return;
     start.value = value;
     load();
 }

@@ -381,7 +381,10 @@ class LandkarteProbelaufTest extends TestCase
             }
         });
 
-        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test")->assertOk();
+        // Both starts of the map, not just the first one.
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&start=lead_magnet:freebie:requested")->assertOk();
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&start=product:masterclass:purchased")->assertOk();
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=unknown")->assertOk();
 
         Mail::assertNothingSent();
         Queue::assertNothingPushed();
