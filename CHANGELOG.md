@@ -28,8 +28,7 @@ automations she has **already been through**; her way is planned again. In the m
 after a mail: **buy** a product of the map (handed to the product, which hands its access on), **click** a link, or
 **unsubscribe** (marketing mails after it do not go out). **Fast forward** ("Stand nach Tag n") shows where she stands on
 a day (mails received, access, purchases). **Why?** under a line lists what it was reached through and what was decided.
-The person lives in the request and nowhere else: nothing about her is stored and no real person is read (the person from
-the CRM is not part of this part). The mail is written for the same person the way was planned for. Needs brand-context 1.24.
+The person lives in the request and nowhere else: nothing about her is stored and no real person is read (copying one from the CRM is the next entry). The mail is written for the same person the way was planned for. Needs brand-context 1.24.
 
 ## 1.32.0 — 2026-10-21
 
