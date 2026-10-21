@@ -1,0 +1,14 @@
+{{# A page with everything a real site puts on one that counts, or that a click would count:
+    an analytics script, a pixel behind <noscript>, a third party's web font, and links whose
+    target is something that happens (a confirmation, a download counter, a smartlink). #}}
+<link rel="preconnect" href="https://fonts.gstatic.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree">
+<link rel="stylesheet" href="/css/funnel-pages.css">
+<script defer src="/analytics/script.js" data-site-id="1"></script>
+<h1 onclick="alert(1)">{{ title }}</h1>
+<noscript><img src="https://pixel.example/tr?id=1" alt=""></noscript>
+<img src="/img/hero.jpg" alt="Hero">
+<p><a href="/!/lead-magnets/confirm/abc123" target="_blank">Bestätigen</a></p>
+<p><a href="/!/lead-magnets/download/abc123">Download</a> <a href="/go/xyz">Smartlink</a> <a href="javascript:alert(1)">Böse</a> <a href="#oben">Oben</a></p>
+<form method="POST" action="/f/kurs/weiter"><button>Weiter</button></form>
+<iframe src="https://evil.example/"></iframe>

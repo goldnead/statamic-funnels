@@ -1,13 +1,14 @@
 <script setup>
-import { computed, inject, ref } from 'vue';
-import { Button, Icon, Input, Select } from '@statamic/cms/ui';
+import { computed, inject } from 'vue';
+import { Button, Dropdown, DropdownItem, DropdownMenu, Select } from '@statamic/cms/ui';
+import { DELAYS } from '../../support/probelauf.js';
 
 /**
- * What the test person does after one mail: buys, clicks a link, unsubscribes.
+ * What the person does with a mail: opens it (and nothing more), clicks a link, buys, unsubscribes.
  *
- * Only a choice in the simulation. Nothing is bought, clicked or unsubscribed: the choice goes back to the
- * planner, which lets her way continue from it (a purchase is handed to the product, an unsubscribe silences
- * the marketing mails after it).
+ * Only a choice in the simulation. Nothing is clicked, bought or unsubscribed: the choice goes back to the planner, which
+ * lets her way go on from it. A button that is on says what she does; pressing it again takes it back, and "Öffnet" is on
+ * as long as she does nothing else.
  */
 const props = defineProps({
     mailKey: { type: String, required: true },
@@ -17,97 +18,118 @@ const props = defineProps({
     maxActions: { type: Number, default: 12 },
 });
 
-const emit = defineEmits(['add', 'remove']);
+const emit = defineEmits(['toggle', 'clear', 'delay']);
 const probe = inject('probelauf');
 
-const type = ref('buy');
-const product = ref(null);
-const link = ref(null);
-const days = ref('0');
+// Up to this many links are a button each; more are a menu, so the row never grows into a wall of buttons.
+const LINK_BUTTONS = 3;
 
-const mine = computed(() => props.actions.map((a, index) => ({ ...a, index })).filter((a) => a.mail === props.mailKey));
-
-const typeOptions = computed(() => [
-    { value: 'buy', label: probe.t('probe_action_buy') },
-    { value: 'click', label: probe.t('probe_action_click') },
-    { value: 'unsubscribe', label: probe.t('probe_action_unsub') },
-]);
-const productOptions = computed(() => props.products.map((p) => ({ value: p.key, label: p.label })));
-const linkOptions = computed(() => props.links.map((l) => ({ value: l.url, label: l.text })));
-
+const mine = computed(() => props.actions.filter((a) => a.mail === props.mailKey));
+const opensOnly = computed(() => mine.value.length === 0);
 const full = computed(() => props.actions.length >= props.maxActions);
-const ready = computed(() => {
-    if (full.value) return false;
-    if (type.value === 'buy') return Boolean(product.value ?? productOptions.value[0]);
-    if (type.value === 'click') return Boolean(link.value ?? linkOptions.value[0]);
-    return true;
-});
 
-function describe(action) {
-    const after = action.after_seconds > 0 ? ` ${probe.t('probe_action_after')} ${Math.round(action.after_seconds / 86400)} ${probe.t('probe_action_days')}` : '';
-    if (action.type === 'unsubscribe') return `${probe.t('probe_action_unsub')}${after}`;
-    if (action.type === 'click') return `${probe.t('probe_action_click')}: ${action.url}${after}`;
-    const known = props.products.find((p) => p.key === action.product);
-    return `${probe.t('probe_action_buy')}: ${known ? known.label : action.product}${after}`;
-}
+const clicked = (url) => mine.value.some((a) => a.type === 'click' && a.url === url);
+const bought = computed(() => mine.value.filter((a) => a.type === 'buy'));
+const boughtLabel = (key) => props.products.find((p) => p.key === key)?.label ?? key;
+const unsubscribed = computed(() => mine.value.some((a) => a.type === 'unsubscribe'));
 
-function add() {
-    if (!ready.value) return;
+// What the actions of this mail wait for, as the one choice that is shown (they share it).
+const delay = computed(() => String(Math.round((mine.value[0]?.after_seconds ?? 0) / 86400)));
+const delayOptions = computed(() => DELAYS.map((d) => ({
+    value: String(d),
+    label: d === 0 ? probe.t('probe_do_now') : probe.t(d === 1 ? 'probe_do_after_one' : 'probe_do_after_many').replace(':days', d),
+})));
 
-    emit('add', {
-        type: type.value,
-        mail: props.mailKey,
-        product: type.value === 'buy' ? (product.value ?? productOptions.value[0]?.value ?? null) : null,
-        url: type.value === 'click' ? (link.value ?? linkOptions.value[0]?.value ?? null) : null,
-        after_seconds: Math.max(0, Math.min(365, parseInt(days.value, 10) || 0)) * 86400,
-    });
-}
+const toggle = (action) => emit('toggle', { ...action, mail: props.mailKey });
+
+const buyText = computed(() => (bought.value.length === 1
+    ? probe.t('probe_do_buys_named').replace(':name', () => boughtLabel(bought.value[0].product))
+    : bought.value.length > 1
+        ? probe.t('probe_do_buys_many').replace(':count', bought.value.length)
+        : probe.t('probe_do_buys')));
+const linkText = (link) => probe.t('probe_do_clicks').replace(':link', () => link.text);
 </script>
 
 <template>
-    <section class="pa" data-pa>
-        <h4 class="pa-title">{{ probe.t('probe_action_title') }}</h4>
+    <div class="pa" data-pa>
+        <div class="pa-row" role="group" :aria-label="probe.t('probe_do_label')">
+            <Button size="sm" :class="opensOnly && 'pa-on'" :aria-pressed="opensOnly" :text="probe.t('probe_do_opens')" data-pa-opens @click="emit('clear')" />
 
-        <ul v-if="mine.length" class="pa-list" data-pa-list>
-            <li v-for="action in mine" :key="action.index" class="pa-item">
-                <span>{{ describe(action) }}</span>
-                <Button size="xs" variant="ghost" icon="trash" :aria-label="probe.t('probe_action_remove')" :title="probe.t('probe_action_remove')" @click="emit('remove', action.index)" />
-            </li>
-        </ul>
+            <template v-if="links.length && links.length <= LINK_BUTTONS">
+                <Button
+                    v-for="(link, i) in links"
+                    :key="i"
+                    size="sm"
+                    :class="clicked(link.url) && 'pa-on'"
+                    :aria-pressed="clicked(link.url)"
+                    :text="linkText(link)"
+                    :disabled="full && !clicked(link.url)"
+                    :data-pa-click="link.url"
+                    @click="toggle({ type: 'click', url: link.url })"
+                />
+            </template>
+            <Dropdown v-else-if="links.length" align="start">
+                <template #trigger>
+                    <Button size="sm" icon-append="chevron-down" :class="mine.some((a) => a.type === 'click') && 'pa-on'" :text="probe.t('probe_do_clicks_menu')" data-pa-click-menu />
+                </template>
+                <DropdownMenu>
+                    <DropdownItem
+                        v-for="(link, i) in links"
+                        :key="i"
+                        :icon="clicked(link.url) ? 'checkmark' : undefined"
+                        :text="link.text"
+                        :disabled="full && !clicked(link.url)"
+                        :data-pa-click="link.url"
+                        @click="toggle({ type: 'click', url: link.url })"
+                    />
+                </DropdownMenu>
+            </Dropdown>
 
-        <div class="pa-form">
-            <Select v-model="type" size="sm" class="w-44" :options="typeOptions" :aria-label="probe.t('probe_action_title')" data-pa-type />
-            <template v-if="type === 'buy'">
-                <Select v-if="productOptions.length" :model-value="product ?? productOptions[0].value" size="sm" class="w-56" :options="productOptions" :aria-label="probe.t('probe_action_product')" data-pa-product @update:model-value="product = $event" />
-                <span v-else class="pa-note">{{ probe.t('probe_action_no_products') }}</span>
-            </template>
-            <template v-else-if="type === 'click'">
-                <Select v-if="linkOptions.length" :model-value="link ?? linkOptions[0].value" size="sm" class="w-56" :options="linkOptions" :aria-label="probe.t('probe_action_link')" data-pa-link @update:model-value="link = $event" />
-                <span v-else class="pa-note">{{ probe.t('probe_action_no_links') }}</span>
-            </template>
-            <label class="pa-after">
-                <span>{{ probe.t('probe_action_after') }}</span>
-                <Input v-model="days" type="number" min="0" max="365" size="sm" class="w-16" :aria-label="probe.t('probe_action_days')" data-pa-days />
-                <span>{{ probe.t('probe_action_days') }}</span>
+            <Dropdown v-if="products.length" align="start">
+                <template #trigger>
+                    <Button size="sm" icon-append="chevron-down" :class="bought.length && 'pa-on'" :aria-pressed="bought.length > 0" :text="buyText" data-pa-buy />
+                </template>
+                <DropdownMenu>
+                    <DropdownItem
+                        v-for="product in products"
+                        :key="product.key"
+                        :icon="bought.some((a) => a.product === product.key) ? 'checkmark' : undefined"
+                        :text="product.label"
+                        :disabled="full && !bought.some((a) => a.product === product.key)"
+                        :data-pa-product="product.key"
+                        @click="toggle({ type: 'buy', product: product.key })"
+                    />
+                </DropdownMenu>
+            </Dropdown>
+            <Button v-else size="sm" :text="probe.t('probe_do_buys')" disabled :title="probe.t('probe_do_no_products')" data-pa-buy />
+
+            <Button size="sm" :class="unsubscribed && 'pa-on'" :aria-pressed="unsubscribed" :text="probe.t('probe_do_unsub')" data-pa-unsub @click="toggle({ type: 'unsubscribe' })" />
+
+            <label v-if="!opensOnly" class="pa-when">
+                <span>{{ probe.t('probe_do_when') }}</span>
+                <Select
+                    size="sm"
+                    class="w-36"
+                    :model-value="delay"
+                    :options="delayOptions"
+                    :aria-label="probe.t('probe_do_when')"
+                    data-pa-delay
+                    @update:model-value="emit('delay', Number($event))"
+                />
             </label>
-            <Button size="sm" :text="probe.t('probe_action_add')" :disabled="!ready" data-pa-add @click="add" />
         </div>
         <p v-if="full" class="pa-note" data-pa-full>{{ probe.t('probe_action_full').replace(':max', () => maxActions) }}</p>
-        <p class="pa-note"><Icon name="info" class="size-3.5" /> {{ probe.t('probe_action_help') }}</p>
-    </section>
+    </div>
 </template>
 
 <style>
-.pa { margin-top: 1.25rem; padding-top: 0.9rem; border-top: 1px solid var(--color-gray-200); }
-.dark .pa { border-top-color: var(--color-gray-700); }
-.pa-title { margin: 0 0 0.5rem; font-size: 0.8rem; font-weight: 600; color: var(--color-gray-900); }
-.dark .pa-title { color: var(--color-gray-100); }
-.pa-list { margin: 0 0 0.6rem; padding: 0; list-style: none; }
-.pa-item { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.15rem 0; font-size: 0.85rem; color: var(--color-gray-900); }
-.dark .pa-item { color: var(--color-gray-100); }
-.pa-form { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.75rem; }
-.pa-after { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--color-gray-600); }
-.dark .pa-after { color: var(--color-gray-400); }
-.pa-note { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0.5rem 0 0; font-size: 0.78rem; color: var(--color-gray-600); }
+.pa { margin: 0 0 0.9rem; }
+.pa-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.5rem; }
+/* The one that is on: the same neutral button, one step heavier, so it reads as chosen in both themes. */
+.pa-row .pa-on { background: var(--color-gray-100); border-color: var(--color-gray-400); font-weight: 600; }
+.dark .pa-row .pa-on { background: var(--color-gray-700); border-color: var(--color-gray-500); }
+.pa-when { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: auto; font-size: 0.8rem; color: var(--color-gray-600); }
+.dark .pa-when { color: var(--color-gray-400); }
+.pa-note { margin: 0.5rem 0 0; font-size: 0.78rem; color: var(--color-gray-600); }
 .dark .pa-note { color: var(--color-gray-400); }
 </style>

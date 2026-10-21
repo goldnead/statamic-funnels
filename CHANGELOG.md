@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+### Changed: the Probelauf opens on one person ("[Person] gets [Lead magnet]"), not on a developer's list of switches
+
+The tab used to open on "every way through the map" with ten controls above it. It now answers the question an operator
+has: what does a person who gets this lead magnet experience?
+
+- **Start:** a sentence, "Testperson ▾ holt sich V4 Zugang zum Kurs ▾", a "Simulation" badge, "Person anpassen" and, as a quiet
+  link, "Alle möglichen Wege ansehen (N)" (the tree of before, unchanged). The first start is a lead magnet when the map has one. The
+  verb follows the event that begins the way (gets, buys, starts, arrives at, is given access to).
+- **Two columns:** on the left what happens to her, by day (a mail, a page, access, a decision; cards and waiting are not rows). A day
+  after the first one says "Bis hierher vorspulen". On the right "Das sieht die Person": the mail, the page, or her account at that
+  moment, and "Warum kommt das?" once for the step that is open instead of "Warum?" on every row. The first mail with something to
+  show is open at the start. "Wirkung unbekannt" is one sentence at the end, naming the cards.
+- **What she does** sits right under the subject: Öffnet, Klickt "<link text>" (one button per link, a menu from four on), Kauft … ▾,
+  Meldet sich ab, and "Wann" (right away … 30 days). A pressed button is on her way; pressing it again takes it off. No raw tracking URL.
+- **Person anpassen** is a stack from the right: who walks through, tags and access chosen from the map by name (tags may still be
+  typed), "Hat sich abgemeldet", the automations she has been through, "Zurücksetzen" and "Fertig". The two person pickers are one.
+- **The mail frame** is as tall as the mail, and an image that is switched off is a quiet area with its alternative text (the server
+  does this: `MailFrame`). The note under it is one line. The frame is `sandbox="allow-same-origin"` (no scripts, the policy inside
+  the document lets it fetch nothing): without `allow-same-origin` nothing outside could read how tall the mail is.
+- The tab no longer shows the map's subtitle.
+
+### Added: a real preview of the page, and a look is no visit
+
+On a page step the right column shows the page itself: the Statamic entry is rendered **on the server** (its own template and layout,
+through Statamic's response for the entry, no request over the network), made safe, and put in an iframe with an **empty
+`sandbox`** (no script, no same-origin, no forms, no navigation) at 1280 (scaled) or 390 wide. `POST landkarten/{id}/probelauf/page`
+takes the place in the planned way, as the mail endpoint does. The markup has no script, no `<noscript>` (a sandbox without scripts
+would show its pixel), no frame, no third party's stylesheet; a policy on the document lets it load from the site and nowhere else; every
+link points nowhere and is listed with its target ("Klickt …" only shows the target: a lead magnet's confirmation, a download
+counter, a smartlink are never followed).
+
+Not every page can be built this way. A page the application serves through a route of its own (a controller with a front-end framework),
+a draft, a protected page, a redirect and a render that fails say so, and show the picture of the funnel step that names the entry when
+there is one.
+
+A render is **a look, not a visit**: the request carries `ProbePreview::ATTRIBUTE` and everything that counts asks it: `FunnelWalk`
+(no visit row, no cookie, no step event, no "entered" webhook, no completion), `Split::variantFor` (A, nothing written), `Tracking`
+(no code, no server call to the pixel), `FunnelController::render` (the preview path). A test for each place proves a visitor is
+counted and the same call as a look is not.
+
+### Added: `options` on the Probelauf answer
+
+`access` (every lead magnet, product and course of the map, by name and kind) and `tags` (what the map's automations ask for, when
+the automations addon has `simulationTags()`; otherwise empty and free to type).
+
 ## 1.33.0 — 2026-10-21
 
 ### Added: Probelauf, "as for a real person" (part 4, the CRM person; read only)
