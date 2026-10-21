@@ -231,8 +231,11 @@ export function accountOf(entries) {
     for (const e of entries) {
         const course = e.meta?.course;
 
-        if (e.kind === 'access' && e.meta?.slug && !access.some((a) => a.slug === e.meta.slug)) {
-            access.push({ slug: e.meta.slug, label: e.label, day: e.day });
+        // Access she was given: by its slug, else by what the line says (an access line of an addon that names no slug is still access).
+        if (e.kind === 'access' && !course) {
+            const slug = e.meta?.slug ?? e.label;
+
+            if (!access.some((a) => a.slug === slug)) access.push({ slug, label: e.label, day: e.day });
         }
 
         if (!course) continue;

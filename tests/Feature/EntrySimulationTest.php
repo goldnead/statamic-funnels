@@ -45,7 +45,7 @@ class EntrySimulationTest extends TestCase
         $this->assertSame([Effect::PAGE, Effect::EMIT], array_map(fn (Effect $e) => $e->kind, $effects));
         $this->assertSame(SimEvent::ENTERED, $effects[1]->emits->type);
         $this->assertSame([], $effects[1]->emits->via);
-        $this->assertSame('Page: Minikurs', $effects[0]->label);
+        $this->assertSame('Minikurs', $effects[0]->label);
         $this->assertSame('/minikurs', $effects[0]->detail);
         $this->assertSame(['url' => '/minikurs', 'entry' => $entry->id()], $effects[0]->meta);
     }

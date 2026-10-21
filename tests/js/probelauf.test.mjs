@@ -191,6 +191,12 @@ test('the account: access with its day, a course with its lessons and the day ea
     assert.deepEqual(courses[0].lessons.map((l) => [l.slug, l.day]), [['l1', 0], ['l2', 7], ['l3', null]]);
 });
 
+test('an access line that names no slug is still access', () => {
+    const { access } = accountOf([{ kind: 'access', label: 'Zugang freischalten', day: 0, at: 0, meta: {} }]);
+
+    assert.deepEqual(access.map((a) => [a.slug, a.day]), [['Zugang freischalten', 0]]);
+});
+
 test('the pages on the way are the page lines that are no lessons', () => {
     const entries = [
         { kind: 'page', label: 'Seite A', meta: {} },

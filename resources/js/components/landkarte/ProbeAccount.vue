@@ -14,6 +14,8 @@ const props = defineProps({
 const probe = inject('probelauf');
 const account = computed(() => accountOf(props.entries));
 const dayWords = (day) => (day === null ? probe.t('probe_account_open_unknown') : probe.t('probe_day').replace(':day', day));
+// The day on the right says when a lesson opens; the words add something only when it is a date or not known.
+const showDetail = (lesson) => lesson.day === null || /\d{1,2}\.\d{1,2}\.\d{2,4}/.test(lesson.detail ?? '');
 const empty = computed(() => account.value.access.length === 0 && account.value.courses.length === 0);
 </script>
 
@@ -33,12 +35,12 @@ const empty = computed(() => account.value.access.length === 0 && account.value.
         </section>
 
         <section v-for="course in account.courses" :key="course.id" class="pac-block" :data-pac-course="course.id">
-            <h3 class="pac-head">{{ probe.t('probe_account_course') }}: {{ course.title.replace(/^[^:]*:\s*/, '') }}</h3>
+            <h3 class="pac-head">{{ course.title.replace(/^[^:]*:\s*/, '') }}</h3>
             <ul class="pac-list">
                 <li v-for="lesson in course.lessons" :key="lesson.slug" class="pac-row" :class="lesson.day === null && 'pac-row--quiet'">
                     <Icon name="page" class="size-4 pac-icon" />
                     <span class="pac-label">{{ lesson.title }}</span>
-                    <span class="pac-meta">{{ lesson.detail }}</span>
+                    <span v-if="showDetail(lesson)" class="pac-meta">{{ lesson.detail }}</span>
                     <span class="pac-day">{{ dayWords(lesson.day) }}</span>
                 </li>
             </ul>

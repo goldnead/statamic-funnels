@@ -203,9 +203,11 @@ const startOptions = computed(() => starts.value.map((s) => ({
 
 const summary = computed(() => {
     if (person.value === 'test') {
-        return t('probe_timeline_summary')
+        const days = new Set(shown.value.map((e) => e.day)).size;
+
+        return t(days === 1 ? 'probe_timeline_summary_one' : 'probe_timeline_summary')
             .replace(':entries', shown.value.length)
-            .replace(':days', new Set(shown.value.map((e) => e.day)).size);
+            .replace(':days', days);
     }
 
     return t('probe_summary')
@@ -231,13 +233,17 @@ const hasContent = computed(() => (person.value === 'test' ? shown.value.length 
                     <ToggleItem v-for="option in personOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-person-option="option.value" />
                 </ToggleGroup>
             </span>
-            <ToggleGroup v-if="person === 'test'" v-model="lens" size="sm" :aria-label="t('probe_lens_label')" data-pr-lens>
-                <ToggleItem v-for="option in lensOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-lens-option="option.value" />
-            </ToggleGroup>
             <label v-if="person === 'test' && startOptions.length" class="pr-start">
                 <span class="pr-start__label">{{ t('probe_start_label') }}</span>
                 <Select class="w-96 max-w-full" size="sm" :model-value="start" :options="startOptions" :aria-label="t('probe_start_label')" data-pr-start @update:model-value="chooseStart" />
             </label>
+        </div>
+
+        <div v-if="person === 'test'" class="pr-start pr-lensrow">
+            <span class="pr-start__label">{{ t('probe_lens_label') }}</span>
+            <ToggleGroup v-model="lens" size="sm" :aria-label="t('probe_lens_label')" data-pr-lens>
+                <ToggleItem v-for="option in lensOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-lens-option="option.value" />
+            </ToggleGroup>
         </div>
 
         <div v-if="person === 'test' && personsUrl" class="pr-start pr-whowrap">
@@ -346,6 +352,7 @@ const hasContent = computed(() => (person.value === 'test' ? shown.value.length 
 .pr-start { display: inline-flex; align-items: center; gap: 0.5rem; }
 .pr-start__label { font-size: 0.8rem; color: var(--color-gray-600); white-space: nowrap; }
 .dark .pr-start__label { color: var(--color-gray-400); }
+.pr-lensrow { margin: -0.25rem 0 0.75rem; }
 .pr-whowrap { margin: 0 0 0.75rem; }
 .pr-who { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem 1.25rem; margin: -0.25rem 0 1rem; }
 .pr-ran { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.25rem 0.9rem; margin: 0; padding: 0; border: 0; min-width: 0; }
