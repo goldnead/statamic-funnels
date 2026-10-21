@@ -215,11 +215,6 @@ class LandkarteController extends CpController
             404,
         );
 
-        // An older brand-context has no details(): the panel shows what it always did.
-        if (! method_exists($this->registry, 'details') || ! method_exists($this->registry, 'detailsAllowed')) {
-            return response()->json(['blocks' => []]);
-        }
-
         // The owning addon decides with the right that guards the object in its own CP.
         if (! $this->registry->detailsAllowed($data['type'], $data['ref_id'], User::current())) {
             return response()->json(['blocks' => [], 'restricted' => true], 403);
