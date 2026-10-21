@@ -1,6 +1,7 @@
 <script setup>
 import { computed, inject, ref, watch } from 'vue';
 import { Alert, Icon } from '@statamic/cms/ui';
+import { linkTarget } from '../../support/probelauf.js';
 
 /**
  * The mailbox of the test person: every mail that goes out on her way, in order, and the one she opens.
@@ -67,6 +68,18 @@ watch(() => props.entries, () => {
     state.value = 'idle';
 });
 
+// Up and down move through the mails like a mailbox does; the focus follows, the mail opens on Enter or click.
+function onKey(event) {
+    if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+
+    const items = [...event.currentTarget.querySelectorAll('.pm-item')];
+    const at = items.indexOf(document.activeElement);
+    if (at === -1) return;
+
+    event.preventDefault();
+    items[Math.min(items.length - 1, Math.max(0, at + (event.key === 'ArrowDown' ? 1 : -1)))].focus();
+}
+
 const imagesNote = computed(() => {
     const n = mail.value?.blocked_images ?? 0;
 
@@ -79,7 +92,7 @@ const imagesNote = computed(() => {
         <p v-if="!mails.length" class="pr-status" data-pr-empty>{{ probe.t('probe_mailbox_empty') }}</p>
 
         <template v-else>
-            <ul class="pm-list" data-pm-list>
+            <ul class="pm-list" data-pm-list @keydown="onKey">
                 <li v-for="entry in mails" :key="entry.id">
                     <button
                         type="button"
@@ -108,11 +121,11 @@ const imagesNote = computed(() => {
                     <dl class="pm-head">
                         <dt>{{ probe.t('probe_mail_subject') }}</dt>
                         <dd class="pm-head__subject" data-pm-subject>{{ mail.subject }}</dd>
-                        <template v-if="mail.from">
-                            <dt>{{ probe.t('probe_mail_from') }}</dt>
-                            <dd>{{ mail.from }}</dd>
-                        </template>
+                        <dt>{{ probe.t('probe_mail_from') }}</dt>
+                        <dd :class="!mail.from && 'pm-head__none'" data-pm-from>{{ mail.from || probe.t('probe_mail_from_none') }}</dd>
                     </dl>
+
+                    <p v-if="imagesNote" class="pm-note pm-note--top" data-pm-images>{{ imagesNote }}</p>
 
                     <!-- Empty sandbox: no script, no same-origin, no forms, no popups, no navigation. -->
                     <iframe
@@ -124,15 +137,14 @@ const imagesNote = computed(() => {
                         data-pm-frame
                     />
 
-                    <p v-if="imagesNote" class="pm-note" data-pm-images>{{ imagesNote }}</p>
-
                     <div v-if="mail.links.length" class="pm-links" data-pm-links>
                         <h4>{{ probe.t('probe_mail_links') }}</h4>
                         <p class="pm-note">{{ probe.t('probe_mail_links_help') }}</p>
                         <ul>
                             <li v-for="(link, i) in mail.links" :key="i">
                                 <span class="pm-link__text">{{ link.text }}</span>
-                                <span class="pm-link__url">{{ link.url }}</span>
+                                <span class="pm-link__url">{{ linkTarget(link.url).goal }}</span>
+                                <span v-if="linkTarget(link.url).wrapped" class="pm-link__wrapped">{{ linkTarget(link.url).wrapped }}</span>
                             </li>
                         </ul>
                     </div>
@@ -167,14 +179,21 @@ const imagesNote = computed(() => {
 .pm-head dd { margin: 0; color: var(--color-gray-900); overflow-wrap: anywhere; }
 .dark .pm-head dd { color: var(--color-gray-100); }
 .pm-head__subject { font-weight: 600; }
-.pm-frame { display: block; width: 100%; height: 26rem; border: 1px solid var(--color-gray-200); border-radius: 0.5rem; background: #fff; }
+.pm-frame { display: block; width: 100%; height: 22rem; min-height: 10rem; resize: vertical; overflow: auto; border: 1px solid var(--color-gray-200); border-radius: 0.5rem; background: #fff; }
 .dark .pm-frame { border-color: var(--color-gray-700); }
+.pm-note--top { margin: 0 0 0.5rem; }
 .pm-note { margin: 0.5rem 0 0; font-size: 0.8rem; color: var(--color-gray-600); }
 .dark .pm-note { color: var(--color-gray-400); }
 .pm-links { margin-top: 1rem; }
 .pm-links h4 { margin: 0; font-size: 0.8rem; font-weight: 600; }
 .pm-links ul { margin: 0.4rem 0 0; padding: 0; list-style: none; }
 .pm-links li { display: flex; flex-wrap: wrap; gap: 0.1rem 0.75rem; padding: 0.2rem 0; font-size: 0.8rem; }
-.pm-link__url { color: var(--color-gray-600); overflow-wrap: anywhere; }
-.dark .pm-link__url { color: var(--color-gray-400); }
+.pm-link__url { color: var(--color-gray-900); overflow-wrap: anywhere; }
+.dark .pm-link__url { color: var(--color-gray-100); }
+.pm-link__wrapped { flex-basis: 100%; font-size: 0.7rem; color: var(--color-gray-500); overflow-wrap: anywhere; }
+.dark .pm-link__wrapped { color: var(--color-gray-500); }
+.pm-head__none { color: var(--color-gray-600) !important; font-style: italic; }
+.dark .pm-head__none { color: var(--color-gray-400) !important; }
+.pm-links h4 { color: var(--color-gray-900); }
+.dark .pm-links h4 { color: var(--color-gray-100); }
 </style>

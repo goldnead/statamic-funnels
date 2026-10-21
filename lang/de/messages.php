@@ -460,6 +460,8 @@ return [
     'probe_event_entered' => 'erreicht',
     'probe_event_granted' => 'Zugang erhalten',
 
+    'probe_lens_label' => 'Ansicht',
+    'probe_mail_from_none' => 'Standardabsender der Marke',
     'probe_lens_timeline' => 'Zeitleiste',
     'probe_lens_mailbox' => 'Postfach',
     'probe_mailbox_empty' => 'Auf diesem Weg geht keine Mail raus.',

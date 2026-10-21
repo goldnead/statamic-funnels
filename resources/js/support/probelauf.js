@@ -131,3 +131,31 @@ export function timeInDay(seconds, t) {
 
     return inDay === 0 ? null : timeWords(inDay, t);
 }
+
+/** Query keys under which click tracking hides where a link really goes. */
+const TARGET_KEYS = ['to', 'url', 'u', 'target', 'redirect', 'r', 'link', 'dest'];
+
+/**
+ * Where a link of a mail really leads. Click tracking wraps the address of a link in its own
+ * (`https://track.test/c/abc?to=https%3A%2F%2Fsite.test%2Fkurs`); the person wants the goal, not the wrapper.
+ *
+ * @param {string} url
+ * @returns {{ goal: string, wrapped: string|null }} `wrapped` is the original address when a goal was found behind it
+ */
+export function linkTarget(url) {
+    try {
+        const parsed = new URL(url, 'https://base.invalid');
+
+        for (const key of TARGET_KEYS) {
+            const value = parsed.searchParams.get(key);
+
+            if (value && /^https?:\/\//i.test(value)) {
+                return { goal: value.replace(/^https?:\/\//i, '').replace(/\/$/, ''), wrapped: url };
+            }
+        }
+    } catch {
+        // Not an address the page can read: it is shown as it is.
+    }
+
+    return { goal: url, wrapped: null };
+}

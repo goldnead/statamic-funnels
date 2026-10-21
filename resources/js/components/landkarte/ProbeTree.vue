@@ -134,7 +134,7 @@ const hasContent = computed(() => (person.value === 'test' ? timeline.value.entr
                     <ToggleItem v-for="option in personOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-person-option="option.value" />
                 </ToggleGroup>
             </span>
-            <ToggleGroup v-if="person === 'test' && mailUrl" v-model="lens" size="sm" :aria-label="t('probe_lens_mailbox')" data-pr-lens>
+            <ToggleGroup v-if="person === 'test' && mailUrl" v-model="lens" size="sm" :aria-label="t('probe_lens_label')" data-pr-lens>
                 <ToggleItem v-for="option in lensOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-lens-option="option.value" />
             </ToggleGroup>
             <label v-if="person === 'test' && startOptions.length" class="pr-start">

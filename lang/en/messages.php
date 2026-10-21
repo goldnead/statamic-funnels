@@ -458,6 +458,8 @@ return [
     'probe_event_entered' => 'reached',
     'probe_event_granted' => 'given access',
 
+    'probe_lens_label' => 'View',
+    'probe_mail_from_none' => 'the brand\'s default sender',
     'probe_lens_timeline' => 'Timeline',
     'probe_lens_mailbox' => 'Mailbox',
     'probe_mailbox_empty' => 'No mail goes out on this way.',

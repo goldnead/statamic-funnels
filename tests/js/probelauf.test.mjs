@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { groupByDay, mailFork, splitNode, startsOpen, timeInDay, timeWords } from '../../resources/js/support/probelauf.js';
+import { groupByDay, linkTarget, mailFork, splitNode, startsOpen, timeInDay, timeWords } from '../../resources/js/support/probelauf.js';
 
 const words = {
     probe_now: 'sofort',
@@ -129,4 +129,15 @@ test('the time inside a day is said, midnight of it is not', () => {
     assert.equal(timeInDay(0, t), null);
     assert.equal(timeInDay(2 * 86400, t), null);
     assert.equal(timeInDay(2 * 86400 + 3 * 3600, t), '3 Std.');
+});
+
+test('a tracked link shows its goal, the wrapper only as a note', () => {
+    const wrapped = 'https://track.example.test/c/abc123?to=https%3A%2F%2Fadriangoldner.com%2Fkurs';
+
+    assert.deepEqual(linkTarget(wrapped), { goal: 'adriangoldner.com/kurs', wrapped });
+    assert.deepEqual(linkTarget('https://track.test/x?url=https%3A%2F%2Fsite.test%2F'), { goal: 'site.test', wrapped: 'https://track.test/x?url=https%3A%2F%2Fsite.test%2F' });
+    assert.deepEqual(linkTarget('https://adriangoldner.com/kurs'), { goal: 'https://adriangoldner.com/kurs', wrapped: null });
+    assert.deepEqual(linkTarget('mailto:hallo@site.test'), { goal: 'mailto:hallo@site.test', wrapped: null });
+    // A parameter that is not an address is no goal.
+    assert.deepEqual(linkTarget('https://site.test/a?to=berlin'), { goal: 'https://site.test/a?to=berlin', wrapped: null });
 });
