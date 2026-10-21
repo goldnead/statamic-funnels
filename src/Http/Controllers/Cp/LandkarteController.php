@@ -230,15 +230,23 @@ class LandkarteController extends CpController
     }
 
     /**
-     * The dry run ("Probelauf"): the tree of every way through this map, planned from the graphs the owning
-     * addons describe. Reads, never does: no mail, no run, no write. Each addon decides with its own right
-     * what the signed-in user may see of it; what she may not see is named, not shown.
+     * The dry run ("Probelauf") of this map, planned from the graphs the owning addons describe. Reads,
+     * never does: no mail, no run, no write. Each addon decides with its own right what the signed-in user
+     * may see of it; what she may not see is named, not shown.
+     *
+     * Without a person it is the tree of every way (`roots`). With the test person (`person=test`) and a
+     * start (`start=type:id:event`, one of `starts`) it is the one way she walks, in order, by day (`entries`).
      */
-    public function probelauf(Landkarte $landkarte)
+    public function probelauf(Request $request, Landkarte $landkarte)
     {
         $this->authorizeAccess();
 
         abort_unless(class_exists(Simulator::class), 404);
+
+        $data = $request->validate([
+            'person' => ['nullable', 'in:unknown,test'],
+            'start' => ['nullable', 'string', 'max:300'],
+        ]);
 
         $built = $this->graph->build($landkarte, MapPeriod::lastDays(30));
 
@@ -257,19 +265,48 @@ class LandkarteController extends CpController
             })
             ->all();
 
-        $tree = (new Simulator($this->registry))->tree($nodes, $edges, SimPerson::unknown(), User::current());
+        $simulator = new Simulator($this->registry);
+        $person = $data['person'] ?? 'unknown';
 
-        $labels = [];
+        $starts = array_map(fn (array $s) => [
+            ...$s,
+            'key' => "{$s['type']}:{$s['id']}:{$s['event']}",
+            'event_label' => Lang::has('statamic-funnels::messages.probe_event_'.$s['event']) ? __('statamic-funnels::messages.probe_event_'.$s['event']) : $s['event'],
+        ], $simulator->starts($nodes, $edges));
+
+        if ($person === 'test') {
+            $chosen = collect($starts)->firstWhere('key', $data['start'] ?? ($starts[0]['key'] ?? null));
+
+            abort_if($chosen === null && ($data['start'] ?? null) !== null, 422);
+
+            $timeline = $chosen
+                ? $simulator->timeline($nodes, $edges, ['type' => $chosen['type'], 'id' => $chosen['id'], 'event' => $chosen['event']], SimPerson::known(), User::current())
+                : ['entries' => [], 'stats' => ['entries' => 0, 'days' => [], 'cut' => 0]];
+
+            return response()->json([
+                'person' => 'test',
+                'starts' => $starts,
+                'start' => $chosen['key'] ?? null,
+                'entries' => $timeline['entries'],
+                'stats' => $timeline['stats'],
+            ]);
+        }
+
+        $tree = $simulator->tree($nodes, $edges, SimPerson::unknown(), User::current());
+
+        $unreached = [];
 
         foreach ($tree['stats']['unreached'] as $key) {
             [$type, $id] = explode(':', $key, 2);
             $card = collect($built['nodes'])->firstWhere('key', $key);
-            $labels[] = ['key' => $key, 'label' => $card['label'] ?? $id, 'type_label' => $card['type_label'] ?? $type];
+            $unreached[] = ['key' => $key, 'label' => $card['label'] ?? $id, 'type_label' => $card['type_label'] ?? $type];
         }
 
         return response()->json([
+            'person' => 'unknown',
+            'starts' => $starts,
             'roots' => $tree['roots'],
-            'stats' => [...$tree['stats'], 'unreached' => $labels],
+            'stats' => [...$tree['stats'], 'unreached' => $unreached],
         ]);
     }
 
@@ -478,9 +515,9 @@ class LandkarteController extends CpController
             'map_connect_pair', 'map_connect_allowed', 'map_connect_forbidden', 'map_connect_failed', 'map_connect_title',
             'map_disconnect_title', 'map_connect_do', 'map_disconnect_do', 'map_connected', 'map_disconnected', 'map_undo', 'map_undone',
             'map_disconnect', 'map_connect_conflict', 'map_dead_stub_help', 'map_details_loading', 'map_details_failed', 'map_details_restricted', 'map_details_more',
-            'probe_tab_map', 'probe_tab_probe', 'probe_title', 'probe_help', 'probe_loading', 'probe_failed', 'probe_empty', 'probe_summary',
+            'probe_tab_map', 'probe_tab_probe', 'probe_title', 'probe_title_test', 'probe_help', 'probe_help_test', 'probe_loading', 'probe_failed', 'probe_empty', 'probe_summary',
             'probe_unreached', 'probe_expand', 'probe_collapse', 'probe_now', 'probe_day', 'probe_hours', 'probe_minutes', 'probe_unavailable',
-            'probe_person_unknown', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
+            'probe_person_unknown', 'probe_person_test', 'probe_person_label', 'probe_start_label', 'probe_start_none', 'probe_timeline_empty', 'probe_timeline_summary', 'probe_kind_decision', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
             'probe_kind_stop', 'probe_kind_unknown', 'probe_kind_fork', 'probe_kind_rejoin', 'probe_kind_denied', 'probe_kind_more', 'probe_kind_trait',
         ];
 

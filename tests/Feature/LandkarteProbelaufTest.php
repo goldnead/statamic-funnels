@@ -306,6 +306,92 @@ class LandkarteProbelaufTest extends TestCase
     }
 
     #[Test]
+    public function the_places_a_way_can_begin_are_listed_with_their_event(): void
+    {
+        $landkarte = $this->landkarte();
+
+        $json = $this->asAdmin()->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf")->assertOk()->json();
+
+        $this->assertSame(['lead_magnet:freebie:requested', 'product:masterclass:purchased'], array_column($json['starts'], 'key'));
+        $this->assertSame(__('statamic-funnels::messages.probe_event_requested'), $json['starts'][0]['event_label']);
+    }
+
+    #[Test]
+    public function the_test_person_walks_one_line_by_day(): void
+    {
+        $landkarte = $this->landkarte();
+
+        $json = $this->asAdmin()
+            ->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&start=lead_magnet:freebie:requested")
+            ->assertOk()
+            ->json();
+
+        $this->assertSame('test', $json['person']);
+        $this->assertSame('lead_magnet:freebie:requested', $json['start']);
+        $this->assertSame([
+            '0 enter:Lead_magnet freebie',
+            '0 mail:Please confirm',
+            '0 enter:Automation welcome',
+            '0 mail:Welcome',
+            '2 wait:after 2 days',
+            '2 mail:Follow-up',
+        ], array_map(fn ($e) => $e['day'].' '.$e['kind'].':'.$e['label'], $json['entries']));
+        $this->assertSame([0, 2], $json['stats']['days']);
+    }
+
+    #[Test]
+    public function a_purchase_starts_a_way_too(): void
+    {
+        $landkarte = $this->landkarte();
+
+        $json = $this->asAdmin()
+            ->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&start=product:masterclass:purchased")
+            ->assertOk()
+            ->json();
+
+        $this->assertSame([
+            'enter:Product masterclass',
+            'access:Access to the course',
+            'enter:Automation thanks',
+            'mail:Thank you',
+        ], array_map(fn ($e) => $e['kind'].':'.$e['label'], $json['entries']));
+    }
+
+    #[Test]
+    public function a_start_the_map_does_not_offer_is_refused(): void
+    {
+        $landkarte = $this->landkarte();
+
+        $this->asAdmin()->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&start=automation:welcome:started")->assertStatus(422);
+        $this->asAdmin()->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=wild")->assertStatus(422);
+    }
+
+    #[Test]
+    public function the_test_person_walks_without_writing_anything(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+        Mail::fake();
+        Queue::fake();
+
+        $writes = [];
+        DB::listen(function ($query) use (&$writes) {
+            if (! preg_match('/^\s*(select|pragma)\b/i', $query->sql)) {
+                $writes[] = $query->sql;
+            }
+        });
+
+        // Both starts of the map, not just the first one.
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&start=lead_magnet:freebie:requested")->assertOk();
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&start=product:masterclass:purchased")->assertOk();
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=unknown")->assertOk();
+
+        Mail::assertNothingSent();
+        Queue::assertNothingPushed();
+        $this->assertSame([], $writes);
+    }
+
+    #[Test]
     public function the_map_page_offers_the_dry_run(): void
     {
         $landkarte = $this->landkarte();

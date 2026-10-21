@@ -1,7 +1,7 @@
 <script setup>
 import { computed, inject, ref } from 'vue';
 import { Icon } from '@statamic/cms/ui';
-import { splitNode, startsOpen } from '../../support/probelauf.js';
+import { ICONS, splitNode, startsOpen } from '../../support/probelauf.js';
 
 /**
  * One line of the dry run and everything below it.
@@ -20,20 +20,6 @@ const props = defineProps({
 
 const probe = inject('probelauf');
 
-const ICONS = {
-    enter: 'arrow-right',
-    mail: 'mail',
-    wait: 'time-clock',
-    access: 'key',
-    page: 'page',
-    trait: 'tag-new',
-    stop: 'x',
-    unknown: 'warning-diamond',
-    denied: 'eye-slash',
-    rejoin: 'arrow-up',
-    more: 'dots',
-    fork: 'split-window',
-};
 
 // What follows on this level and what hangs below: see support/probelauf.js.
 const split = computed(() => splitNode(props.node));

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added: Probelauf with a test person (part 2: the way by day)
+
+The Probelauf tab has a second view: **Testperson**. Pick a start (a lead magnet asked for, a product bought, or a
+card that begins a way) and see the one way she walks, every step in the order it happens under the day it falls on
+(Tag 0, Tag 2, ...). A known person answers every condition, so there is no fork: the automations decide with the
+engine's own pure parts and say which way she took and why. `GET landkarten/{id}/probelauf?person=test&start=type:id:event`
+answers only starts the map offers (`starts` in the answer; anything else is a 422). Still a simulation: nothing is
+sent, started or written (tested with a query log, also from a product start). Needs brand-context 1.22.
+
 ## 1.30.0 — 2026-10-21
 
 ### Added: "Probelauf", the dry run of a Landkarte (part 1: the tree of every way)
