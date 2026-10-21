@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.35.2 — 2026-10-21
+
+### Changed
+
+- The fonts a page takes in as data are the Latin ones: a font package ships a file per script (`-latin-ext-`, `-cyrillic-`, `-greek-`, ...)
+  and a German page uses only the Latin files. Those of other scripts stay links. A page of adriangoldner.com goes from 1.95 MB to about
+  a third of that. The limit of one page is 900 KB of data.
+
 ## 1.35.1 — 2026-10-21
 
 ### Fixed: the page of the Probelauf showed in a fallback font and without its drawn strokes
