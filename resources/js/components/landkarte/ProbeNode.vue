@@ -51,7 +51,7 @@ const kindWord = computed(() => probe.t(`probe_kind_${props.node.kind}`, ''));
             </button>
             <span v-else class="pr-fold pr-fold--none" aria-hidden="true" />
 
-            <span v-if="node.kind === 'alt'" class="pr-alt" :class="bought ? 'pr-alt--side' : 'pr-alt--when'">{{ node.label }}</span>
+            <span v-if="node.kind === 'alt'" class="pr-alt" :class="bought ? 'pr-alt--side' : 'pr-alt--when'" :title="node.label">{{ node.label }}</span>
             <template v-else>
                 <Icon v-if="icon" :name="icon" class="pr-icon size-4" :title="kindWord" />
                 <span v-if="node.kind === 'enter'" class="pr-type">{{ node.detail }}</span>
@@ -79,7 +79,7 @@ const kindWord = computed(() => probe.t(`probe_kind_${props.node.kind}`, ''));
 .pr-fold { display: inline-flex; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; flex: none; align-self: center; border-radius: 0.25rem; background: transparent; border: 0; padding: 0; color: var(--color-gray-500); cursor: pointer; }
 .pr-fold:hover { color: var(--color-gray-900); background: var(--color-gray-100); }
 .dark .pr-fold:hover { color: var(--color-gray-100); background: var(--color-gray-700); }
-.pr-fold:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.pr-fold:focus-visible { outline: 2px solid var(--color-blue-400, var(--color-primary)); outline-offset: 1px; }
 .pr-fold--none { cursor: default; pointer-events: none; }
 
 .pr-icon { flex: none; align-self: center; color: var(--color-gray-500); }
@@ -97,7 +97,7 @@ const kindWord = computed(() => probe.t(`probe_kind_${props.node.kind}`, ''));
 .dark .pr-node--quiet > .pr-row { color: var(--color-gray-400); }
 .pr-node--quiet .pr-label { font-weight: 400; }
 .pr-node--stop > .pr-row, .pr-node--unknown > .pr-row { color: var(--color-gray-700); }
-.pr-alt { display: inline-block; font-size: 0.875rem; }
+.pr-alt { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem; }
 .pr-alt--when { font-weight: 500; color: var(--color-gray-800); }
 .dark .pr-alt--when { color: var(--color-gray-200); }
 .pr-alt--side { padding: 0.05rem 0.55rem; border: 1px solid var(--color-gray-200); border-radius: 999px; font-size: 0.8rem; color: var(--color-gray-600); }

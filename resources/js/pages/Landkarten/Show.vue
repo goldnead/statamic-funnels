@@ -52,6 +52,7 @@ const props = defineProps({
     // The dry run: null when the installed Brand Context cannot plan one.
     probelaufUrl: { type: String, default: null },
     probelaufMailUrl: { type: String, default: null },
+    probelaufPageUrl: { type: String, default: null },
     probelaufPersonsUrl: { type: String, default: null },
     showUrl: { type: String, required: true },
     indexUrl: { type: String, required: true },
@@ -831,7 +832,8 @@ const helpLines = computed(() => [
             <Button :class="view !== 'map' && 'lk-off'" :inert="view !== 'map'" :text="t('map_add_stage', 'Add phase')" icon="plus" @click="openLane()" />
         </Header>
 
-        <Description :text="t('landkarten_description')" class="mb-4" />
+        <!-- The subtitle explains the map; on the dry run it is a sentence nobody needs between the title and the person. -->
+        <Description v-if="view === 'map'" :text="t('landkarten_description')" class="mb-4" />
 
         <Alert v-if="conflict" variant="warning" class="mb-3" data-lk-conflict>
             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -841,7 +843,7 @@ const helpLines = computed(() => [
         </Alert>
         <p v-else-if="errors && Object.keys(errors).length" class="mb-3 text-sm text-red-600" role="alert">{{ Object.values(errors)[0] }}</p>
 
-        <ProbeTree v-if="view === 'probe' && probelaufUrl" :url="probelaufUrl" :mail-url="probelaufMailUrl" :persons-url="probelaufPersonsUrl" :labels="labels" />
+        <ProbeTree v-if="view === 'probe' && probelaufUrl" :url="probelaufUrl" :mail-url="probelaufMailUrl" :page-url="probelaufPageUrl" :persons-url="probelaufPersonsUrl" :labels="labels" />
 
         <div v-show="view === 'map'" class="lk-board sa-canvas-frame" data-landkarte-board>
             <VueFlow

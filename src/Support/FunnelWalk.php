@@ -31,6 +31,11 @@ class FunnelWalk
      */
     public function existingVisit(Funnel $funnel): ?FunnelVisit
     {
+        // A look (the dry run's page) has no walk, not even somebody else's.
+        if (ProbePreview::active($this->request())) {
+            return null;
+        }
+
         $token = Embed::tokenFromRequest($this->request())
             ?? ($this->request()->hasSession() ? $this->request()->session()->get(self::RETURNED) : null)
             ?? $this->request()->cookie(self::COOKIE);
@@ -48,6 +53,11 @@ class FunnelWalk
     /** The walk this request belongs to, started if it is the first step. */
     public function visit(Funnel $funnel): FunnelVisit
     {
+        // A look is nobody's walk: a made-up visit that is never saved, no row, no cookie.
+        if (ProbePreview::active($this->request())) {
+            return (new FunnelVisit(['funnel_id' => $funnel->id, 'current_node_key' => $funnel->entryStep()?->node_key]))->setRelation('funnel', $funnel);
+        }
+
         $token = $this->token();
 
         return FunnelVisit::firstOrCreate(
@@ -142,6 +152,10 @@ class FunnelWalk
     /** Das Cookie des Besuchs setzen, `Lax`, einen Monat. */
     public function queueCookie(string $token): void
     {
+        if (ProbePreview::active($this->request())) {
+            return;
+        }
+
         $sicher = $this->request()->isSecure();
 
         cookie()->queue(cookie(self::COOKIE, $token, 60 * 24 * 30, null, null, $sicher ?: null, true, false, 'Lax'));
@@ -168,6 +182,11 @@ class FunnelWalk
     /** Record arrival at a step, once per step per walk. */
     public function enter(FunnelVisit $visit, FunnelStep $step): void
     {
+        // Looking at a step is not arriving at it: no event, no webhook, no "entered".
+        if (ProbePreview::active($this->request())) {
+            return;
+        }
+
         $visit->forceFill(['current_node_key' => $step->node_key])->save();
 
         // Once. A visitor who reloads a page has not entered it twice, and a
@@ -192,6 +211,11 @@ class FunnelWalk
     /** Move on, and say by which way out. */
     public function advance(FunnelVisit $visit, FunnelStep $from, string $output, string $event, array $payload = [], bool $recorded = false): ?FunnelStep
     {
+        // A look goes nowhere: no event, no mail trigger, no completion.
+        if (ProbePreview::active($this->request())) {
+            return null;
+        }
+
         // `$recorded`: the caller already wrote the event (atomically, with
         // `FunnelVisit::recordOnce()`) and must not have it written twice.
         if (! $recorded) {
@@ -224,7 +248,7 @@ class FunnelWalk
 
     public function complete(FunnelVisit $visit, FunnelStep $step): void
     {
-        if ($visit->completed_at) {
+        if (ProbePreview::active($this->request()) || $visit->completed_at) {
             return;
         }
 

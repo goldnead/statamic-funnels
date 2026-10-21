@@ -87,7 +87,7 @@ async function pick(person) {
         </div>
         <label v-else class="rp-search">
             <span class="pr-start__label">{{ probe.t('probe_who_search') }}</span>
-            <Input v-model="query" size="sm" class="w-64" :aria-label="probe.t('probe_who_search')" autocomplete="off" data-pr-real-search />
+            <Input v-model="query" size="sm" class="w-full" :aria-label="probe.t('probe_who_search')" autocomplete="off" data-pr-real-search />
         </label>
 
         <ul v-if="state === 'ready'" class="rp-results" data-pr-real-results>
@@ -103,8 +103,9 @@ async function pick(person) {
 </template>
 
 <style>
-.rp { display: flex; flex-direction: column; gap: 0.35rem; margin: -0.25rem 0 0.9rem; }
-.rp-search { display: inline-flex; align-items: center; gap: 0.5rem; }
+.rp { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.9rem 0 0; padding-top: 0.75rem; border-top: 1px solid var(--color-gray-200); }
+.dark .rp { border-top-color: var(--color-gray-700); }
+.rp-search { display: flex; flex-direction: column; align-items: stretch; gap: 0.3rem; }
 .rp-copied { display: inline-flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; font-weight: 500; color: var(--color-gray-900); }
 .dark .rp-copied { color: var(--color-gray-100); }
 .rp-results { margin: 0; padding: 0; list-style: none; max-width: 28rem; border: 1px solid var(--color-gray-200); border-radius: 0.5rem; overflow: hidden; }
@@ -115,7 +116,7 @@ async function pick(person) {
 .dark .rp-pick { color: var(--color-gray-100); }
 .rp-pick:hover { background: var(--color-gray-50); }
 .dark .rp-pick:hover { background: var(--color-gray-800); }
-.rp-pick:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.rp-pick:focus-visible { outline: 2px solid var(--color-blue-400, var(--color-primary)); outline-offset: -2px; }
 .rp-note--warn { color: var(--color-gray-900) !important; font-weight: 500; }
 .dark .rp-note--warn { color: var(--color-gray-100) !important; }
 .rp-note { margin: 0; font-size: 0.78rem; color: var(--color-gray-600); }

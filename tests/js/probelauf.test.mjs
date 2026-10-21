@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { accountOf, encodeActions, groupByDay, linkTarget, mailFork, splitNode, standing, startsOpen, timeInDay, timeWords, untilDay, pagesOf, words as plainWords } from '../../resources/js/support/probelauf.js';
+import { accountOf, countsText, encodeActions, entriesUntil, firstToOpen, freeTags, groupByDay, isExperienced, linkTarget, mailFork, pagesOf, signatureOf, splitNode, standing, startsOpen, stepsByDay, timeInDay, timeWords, unknownCards, untilDay, words as plainWords } from '../../resources/js/support/probelauf.js';
 
 const words = {
     probe_now: 'sofort',
@@ -205,4 +205,76 @@ test('the pages on the way are the page lines that are no lessons', () => {
     ];
 
     assert.deepEqual(pagesOf(entries).map((e) => e.label), ['Seite A']);
+});
+
+// --- the start screen: one person's way as what she experiences -------------------------------------------------------
+
+const line = (id, kind, label, day = 0, at = day * 86400, meta = {}) => ({ id, kind, label, day, at, meta, detail: null });
+
+const way = [
+    line('e1', 'enter', 'Lead Magnet'),
+    line('e2', 'mail', 'Bitte bestätigen', 0, 0, { mail_key: 'lm|Bitte bestätigen' }),
+    line('e3', 'wait', 'Wartet'),
+    line('e4', 'access', 'Zugang freischalten'),
+    line('e5', 'mail', 'Dein Zugang', 0, 3600, { mail_key: 'lm|Dein Zugang' }),
+    line('e6', 'enter', 'Kurs leer'),
+    line('e7', 'unknown', 'Wirkung unbekannt'),
+    line('e8', 'wait', 'nach 2 Tagen', 2, 2 * 86400),
+    line('e9', 'decision', 'Chor oder solo?', 2, 2 * 86400),
+    line('e10', 'mail', 'Eine Frage', 2, 2 * 86400, { mail_key: 'auto|Eine Frage' }),
+    line('e11', 'page', 'Seite: Masterclass', 5, 5 * 86400),
+];
+
+test('only what the person gets, does or is told is a row; cards and waiting are not', () => {
+    assert.deepEqual(way.filter(isExperienced).map((e) => e.id), ['e2', 'e4', 'e5', 'e9', 'e10', 'e11']);
+});
+
+test('the rows are grouped by day and each day counts what it brings', () => {
+    const days = stepsByDay(way);
+
+    assert.deepEqual(days.map((d) => [d.day, d.rows.length]), [[0, 3], [2, 2], [5, 1]]);
+    assert.deepEqual(days[0].counts, { mails: 2, access: 1, pages: 0 });
+    assert.deepEqual(days[2].counts, { mails: 0, access: 0, pages: 1 });
+});
+
+test('a day is counted in words, singular and plural, and an empty day says nothing', () => {
+    const t = (key) => ({
+        probe_count_mail_one: '1 Mail', probe_count_mail_many: ':count Mails',
+        probe_count_access_one: '1 Zugang', probe_count_access_many: ':count Zugänge',
+        probe_count_page_one: '1 Seite', probe_count_page_many: ':count Seiten',
+    })[key];
+
+    assert.equal(countsText({ mails: 3, access: 1, pages: 0 }, t), '3 Mails, 1 Zugang');
+    assert.equal(countsText({ mails: 1, access: 2, pages: 1 }, t), '1 Mail, 2 Zugänge, 1 Seite');
+    assert.equal(countsText({ mails: 0, access: 0, pages: 0 }, t), '');
+});
+
+test('a card whose effect is unknown is named once, at the end, by the card and not by the line', () => {
+    assert.deepEqual(unknownCards(way), ['Kurs leer']);
+    // The same card twice is said once; a line that is unknown behind something else names itself.
+    assert.deepEqual(unknownCards([...way, line('x', 'enter', 'Kurs leer'), line('y', 'unknown', 'Wirkung unbekannt'), line('z', 'mail', 'M'), line('u', 'unknown', 'Kaufabwicklung')]), ['Kurs leer', 'Kaufabwicklung']);
+    assert.deepEqual(unknownCards([]), []);
+});
+
+test('the screen opens on the first mail, passes over mails with nothing to show, then a page, then the first row', () => {
+    assert.equal(firstToOpen(way).id, 'e2');
+    assert.equal(firstToOpen(way, new Set([signatureOf(way[1])])).id, 'e5');
+    assert.equal(firstToOpen(way, new Set([signatureOf(way[1]), signatureOf(way[4]), signatureOf(way[9])])).id, 'e11');
+    assert.equal(firstToOpen([line('a', 'access', 'Zugang')]).id, 'a');
+    assert.equal(firstToOpen([line('a', 'enter', 'Karte')]), null);
+});
+
+test('a row is found again after the way is planned anew: a mail by its name in the simulation, a line by what it is', () => {
+    assert.equal(signatureOf(way[1]), 'lm|Bitte bestätigen');
+    assert.equal(signatureOf(way[8]), 'decision|Chor oder solo?|172800');
+});
+
+test('the account at a row is what the way gave her up to and including it', () => {
+    assert.deepEqual(entriesUntil(way, 'e4').map((e) => e.id), ['e1', 'e2', 'e3', 'e4']);
+    assert.equal(entriesUntil(way, 'nope').length, way.length);
+});
+
+test('a tag is offered as free until she has it, whatever the case', () => {
+    assert.deepEqual(freeTags(['Solo', 'Chorleitung', 'Newsletter'], ['chorleitung']), ['Solo', 'Newsletter']);
+    assert.deepEqual(freeTags([], ['x']), []);
 });

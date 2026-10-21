@@ -26,6 +26,8 @@ Route::prefix('funnels/landkarten')->name('statamic-funnels.landkarten.')->group
     // for her name) travels in the body and not in a URL that every access log keeps.
     Route::match(['get', 'post'], '{landkarte}/probelauf', [LandkarteController::class, 'probelauf'])->name('probelauf');
     Route::match(['get', 'post'], '{landkarte}/probelauf/mail', [LandkarteController::class, 'probelaufMail'])->name('probelauf.mail');
+    // POST only: the person travels in the body, and rendering a page is no "read" a link or a prefetch may trigger.
+    Route::post('{landkarte}/probelauf/page', [LandkarteController::class, 'probelaufPage'])->name('probelauf.page');
     Route::post('{landkarte}/probelauf/persons', [LandkarteController::class, 'probelaufPersons'])->name('probelauf.persons');
     Route::post('{landkarte}/connections/preview', [LandkarteController::class, 'previewConnection'])->name('connections.preview');
     Route::post('{landkarte}/connections', [LandkarteController::class, 'connect'])->name('connections.store');

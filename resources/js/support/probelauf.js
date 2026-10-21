@@ -261,3 +261,137 @@ export function accountOf(entries) {
 export function pagesOf(entries) {
     return entries.filter((e) => e.kind === 'page' && !e.meta?.lesson);
 }
+
+// --- the start screen: one person's way as what she experiences ------------------------------------------------------
+
+/** Lines that say nothing a person would feel: a card being entered, a wait (the day header is that wait), "as above", "n more". */
+const NOT_EXPERIENCED = ['enter', 'wait', 'rejoin', 'more', 'unknown', 'fork'];
+
+/** Whether a line of the way is something the person gets, does or is told (and so has a row of its own). */
+export function isExperienced(entry) {
+    return !NOT_EXPERIENCED.includes(entry.kind);
+}
+
+/**
+ * The way of a known person as the rows of the left column, by day: what she gets (a mail, a page, access), what she
+ * does, and the decisions on the way. The cards she passes through and the waiting between are not rows: the day header
+ * is the waiting, and the card is said by what it does.
+ *
+ * @param {{ id: string, day: number, kind: string }[]} entries
+ * @returns {{ day: number, rows: object[], counts: { mails: number, access: number, pages: number } }[]}
+ */
+export function stepsByDay(entries) {
+    const days = [];
+
+    for (const entry of entries) {
+        if (!isExperienced(entry)) continue;
+
+        let group = days[days.length - 1];
+
+        if (!group || group.day !== entry.day) {
+            group = { day: entry.day, rows: [], counts: { mails: 0, access: 0, pages: 0 } };
+            days.push(group);
+        }
+
+        group.rows.push(entry);
+
+        if (entry.kind === 'mail') group.counts.mails++;
+        else if (entry.kind === 'access') group.counts.access++;
+        else if (entry.kind === 'page') group.counts.pages++;
+    }
+
+    return days;
+}
+
+/** "3 Mails, 1 Zugang": what a day brings, in words. Nothing at all when it brings nothing worth counting. */
+export function countsText(counts, t) {
+    const part = (n, one, many) => (n === 0 ? null : (n === 1 ? t(one) : t(many).replace(':count', n)));
+
+    return [
+        part(counts.mails, 'probe_count_mail_one', 'probe_count_mail_many'),
+        part(counts.access, 'probe_count_access_one', 'probe_count_access_many'),
+        part(counts.pages, 'probe_count_page_one', 'probe_count_page_many'),
+    ].filter(Boolean).join(', ');
+}
+
+/**
+ * The cards of the way whose effect the planner cannot say (a card that "does something unknown", or a line that is
+ * unknown on its own), by name, without repeats: said once at the end of the screen instead of on a row of its own.
+ *
+ * @param {{ kind: string, label: string }[]} entries
+ * @returns {string[]}
+ */
+export function unknownCards(entries) {
+    const names = [];
+    let card = null;
+
+    for (const entry of entries) {
+        if (entry.kind === 'enter') {
+            card = entry.label;
+            continue;
+        }
+
+        if (entry.kind !== 'unknown') {
+            // A line that is something else ends "right behind a card": what is unknown after it names itself.
+            card = null;
+            continue;
+        }
+
+        // Directly behind a card it is the card that is unknown; elsewhere the line names itself.
+        const name = card ?? entry.label;
+
+        if (!names.includes(name)) names.push(name);
+
+        card = null;
+    }
+
+    return names;
+}
+
+/** What names an entry again after the way was planned anew (its id may have moved on). */
+export function signatureOf(entry) {
+    return entry.meta?.mail_key ?? `${entry.kind}|${entry.label}|${entry.at}`;
+}
+
+/**
+ * The row to open at first: the first mail, else the first page, else the first thing she gets. A mail the owner cannot
+ * write for the dry run (said so by the server) is passed over, so the screen does not open on an empty reader.
+ *
+ * @param {{ kind: string }[]} entries
+ * @param {Set<string>} skip signatures of the mails that have nothing to show
+ */
+export function firstToOpen(entries, skip = new Set()) {
+    const rows = entries.filter(isExperienced);
+
+    return rows.find((e) => e.kind === 'mail' && !skip.has(signatureOf(e))) ?? rows.find((e) => e.kind === 'page') ?? rows[0] ?? null;
+}
+
+/** Which kinds open a view of their own on the right (the others say what they are in a line). */
+export const VIEWS = { mail: 'mail', page: 'page', access: 'account' };
+
+/**
+ * The account of the person at the moment of one row: what the way gave her up to and including it.
+ *
+ * @param {{ id: string }[]} entries
+ * @param {string} id
+ */
+export function entriesUntil(entries, id) {
+    const at = entries.findIndex((e) => e.id === id);
+
+    return at === -1 ? entries : entries.slice(0, at + 1);
+}
+
+/** The delays the person editor offers for "when she does it", in days. */
+export const DELAYS = [0, 1, 2, 3, 5, 7, 14, 30];
+
+/**
+ * The tags to offer as "still free": what the map's conditions ask for, minus what she already has.
+ *
+ * @param {string[]} offered
+ * @param {string[]} chosen
+ */
+export function freeTags(offered, chosen) {
+    const have = new Set(chosen.map((t) => t.toLowerCase()));
+
+    return offered.filter((t) => !have.has(t.toLowerCase()));
+}

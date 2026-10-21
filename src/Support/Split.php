@@ -98,7 +98,8 @@ class Split
             return self::A;
         }
 
-        if (! $visit) {
+        // No walk, or a look (the dry run's page): A, and nothing is written.
+        if (! $visit || ProbePreview::active()) {
             return self::A;
         }
 

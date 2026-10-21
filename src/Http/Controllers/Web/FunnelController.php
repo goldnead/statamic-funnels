@@ -22,6 +22,7 @@ use Goldnead\StatamicFunnels\Support\InAppBrowser;
 use Goldnead\StatamicFunnels\Support\OrderSummary;
 use Goldnead\StatamicFunnels\Support\PaymentsDoor;
 use Goldnead\StatamicFunnels\Support\PreviewToken;
+use Goldnead\StatamicFunnels\Support\ProbePreview;
 use Goldnead\StatamicFunnels\Support\SavedCard;
 use Goldnead\StatamicFunnels\Support\Sibling;
 use Goldnead\StatamicFunnels\Support\Split;
@@ -215,6 +216,9 @@ class FunnelController
 
     protected function render(Funnel $funnel, FunnelStep $step, bool $preview = false)
     {
+        // The dry run's page is a look, whichever door it came through.
+        $preview = $preview || ProbePreview::active();
+
         // In preview nothing about a visitor is real, so nothing about a
         // visitor is written. The template still gets a `visit` shape, because
         // a template that has to test for it would be a template that behaves

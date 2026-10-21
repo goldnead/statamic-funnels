@@ -1,58 +1,32 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
-import { Alert, Checkbox, Description, Heading, Input, Select, ToggleGroup, ToggleItem } from '@statamic/cms/ui';
+import { computed, onBeforeUnmount, onMounted, provide, ref } from 'vue';
+import { Alert, Badge, Button, Description, Heading, Select } from '@statamic/cms/ui';
+import ProbeDetail from './ProbeDetail.vue';
 import ProbeNode from './ProbeNode.vue';
-import ProbeAccount from './ProbeAccount.vue';
-import ProbeMailbox from './ProbeMailbox.vue';
-import ProbePages from './ProbePages.vue';
-import ProbeRealPerson from './ProbeRealPerson.vue';
-import ProbeTimeline from './ProbeTimeline.vue';
+import ProbeStack from './ProbeStack.vue';
+import ProbeSteps from './ProbeSteps.vue';
 import {
-    standing, timeInDay as timeInDayText, timeWords as timeText, untilDay, words as plainWords,
+    firstToOpen, isExperienced, signatureOf, timeInDay as timeInDayText, timeWords as timeText, unknownCards, untilDay,
 } from '../../support/probelauf.js';
 import { postJson } from '../../support/landkarteRequest.js';
 
 /**
  * The dry run of a Landkarte ("Probelauf").
  *
- * Planned on the server from what the owning addons say they would do; nothing here sends, saves or
- * starts anything. Two ways to look: every way through the map (no person, a tree), or the one way a
- * test person walks from a chosen start, in order by day. Loaded when the tab opens and again when
- * the person or the start changes.
+ * Planned on the server from what the owning addons say they would do; nothing here sends, saves or starts anything. It
+ * opens on one thing: a test person who gets the map's first lead magnet. On the left what happens to her, by day; on the
+ * right what she sees at the step that is chosen. Everything about who she is lives in a stack ("Person anpassen"), and
+ * the tree of every way through the map is a link away. Loaded when the tab opens and again whenever the person, the start
+ * or what she does changes.
  */
 const props = defineProps({
     url: { type: String, required: true },
     mailUrl: { type: String, default: null },
+    pageUrl: { type: String, default: null },
     // Where a real person can be found and copied from; null when no addon knows real people.
     personsUrl: { type: String, default: null },
     labels: { type: Object, default: () => ({}) },
 });
-
-const state = ref('loading');
-// Once there is something to show, planning again does not take it away.
-const loadedOnce = ref(false);
-const person = ref('unknown');
-// For the test person: her way as a timeline, or the mails of it as a mailbox.
-const lens = ref('timeline');
-// The test person: what the page lets the operator say about her. She lives in the query and nowhere else.
-const tags = ref('');
-const access = ref('');
-const ran = ref([]);
-const actions = ref([]);
-// Fast forward: the day up to which her way is shown (null: all of it).
-const until = ref(null);
-// "As for a real person": what was copied from her beyond the form's fields, and who she is for the page.
-const unsubscribed = ref(false);
-const extraTraits = ref({});
-const copiedFrom = ref(null);
-const missing = ref([]);
-const who = ref('test');
-const products = ref([]);
-const automations = ref([]);
-const start = ref(null);
-const starts = ref([]);
-const tree = ref({ roots: [], stats: { nodes: 0, leaves: 0, cut: 0, unreached: [] } });
-const timeline = ref({ entries: [], stats: { entries: 0, days: [], cut: 0 } });
 
 const t = (key, fallback = '') => props.labels?.[key] ?? fallback;
 
@@ -62,12 +36,49 @@ provide('probelauf', {
     timeInDay: (seconds) => timeInDayText(seconds, t),
 });
 
-// Everything that makes her this person, as the body of a request: the way is planned from it and so is her mail. A body, not a URL:
-// what describes a real person must not land in an access log.
+// Her way (one line, by day) or every way through the map (a tree).
+const view = ref('person');
+const state = ref('loading');
+// Once there is something to show, planning again does not take it away.
+const loadedOnce = ref(false);
+
+// The test person: what the stack lets the operator say about her. She lives in the request and nowhere else.
+const who = ref('test');
+const tags = ref([]);
+const access = ref([]);
+const ran = ref([]);
+const actions = ref([]);
+const unsubscribed = ref(false);
+// "As for a real person": what was copied from her beyond the form's fields, and who she is for the page.
+const extraTraits = ref({});
+const copiedFrom = ref(null);
+const missing = ref([]);
+const stackOpen = ref(false);
+
+// Fast forward: the day up to which her way is shown (null: all of it).
+const until = ref(null);
+const selectedSig = ref(null);
+// Mails that had nothing to show while nobody had chosen one: the screen passes over them and opens on the next.
+const noPreview = ref(new Set());
+
+const start = ref(null);
+const starts = ref([]);
+const products = ref([]);
+const automations = ref([]);
+const options = ref({ access: [], tags: [] });
+const timeline = ref({ entries: [], stats: { entries: 0, days: [], cut: 0 } });
+const tree = ref(null);
+const treeState = ref('idle');
+
+// What the planner takes of a person's actions; the page does not offer more.
+const MAX_ACTIONS = 12;
+
+// Everything that makes her this person, as the body of a request: the way is planned from it and so is her mail. A body, not a
+// URL: what describes a real person must not land in an access log.
 function personBody() {
     const body = {
-        tags: plainWords(tags.value),
-        access: plainWords(access.value),
+        tags: tags.value,
+        access: access.value,
         ran: ran.value,
         actions: actions.value.map((a) => ({
             type: a.type, mail: a.mail, product: a.product ?? null, url: a.url ?? null, after_seconds: a.after_seconds ?? 0,
@@ -80,8 +91,8 @@ function personBody() {
     return body;
 }
 
-// What the planner takes of a person's actions; the page does not offer more.
-const MAX_ACTIONS = 12;
+// What she is, without what she does next: another person is another mail and page, a click after the mail is not.
+const personSig = computed(() => JSON.stringify([tags.value, access.value, ran.value, unsubscribed.value, extraTraits.value]));
 
 let ticket = 0;
 
@@ -90,31 +101,24 @@ async function load() {
     state.value = 'loading';
 
     try {
-        const body = { person: person.value };
-        if (person.value === 'test') Object.assign(body, personBody(), start.value ? { start: start.value } : {});
-
-        const response = await postJson(props.url, body);
+        const response = await postJson(props.url, { person: 'test', ...personBody(), ...(start.value ? { start: start.value } : {}) });
 
         if (!response.ok) throw new Error(String(response.status));
 
         const data = response.data;
-        // A slower answer to an earlier choice must not overwrite the answer to the latest.
+        // A slower answer to an earlier change must not overwrite the answer to the latest.
         if (mine !== ticket) return;
 
         starts.value = data.starts ?? [];
+        timeline.value = { entries: data.entries, stats: data.stats };
+        start.value = data.start;
+        products.value = data.products ?? [];
+        automations.value = data.automations ?? [];
+        options.value = data.options ?? { access: [], tags: [] };
 
-        if (data.person === 'test') {
-            timeline.value = { entries: data.entries, stats: data.stats };
-            start.value = data.start;
-            products.value = data.products ?? [];
-            automations.value = data.automations ?? [];
-
-            // An action tied to a mail that is no longer on her way (another start, a changed form) has nothing to act on.
-            const keys = new Set(data.entries.map((e) => e.meta?.mail_key).filter(Boolean));
-            if (actions.value.some((a) => !keys.has(a.mail))) actions.value = actions.value.filter((a) => keys.has(a.mail));
-        } else {
-            tree.value = { roots: data.roots, stats: data.stats };
-        }
+        // An action tied to a mail that is no longer on her way (another start, a changed person) has nothing to act on.
+        const keys = new Set(data.entries.map((e) => e.meta?.mail_key).filter(Boolean));
+        if (actions.value.some((a) => !keys.has(a.mail))) actions.value = actions.value.filter((a) => keys.has(a.mail));
 
         state.value = 'ready';
         loadedOnce.value = true;
@@ -123,27 +127,54 @@ async function load() {
     }
 }
 
-function choosePerson(value) {
-    if (!value || value === person.value) return;
-    person.value = value;
-    // The other way of looking has nothing of its own to keep on screen yet.
-    loadedOnce.value = false;
-    load();
+// The tree of every way is planned in the background once the first screen is there: the link says how many there are.
+async function loadTree() {
+    if (treeState.value === 'loading' || treeState.value === 'ready') return;
+
+    treeState.value = 'loading';
+
+    try {
+        const response = await postJson(props.url, { person: 'unknown' });
+
+        if (!response.ok) throw new Error(String(response.status));
+
+        tree.value = { roots: response.data.roots, stats: response.data.stats };
+        treeState.value = 'ready';
+    } catch {
+        treeState.value = 'failed';
+    }
 }
 
-function chooseStart(value) {
-    // A cleared select is no choice: the start stays what it was.
-    if (!value || value === start.value) return;
-    start.value = value;
-    load();
+let pause = null;
+
+// Several changes in a row (a chip after a chip) plan once, a moment after the last.
+function planSoon() {
+    clearTimeout(pause);
+    pause = setTimeout(load, 200);
+}
+
+onBeforeUnmount(() => clearTimeout(pause));
+onMounted(async () => {
+    await load();
+    loadTree();
+});
+
+// --- who she is ----------------------------------------------------------------------------------------------------------
+
+function onPatch(patch) {
+    if ('tags' in patch) tags.value = patch.tags;
+    if ('access' in patch) access.value = patch.access;
+    if ('ran' in patch) ran.value = patch.ran;
+    if ('unsubscribed' in patch) unsubscribed.value = patch.unsubscribed;
+
+    planSoon();
 }
 
 // What a real person said, into the form. Everything stays editable; the way is planned from the form.
 function copyPerson(data) {
-    copied = true;
     missing.value = data.missing ?? [];
-    tags.value = (data.tags ?? []).join(', ');
-    access.value = (data.access ?? []).join(', ');
+    tags.value = data.tags ?? [];
+    access.value = data.access ?? [];
     ran.value = data.ran ?? [];
     unsubscribed.value = Boolean(data.unsubscribed);
     extraTraits.value = data.traits ?? {};
@@ -153,246 +184,291 @@ function copyPerson(data) {
 }
 
 function resetPerson() {
-    copied = true;
     missing.value = [];
-    tags.value = '';
-    access.value = '';
+    tags.value = [];
+    access.value = [];
     ran.value = [];
     unsubscribed.value = false;
     extraTraits.value = {};
     copiedFrom.value = null;
+    actions.value = [];
+    who.value = 'test';
     load();
 }
 
 function chooseWho(value) {
     if (!value || value === who.value) return;
+
     who.value = value;
+
     if (value === 'test' && copiedFrom.value) resetPerson();
 }
 
-function toggleRan(handle, on) {
-    ran.value = on ? [...ran.value, handle] : ran.value.filter((h) => h !== handle);
-    load();
-}
+// The person in the sentence: the test person, the real one she was copied from, or a way to look for one.
+const FIND = '__find';
+const personOptions = computed(() => [
+    { value: 'test', label: t('probe_person_test') },
+    ...(copiedFrom.value ? [{ value: 'real', label: copiedFrom.value }] : []),
+    ...(props.personsUrl && !copiedFrom.value ? [{ value: FIND, label: t('probe_person_find') }] : []),
+]);
 
-function addAction(action) {
-    if (actions.value.length >= MAX_ACTIONS) return;
-    actions.value = [...actions.value, action];
-    load();
-}
-
-function removeAction(index) {
-    actions.value = actions.value.filter((_, i) => i !== index);
-    load();
-}
-
-// Typing in a field plans again once the typing pauses, not at every key.
-let pause = null;
-let copied = false;
-watch([tags, access], () => {
-    // A copy from a real person sets both at once and plans itself: the typing pause is for a hand on the keys.
-    if (copied) {
-        copied = false;
+function choosePerson(value) {
+    if (value === FIND) {
+        who.value = 'real';
+        stackOpen.value = true;
 
         return;
     }
 
-    clearTimeout(pause);
-    pause = setTimeout(load, 450);
-});
-onBeforeUnmount(() => clearTimeout(pause));
+    if (value === 'test' && copiedFrom.value) resetPerson();
+}
 
-onMounted(load);
+function chooseStart(value) {
+    // A cleared select is no choice: the start stays what it was.
+    if (!value || value === start.value) return;
 
-const lensOptions = computed(() => [
-    { value: 'timeline', label: t('probe_lens_timeline') },
-    { value: 'mailbox', label: t('probe_lens_mailbox') },
-    { value: 'account', label: t('probe_lens_account') },
-    { value: 'pages', label: t('probe_lens_pages') },
-]);
+    start.value = value;
+    until.value = null;
+    selectedSig.value = null;
+    noPreview.value = new Set();
+    actions.value = [];
+    load();
+}
 
-const untilOptions = computed(() => [
-    { value: 'all', label: t('probe_until_all') },
-    ...timeline.value.stats.days.map((d) => ({ value: String(d), label: t('probe_until_day').replace(':day', d) })),
-]);
+// --- what she does -------------------------------------------------------------------------------------------------------
 
-const shown = computed(() => untilDay(timeline.value.entries, until.value));
-const where = computed(() => standing(shown.value));
+const sameAction = (a, b) => a.mail === b.mail && a.type === b.type && (a.url ?? null) === (b.url ?? null) && (a.product ?? null) === (b.product ?? null);
 
-const personOptions = computed(() => [
-    { value: 'unknown', label: t('probe_person_unknown') },
-    { value: 'test', label: t('probe_person_test') },
-]);
+// An action is a switch: pressing it puts it on her way, pressing it again takes it off.
+function toggleAction(action) {
+    const found = actions.value.findIndex((a) => sameAction(a, action));
 
-const startOptions = computed(() => starts.value.map((s) => ({
-    value: s.key,
-    label: `${s.type_label}: ${s.label}, ${s.event_label}`,
-})));
+    if (found !== -1) {
+        actions.value = actions.value.filter((_, i) => i !== found);
+    } else if (actions.value.length < MAX_ACTIONS) {
+        // A new one waits as long as the others of that mail do: they share one "when".
+        const same = actions.value.find((a) => a.mail === action.mail);
 
-const summary = computed(() => {
-    if (person.value === 'test') {
-        const days = new Set(shown.value.map((e) => e.day)).size;
-
-        return t(days === 1 ? 'probe_timeline_summary_one' : 'probe_timeline_summary')
-            .replace(':entries', shown.value.length)
-            .replace(':days', days);
+        actions.value = [...actions.value, { after_seconds: same?.after_seconds ?? 0, product: null, url: null, ...action }];
     }
 
-    return t('probe_summary')
-        .replace(':ways', tree.value.stats.leaves)
-        .replace(':steps', tree.value.stats.nodes);
+    load();
+}
+
+function clearActions(mail) {
+    if (!actions.value.some((a) => a.mail === mail)) return;
+
+    actions.value = actions.value.filter((a) => a.mail !== mail);
+    load();
+}
+
+function delayActions(mail, days) {
+    actions.value = actions.value.map((a) => (a.mail === mail ? { ...a, after_seconds: Math.max(0, days) * 86400 } : a));
+    load();
+}
+
+// --- the screen ----------------------------------------------------------------------------------------------------------
+
+const shown = computed(() => untilDay(timeline.value.entries, until.value));
+const hasWay = computed(() => shown.value.some(isExperienced));
+
+// The row that is open: the one she chose, found again by what it is when the way was planned anew, else the first mail.
+const selected = computed(() => {
+    const rows = shown.value.filter(isExperienced);
+    const chosen = selectedSig.value ? rows.find((e) => signatureOf(e) === selectedSig.value) : null;
+
+    return chosen ?? firstToOpen(shown.value, noPreview.value);
 });
 
-const hasContent = computed(() => (person.value === 'test' ? shown.value.length > 0 : tree.value.roots.length > 0));
+function select(entry) {
+    selectedSig.value = signatureOf(entry);
+}
+
+function passOver(entry) {
+    if (selectedSig.value === null) noPreview.value = new Set([...noPreview.value, signatureOf(entry)]);
+}
+
+function skipTo(day) {
+    until.value = day;
+}
+
+const unknowns = computed(() => unknownCards(shown.value));
+const unknownText = computed(() => {
+    const names = unknowns.value.map((n) => `„${n}“`);
+
+    if (!names.length) return '';
+
+    const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} ${t('probe_and')} ${names[names.length - 1]}`;
+
+    return t('probe_unknown_foot').replace(':names', () => list);
+});
+
+// "holt sich": what the person does at the start, by the event that begins the way.
+const startEvent = computed(() => starts.value.find((s) => s.key === start.value)?.event ?? 'requested');
+const sentence = computed(() => t(`probe_sentence_${startEvent.value}`, t('probe_sentence_requested')));
+
+const startOptions = computed(() => {
+    const labels = starts.value.map((s) => s.label);
+
+    return starts.value.map((s) => ({
+        value: s.key,
+        // The same name on two kinds of card is told apart by the kind.
+        label: labels.filter((l) => l === s.label).length > 1 ? `${s.label} (${s.type_label})` : s.label,
+    }));
+});
+
+const ways = computed(() => tree.value?.stats.leaves ?? null);
+const waysText = computed(() => (ways.value === null ? t('probe_all_ways_plain') : t('probe_all_ways').replace(':count', ways.value)));
+
+const treeSummary = computed(() => (tree.value
+    ? t('probe_summary').replace(':ways', tree.value.stats.leaves).replace(':steps', tree.value.stats.nodes)
+    : ''));
+
+async function showTree() {
+    view.value = 'tree';
+    await loadTree();
+}
 </script>
 
 <template>
     <div class="pr-page" data-landkarte-probelauf>
-        <div class="pr-head">
-            <Heading :text="person === 'test' ? t('probe_title_test') : t('probe_title')" size="base" />
-            <span v-if="state === 'ready' && hasContent" class="pr-summary" data-pr-summary>{{ summary }}</span>
-        </div>
-        <Description :text="person === 'test' ? t('probe_help_test') : t('probe_help')" class="pr-help" />
+        <template v-if="view === 'person'">
+            <div class="pr-top">
+                <div class="pr-sentence" data-pr-sentence>
+                    <Select
+                        class="pr-select"
+                        size="sm"
+                        :model-value="copiedFrom ? 'real' : 'test'"
+                        :options="personOptions"
+                        :aria-label="t('probe_person_label')"
+                        data-pr-person
+                        @update:model-value="choosePerson"
+                    />
+                    <span>{{ sentence }}</span>
+                    <Select
+                        v-if="startOptions.length"
+                        class="pr-select pr-select--start"
+                        size="sm"
+                        :model-value="start"
+                        :options="startOptions"
+                        :aria-label="t('probe_start_label')"
+                        data-pr-start
+                        @update:model-value="chooseStart"
+                    />
+                    <Badge :text="t('probe_badge')" data-pr-badge />
+                </div>
+                <Button icon="sliders-horizontal" :text="t('probe_adjust')" data-pr-adjust @click="stackOpen = true" />
+            </div>
 
-        <div class="pr-controls">
-            <span class="pr-start">
-                <span class="pr-start__label">{{ t('probe_person_label') }}</span>
-                <ToggleGroup :model-value="person" size="sm" :aria-label="t('probe_person_label')" data-pr-person @update:model-value="choosePerson">
-                    <ToggleItem v-for="option in personOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-person-option="option.value" />
-                </ToggleGroup>
-            </span>
-            <label v-if="person === 'test' && startOptions.length" class="pr-start">
-                <span class="pr-start__label">{{ t('probe_start_label') }}</span>
-                <Select class="w-96 max-w-full" size="sm" :model-value="start" :options="startOptions" :aria-label="t('probe_start_label')" data-pr-start @update:model-value="chooseStart" />
-            </label>
-        </div>
+            <div class="pr-hint">
+                <span>{{ t('probe_help_test') }}</span>
+                <button type="button" class="pr-link" data-pr-all-ways @click="showTree">{{ waysText }}</button>
+            </div>
 
-        <div v-if="person === 'test'" class="pr-start pr-lensrow">
-            <span class="pr-start__label">{{ t('probe_lens_label') }}</span>
-            <ToggleGroup v-model="lens" size="sm" :aria-label="t('probe_lens_label')" data-pr-lens>
-                <ToggleItem v-for="option in lensOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-lens-option="option.value" />
-            </ToggleGroup>
-        </div>
+            <p v-if="state === 'loading' && !loadedOnce" class="pr-status" role="status" data-pr-loading>{{ t('probe_loading') }}</p>
+            <Alert v-if="state === 'failed'" variant="warning" data-pr-failed>{{ t('probe_failed') }}</Alert>
 
-        <div v-if="person === 'test' && personsUrl" class="pr-start pr-whowrap">
-            <span class="pr-start__label">{{ t('probe_who_label') }}</span>
-            <ToggleGroup :model-value="who" size="sm" :aria-label="t('probe_who_label')" data-pr-who-toggle @update:model-value="chooseWho">
-                <ToggleItem value="test" :label="t('probe_who_test')" data-pr-who-option="test" />
-                <ToggleItem value="real" :label="t('probe_who_real')" data-pr-who-option="real" />
-            </ToggleGroup>
-        </div>
-        <ProbeRealPerson
-            v-if="person === 'test' && personsUrl && who === 'real'"
-            :url="personsUrl"
+            <!-- The body stays where it is while the way is planned again: a mail that is open, the day that was chosen. -->
+            <template v-if="state === 'ready' || (state === 'loading' && loadedOnce)">
+                <p v-if="!starts.length" class="pr-status" data-pr-empty>{{ t('probe_start_none') }}</p>
+                <p v-else-if="!hasWay" class="pr-status" data-pr-empty>{{ t('probe_timeline_empty') }}</p>
+
+                <div v-else class="pr-cols">
+                    <ProbeSteps :entries="shown" :selected="selected?.id ?? null" :until="until" @select="select" @skip="skipTo" @unskip="until = null" />
+                    <ProbeDetail
+                        :entry="selected"
+                        :entries="shown"
+                        :mail-url="mailUrl"
+                        :page-url="pageUrl"
+                        :start="start"
+                        :person-sig="personSig"
+                        :person-body="personBody"
+                        :max-actions="MAX_ACTIONS"
+                        :products="products"
+                        :actions="actions"
+                        @toggle="toggleAction"
+                        @clear="clearActions"
+                        @delay="delayActions"
+                        @none="passOver"
+                    />
+                </div>
+
+                <p v-if="unknownText" class="pr-foot" data-pr-unknown>{{ unknownText }}</p>
+            </template>
+        </template>
+
+        <template v-else>
+            <div class="pr-top">
+                <div class="pr-head">
+                    <Heading :text="t('probe_title')" size="base" />
+                    <span v-if="treeSummary" class="pr-summary" data-pr-summary>{{ treeSummary }}</span>
+                </div>
+                <Button icon="arrow-left" :text="t('probe_back')" data-pr-back @click="view = 'person'" />
+            </div>
+            <Description :text="t('probe_help')" class="pr-help" />
+
+            <p v-if="treeState === 'loading'" class="pr-status" role="status" data-pr-loading>{{ t('probe_loading') }}</p>
+            <Alert v-else-if="treeState === 'failed'" variant="warning" data-pr-failed>{{ t('probe_failed') }}</Alert>
+            <template v-else-if="tree">
+                <p v-if="!tree.roots.length" class="pr-status" data-pr-empty>{{ t('probe_empty') }}</p>
+                <ul v-else class="pr-tree" data-pr-tree>
+                    <ProbeNode v-for="root in tree.roots" :key="root.id" :node="root" />
+                </ul>
+                <p v-if="tree.stats.unreached.length" class="pr-unreached" data-pr-unreached>
+                    <strong>{{ t('probe_unreached') }}:</strong>
+                    {{ tree.stats.unreached.map((u) => u.label).join(', ') }}
+                </p>
+            </template>
+        </template>
+
+        <ProbeStack
+            v-model:open="stackOpen"
+            :who="who"
+            :persons-url="personsUrl"
             :copied-from="copiedFrom"
             :missing="missing"
+            :tags="tags"
+            :access="access"
+            :ran="ran"
+            :unsubscribed="unsubscribed"
+            :options="options"
+            :automations="automations"
+            @who="chooseWho"
+            @patch="onPatch"
             @copy="copyPerson"
             @reset="resetPerson"
         />
-
-        <div v-if="person === 'test'" class="pr-who" data-pr-who>
-            <label class="pr-start">
-                <span class="pr-start__label">{{ t('probe_tags_label') }}</span>
-                <Input v-model="tags" size="sm" class="w-52" :placeholder="t('probe_tags_placeholder')" :aria-label="t('probe_tags_label')" data-pr-tags />
-            </label>
-            <label class="pr-start">
-                <span class="pr-start__label">{{ t('probe_access_label') }}</span>
-                <Input v-model="access" size="sm" class="w-52" :placeholder="t('probe_access_placeholder')" :aria-label="t('probe_access_label')" data-pr-access />
-            </label>
-            <Checkbox
-                v-model="unsubscribed"
-                :label="t('probe_unsubscribed_label')"
-                size="sm"
-                data-pr-unsubscribed
-                @update:model-value="load"
-            />
-            <fieldset v-if="automations.length" class="pr-ran">
-                <legend class="pr-start__label">{{ t('probe_ran_label') }}</legend>
-                <Checkbox
-                    v-for="a in automations"
-                    :key="a.id"
-                    :model-value="ran.includes(a.id)"
-                    :label="a.label"
-                    size="sm"
-                    :data-pr-ran="a.id"
-                    @update:model-value="toggleRan(a.id, $event)"
-                />
-            </fieldset>
-            <label v-if="timeline.stats.days.length > 1" class="pr-start">
-                <span class="pr-start__label">{{ t('probe_until_label') }}</span>
-                <Select
-                    :model-value="until === null ? 'all' : String(until)"
-                    size="sm"
-                    class="w-44"
-                    :options="untilOptions"
-                    :aria-label="t('probe_until_label')"
-                    data-pr-until
-                    @update:model-value="until = $event === 'all' ? null : Number($event)"
-                />
-            </label>
-        </div>
-        <p v-if="person === 'test' && state === 'ready' && until !== null" class="pr-standing" data-pr-standing>
-            {{ t('probe_standing').replace(':day', until).replace(':mails', where.mails).replace(':purchases', where.purchases) }}
-            <template v-if="where.access.length"> {{ t('probe_standing_access') }} {{ where.access.join(', ') }}.</template>
-            <template v-if="where.unsubscribed"> {{ t('probe_standing_unsub') }}</template>
-        </p>
-
-        <p v-if="state === 'loading'" class="pr-status" role="status" data-pr-loading>{{ t('probe_loading') }}</p>
-        <Alert v-if="state === 'failed'" variant="warning" data-pr-failed>{{ t('probe_failed') }}</Alert>
-
-        <!-- The body stays where it is while the way is planned again: a mail that is open, a line whose reasons are open. -->
-        <template v-if="state === 'ready' || (state === 'loading' && loadedOnce)">
-        <p v-if="person === 'test' && !startOptions.length" class="pr-status" data-pr-empty>{{ t('probe_start_none') }}</p>
-        <p v-else-if="!hasContent" class="pr-status" data-pr-empty>{{ person === 'test' ? t('probe_timeline_empty') : t('probe_empty') }}</p>
-
-        <ProbeMailbox
-            v-else-if="person === 'test' && lens === 'mailbox' && mailUrl"
-            :entries="shown"
-            :mail-url="mailUrl"
-            :start="start"
-            :person-body="personBody"
-            :max-actions="MAX_ACTIONS"
-            :products="products"
-            :actions="actions"
-            @add-action="addAction"
-            @remove-action="removeAction"
-        />
-        <ProbeAccount v-else-if="person === 'test' && lens === 'account'" :entries="shown" />
-        <ProbePages v-else-if="person === 'test' && lens === 'pages'" :entries="shown" />
-        <ProbeTimeline v-else-if="person === 'test'" :entries="shown" />
-        <ul v-else class="pr-tree" data-pr-tree>
-            <ProbeNode v-for="root in tree.roots" :key="root.id" :node="root" />
-        </ul>
-        </template>
-
-        <p v-if="state === 'ready' && person === 'unknown' && tree.stats.unreached.length" class="pr-unreached" data-pr-unreached>
-            <strong>{{ t('probe_unreached') }}:</strong>
-            {{ tree.stats.unreached.map((u) => u.label).join(', ') }}
-        </p>
     </div>
 </template>
 
 <style>
 .pr-page {
-    height: calc(100vh - 13rem); min-height: 460px; overflow: auto; padding: 1rem 1.25rem 1.5rem;
+    min-height: 460px; padding: 1.25rem 1.25rem 1.5rem;
     border: 1px solid var(--color-gray-200); border-radius: 0.75rem; background: var(--color-white);
 }
 .dark .pr-page { border-color: var(--color-gray-700); background: var(--color-gray-900); }
+.pr-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.6rem 1rem; }
+.pr-sentence { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.6rem; font-size: 0.95rem; color: var(--color-gray-800); }
+.dark .pr-sentence { color: var(--color-gray-200); }
+.pr-select { width: auto; min-width: 8.5rem; }
+.pr-select--start { min-width: 12rem; max-width: 22rem; }
+.pr-hint { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 0.5rem 0 1.1rem; font-size: 0.85rem; color: var(--color-gray-600); }
+.dark .pr-hint { color: var(--color-gray-400); }
+.pr-link { padding: 0; border: 0; background: transparent; font-size: 0.85rem; color: var(--color-gray-700); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.pr-link:hover { color: var(--color-gray-900); }
+.pr-link:focus-visible { outline: 2px solid var(--color-blue-400, var(--color-primary)); outline-offset: 2px; border-radius: 2px; }
+.dark .pr-link { color: var(--color-gray-300); }
+.dark .pr-link:hover { color: var(--color-gray-100); }
+.pr-cols { display: grid; grid-template-columns: minmax(16rem, 20.5rem) minmax(0, 1fr); gap: 1.75rem; align-items: start; }
+@media (max-width: 900px) { .pr-cols { grid-template-columns: 1fr; } }
+.pr-foot { margin: 1.5rem 0 0; font-size: 0.8rem; color: var(--color-gray-600); }
+.dark .pr-foot { color: var(--color-gray-400); }
 .pr-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.25rem 1rem; }
-.pr-summary { margin-left: auto; font-size: 0.8rem; color: var(--color-gray-600); }
+.pr-summary { font-size: 0.8rem; color: var(--color-gray-600); }
 .dark .pr-summary { color: var(--color-gray-400); }
 .pr-help { margin: 0.25rem 0 0.9rem; max-width: 70ch; }
-.pr-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem 1.25rem; margin: 0 0 1rem; }
-.pr-start { display: inline-flex; align-items: center; gap: 0.5rem; }
-.pr-start__label { font-size: 0.8rem; color: var(--color-gray-600); white-space: nowrap; }
-.dark .pr-start__label { color: var(--color-gray-400); }
-.pr-lensrow { display: flex; margin: -0.25rem 0 0.75rem; }
-.pr-whowrap { display: flex; margin: 0 0 0.75rem; }
-.pr-who { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem 1.25rem; margin: -0.25rem 0 1rem; }
-.pr-ran { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.25rem 0.9rem; margin: 0; padding: 0; border: 0; min-width: 0; }
-.pr-standing { margin: -0.4rem 0 0.9rem; font-size: 0.8rem; color: var(--color-gray-700); }
-.dark .pr-standing { color: var(--color-gray-300); }
 .pr-status { font-size: 0.875rem; color: var(--color-gray-600); }
+.dark .pr-status { color: var(--color-gray-400); }
 .pr-tree { margin: 0; padding: 0; }
 .pr-tree > .pr-node { padding-bottom: 0.4rem; margin-bottom: 0.4rem; border-bottom: 1px solid var(--color-gray-100); }
 .dark .pr-tree > .pr-node { border-bottom-color: var(--color-gray-800); }

@@ -46,6 +46,11 @@ class Tracking
      */
     public static function forPage(Funnel $funnel, FunnelStep $step, FunnelVisit $visit, Request $request, ?array $offer): array
     {
+        // A look at the page (the dry run) is no visitor, not even for an ad platform: no code, no server call.
+        if (ProbePreview::active($request)) {
+            return ['head' => '', 'body' => ''];
+        }
+
         $settings = FunnelSettings::of($funnel);
         $pixel = $settings['meta_pixel_id'];
         $pixelService = self::pixelService($settings);
@@ -190,7 +195,7 @@ class Tracking
     {
         $sender = app(ConversionSender::class);
 
-        if (! $sender->enabled()) {
+        if (ProbePreview::active() || ! $sender->enabled()) {
             return;
         }
 
