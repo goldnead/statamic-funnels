@@ -22,9 +22,11 @@ const props = defineProps({
 
 const probe = inject('probelauf');
 
-// The stage is a window onto the page: wide enough to be read, as high as the screen can spare, and the page scrolls inside it.
-const STAGE = 380;
+// The stage is a window onto the page, and the page scrolls inside it. A phone page is laid out at 390 and shown a fifth smaller, so
+// that its first screen (head, headline, the button) fits; a desktop page is laid out at 1280 and scaled to the width of the stage.
+const STAGE = { phone: 380, desktop: 460 };
 const WIDTHS = { desktop: 1280, phone: 390 };
+const PHONE_SCALE = 0.8;
 
 const state = ref('loading');
 const page = ref(null);
@@ -35,10 +37,15 @@ const stageWidth = ref(0);
 
 let ticket = 0;
 
+// Which entry the page on screen belongs to: another page does not stay on screen while its own is read.
+let shownFor = null;
+
 async function load() {
     const mine = ++ticket;
     state.value = 'loading';
     clicked.value = null;
+
+    if (shownFor !== props.entry.id) page.value = null;
 
     try {
         const response = await postJson(props.pageUrl, {
@@ -50,6 +57,7 @@ async function load() {
         if (mine !== ticket) return;
 
         page.value = response.data;
+        shownFor = props.entry.id;
         state.value = response.data.state === 'rendered' ? 'ready' : 'unavailable';
     } catch {
         if (mine === ticket) {
@@ -77,20 +85,39 @@ onMounted(() => {
 onBeforeUnmount(() => observer?.disconnect());
 
 // A desktop page is laid out at 1280 and scaled to the stage, so the layout is the real one and only smaller.
-const scale = computed(() => (device.value === 'desktop' && stageWidth.value > 0 ? Math.min(1, stageWidth.value / WIDTHS.desktop) : 1));
+const scale = computed(() => {
+    if (device.value === 'phone') return PHONE_SCALE;
+
+    return stageWidth.value > 0 ? Math.min(1, stageWidth.value / WIDTHS.desktop) : 1;
+});
 const frameStyle = computed(() => ({
     width: `${WIDTHS[device.value]}px`,
-    height: `${Math.ceil(STAGE / scale.value)}px`,
+    height: `${Math.ceil(STAGE[device.value] / scale.value)}px`,
     transform: scale.value === 1 ? undefined : `scale(${scale.value})`,
 }));
+const deviceStyle = computed(() => ({
+    height: `${STAGE[device.value]}px`,
+    width: device.value === 'desktop' ? '100%' : `${Math.round(WIDTHS.phone * PHONE_SCALE)}px`,
+}));
 
-const address = computed(() => (page.value?.url ? `${window.location.host}${page.value.url}` : ''));
+const address = computed(() => page.value?.address ?? '');
 const deviceOptions = computed(() => [
     { value: 'desktop', label: probe.t('probe_page_desktop'), icon: 'computer-desktop' },
     { value: 'phone', label: probe.t('probe_page_phone'), icon: 'phone-telephone-call' },
 ]);
 const reason = computed(() => probe.t(`probe_page_unavailable_${page.value?.reason}`, probe.t('probe_page_unavailable_failed')));
 const goal = (url) => url.replace(/^https?:\/\//i, '');
+const hostOf = (url) => goal(url).split('/')[0];
+const isOwn = (url) => url.startsWith('/');
+
+// The page's own links come first; an embedded service's (a privacy notice of a video host) after them. Two buttons with the same
+// words are told apart by where they lead.
+const links = computed(() => {
+    const all = [...(page.value?.links ?? [])].sort((a, b) => Number(isOwn(b.url)) - Number(isOwn(a.url)));
+    const same = (text) => all.filter((l) => l.text === text).length > 1;
+
+    return all.map((l) => ({ ...l, button: probe.t('probe_do_clicks').replace(':link', () => (same(l.text) && !isOwn(l.url) ? `${l.text} (${hostOf(l.url)})` : l.text)) }));
+});
 </script>
 
 <template>
@@ -119,7 +146,7 @@ const goal = (url) => url.replace(/^https?:\/\//i, '');
 
         <template v-else-if="page">
             <div ref="stage" class="pg-stage" :class="`pg-stage--${device}`">
-                <div class="pg-device" :class="`pg-device--${device}`" :style="{ height: `${STAGE}px`, width: device === 'desktop' ? '100%' : `${WIDTHS.phone}px` }">
+                <div class="pg-device" :class="`pg-device--${device}`" :style="deviceStyle">
                     <!-- Empty sandbox: no script, no same-origin, no forms, no popups, no navigation. -->
                     <iframe
                         class="pg-frame"
@@ -134,16 +161,16 @@ const goal = (url) => url.replace(/^https?:\/\//i, '');
                 <span class="pg-fade" aria-hidden="true" />
             </div>
 
-            <section v-if="page.links.length" class="pg-links" data-pg-links>
+            <section v-if="links.length" class="pg-links" data-pg-links>
                 <h4>{{ probe.t('probe_page_links') }}</h4>
                 <ul>
-                    <li v-for="(link, i) in page.links" :key="i" class="pg-link">
+                    <li v-for="(link, i) in links" :key="i" class="pg-link">
                         <div class="pg-link__text">
                             <span>{{ link.text }}</span>
                             <span class="pg-link__url">{{ goal(link.url) }}</span>
                             <span v-if="clicked === i" class="pg-link__goal" data-pg-goal>{{ probe.t('probe_page_link_goal').replace(':target', () => goal(link.url)) }}</span>
                         </div>
-                        <Button size="sm" :class="clicked === i && 'pa-on'" :aria-pressed="clicked === i" :text="probe.t('probe_do_clicks').replace(':link', () => link.text)" data-pg-click @click="clicked = clicked === i ? null : i" />
+                        <Button size="sm" :class="clicked === i && 'pa-on'" :aria-pressed="clicked === i" :text="link.button" data-pg-click @click="clicked = clicked === i ? null : i" />
                     </li>
                 </ul>
             </section>

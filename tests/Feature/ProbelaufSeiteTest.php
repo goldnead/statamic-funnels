@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\Test;
+use Statamic\Events\ResponseCreated;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Permission;
@@ -212,10 +213,23 @@ class ProbelaufSeiteTest extends TestCase
             ['text' => 'Bestätigen', 'url' => '/!/lead-magnets/confirm/abc123'],
             ['text' => 'Download', 'url' => '/!/lead-magnets/download/abc123'],
             ['text' => 'Smartlink', 'url' => '/go/xyz'],
+            ['text' => 'Bild-Link', 'url' => '/!/lead-magnets/confirm/svg789'],
         ], $page['links']);
 
-        // The only `href` left on a link is `#`: what a click would do is only remembered, in `data-sim-href`.
-        $this->assertDoesNotMatchRegularExpression('/\shref="\/(!|go)/', $page['html']);
+        // No link has an address left, not even `#` (with the base element in the document a bare `#` is read against the site, and a
+        // click on it would load the front page into the frame: a visit). What a click would do is only remembered, in `data-sim-href`.
+        $document = new \DOMDocument;
+        libxml_use_internal_errors(true);
+        $document->loadHTML($page['html']);
+        libxml_clear_errors();
+
+        foreach ((new \DOMXPath($document))->query('//a') as $link) {
+            $this->assertFalse($link->hasAttribute('href'), 'a link kept its href');
+            $this->assertFalse($link->hasAttribute('xlink:href'), 'a link kept its xlink:href');
+        }
+
+        $this->assertStringNotContainsString('xlink:href', $page['html']);
+        $this->assertStringContainsString('data-sim-href="/!/lead-magnets/confirm/svg789"', $page['html']);
         $this->assertStringNotContainsString('javascript:', $page['html']);
         $this->assertStringContainsString('data-sim-href="/!/lead-magnets/confirm/abc123"', $page['html']);
         $this->assertStringNotContainsString('target=', $page['html']);
@@ -244,7 +258,7 @@ class ProbelaufSeiteTest extends TestCase
         $app = Entry::query()->where('slug', 'app-seite')->first();
         $draft = $this->page('entwurf', published: false);
 
-        $this->assertSame(['state' => 'unavailable', 'reason' => PagePreview::DRAFT, 'url' => '/entwurf', 'thumbnail' => null], app(PagePreview::class)->render($draft->id()));
+        $this->assertSame(['state' => 'unavailable', 'reason' => PagePreview::DRAFT, 'url' => '/entwurf', 'address' => 'localhost/entwurf', 'thumbnail' => null], app(PagePreview::class)->render($draft->id()));
         $this->assertSame(PagePreview::GONE, app(PagePreview::class)->render('nope')['reason']);
         $this->assertSame(PagePreview::APP_ROUTE, app(PagePreview::class)->render($app->id())['reason']);
     }
@@ -374,6 +388,50 @@ class ProbelaufSeiteTest extends TestCase
     }
 
     #[Test]
+    public function the_server_side_pixel_event_is_sent_for_a_visitor_and_not_for_a_look(): void
+    {
+        Http::fake(['graph.facebook.com/*' => Http::response(['events_received' => 1, 'fbtrace_id' => 'x'])]);
+        config(['statamic-funnels.tracking.meta.access_token' => 'token-geheim']);
+        TrackingConsent::resolveUsing(fn () => ['addon' => true, 'granted' => true]);
+
+        $funnel = $this->funnel();
+        $funnel->update(['meta' => ['settings' => ['meta_pixel_id' => '123456789012345']]]);
+        $funnel = $funnel->fresh(['steps', 'edges']);
+        $step = $funnel->steps->firstWhere('node_key', 'entry_1');
+        $visit = FunnelVisit::create(['funnel_id' => $funnel->id, 'token' => 'abcdefghijklmnopqrstuvwxyz012345']);
+
+        $request = $this->visitorRequest();
+        Tracking::initiateCheckout($funnel, $step, $visit, $request, 9900, 'EUR');
+
+        // For a visitor the event goes to the platform ...
+        $this->assertCount(1, Http::recorded());
+
+        // ... and the same call as a look sends nothing more.
+        ProbePreview::mark($request);
+        Tracking::initiateCheckout($funnel, $step, $visit, $request, 9900, 'EUR');
+
+        $this->assertCount(1, Http::recorded());
+        TrackingConsent::resolveUsing(null);
+    }
+
+    #[Test]
+    public function rendering_a_page_marks_the_request_it_renders_on_as_a_look(): void
+    {
+        $seen = [];
+        Event::listen(ResponseCreated::class, function () use (&$seen) {
+            $seen[] = ProbePreview::active();
+        });
+
+        $this->assertFalse(ProbePreview::active());
+
+        app(PagePreview::class)->render($this->page()->id());
+
+        // While Statamic built the response, the request in the container was the look; before and after it is the real one again.
+        $this->assertSame([true], $seen);
+        $this->assertFalse(ProbePreview::active());
+    }
+
+    #[Test]
     public function a_funnel_page_asked_as_a_look_writes_no_visit_no_event_no_cookie_and_carries_no_tracking(): void
     {
         $this->withoutConsentAddon();
@@ -447,7 +505,7 @@ class ProbelaufSeiteTest extends TestCase
         $this->assertSame('rendered', $json['state']);
         $this->assertSame('/masterclass', $json['url']);
         $this->assertStringContainsString('<h1>Masterclass</h1>', $json['html']);
-        $this->assertCount(3, $json['links']);
+        $this->assertCount(4, $json['links']);
         $this->assertSame($before, $this->counts());
         // Nothing asked of the network: no link of the page, no tracking host, no stylesheet.
         Http::assertNothingSent();

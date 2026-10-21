@@ -126,7 +126,7 @@ const linkText = (link) => probe.t('probe_do_clicks').replace(':link', () => lin
 .pa { margin: 0 0 0.9rem; }
 .pa-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.5rem; }
 /* The one that is on: the same neutral button, one step heavier, so it reads as chosen in both themes. */
-.pa-row .pa-on { background: var(--color-gray-100); border-color: var(--color-gray-400); font-weight: 600; }
+.pa-row .pa-on { background: var(--color-gray-100); border-color: var(--color-gray-400); }
 .dark .pa-row .pa-on { background: var(--color-gray-700); border-color: var(--color-gray-500); }
 .pa-when { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: auto; font-size: 0.8rem; color: var(--color-gray-600); }
 .dark .pa-when { color: var(--color-gray-400); }

@@ -95,10 +95,10 @@ function onKey(event) {
 .ps-row { display: flex; align-items: center; gap: 0.6rem; width: 100%; padding: 0.55rem 0.75rem; background: transparent; border: 0; text-align: left; cursor: pointer; font-size: 0.875rem; color: var(--color-gray-900); }
 .dark .ps-row { color: var(--color-gray-100); }
 .ps-row:hover { background: var(--color-gray-50); }
-.dark .ps-row:hover { background: var(--color-gray-800); }
+.dark .ps-row:hover { background: color-mix(in srgb, var(--color-gray-800) 55%, transparent); }
 .ps-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 .ps-row--on, .ps-row--on:hover { background: var(--color-gray-100); font-weight: 500; }
-.dark .ps-row--on, .dark .ps-row--on:hover { background: var(--color-gray-700); }
+.dark .ps-row--on, .dark .ps-row--on:hover { background: var(--color-gray-800); }
 .ps-icon { flex: none; color: var(--color-gray-500); }
 .ps-label { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 .ps-time { flex: none; font-size: 0.75rem; color: var(--color-gray-600); white-space: nowrap; }

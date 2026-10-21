@@ -1,6 +1,6 @@
 <script setup>
 import { computed, inject } from 'vue';
-import { Button, Card, Checkbox, Combobox, Panel, Radio, RadioGroup, Stack, Switch } from '@statamic/cms/ui';
+import { Button, Card, Checkbox, Combobox, Panel, Radio, RadioGroup, Stack, StackContent, StackFooter, Switch } from '@statamic/cms/ui';
 import { freeTags } from '../../support/probelauf.js';
 import ProbeRealPerson from './ProbeRealPerson.vue';
 
@@ -52,6 +52,7 @@ const addTag = (name) => emit('patch', { tags: [...new Set([...props.tags, name]
 
 <template>
     <Stack :open="open" size="narrow" icon="user-avatar" :title="probe.t('probe_stack_title')" @update:open="emit('update:open', $event)">
+        <StackContent>
         <div class="pk" data-pk>
             <p class="pk-lead">{{ probe.t('probe_stack_help') }}</p>
 
@@ -133,16 +134,22 @@ const addTag = (name) => emit('patch', { tags: [...new Set([...props.tags, name]
                 </Card>
             </Panel>
 
-            <div class="pk-foot">
-                <Button :text="probe.t('probe_reset')" data-pk-reset @click="emit('reset')" />
-                <Button variant="primary" :text="probe.t('probe_done')" data-pk-done @click="emit('update:open', false)" />
-            </div>
         </div>
+        </StackContent>
+        <StackFooter>
+            <template #start>
+                <Button variant="ghost" :text="probe.t('probe_reset')" data-pk-reset @click="emit('reset')" />
+            </template>
+            <template #end>
+                <Button variant="primary" :text="probe.t('probe_done')" data-pk-done @click="emit('update:open', false)" />
+            </template>
+        </StackFooter>
     </Stack>
 </template>
 
 <style>
-.pk { padding: 1rem; }
+/* The stack brings its own padding; the groups sit close together like a form. */
+.pk { padding: 0; }
 /* Statamic's panel brings its own space below; the stack is one column of groups, close together like a form. */
 .pk [data-ui-panel] { margin-bottom: 0.75rem; }
 .pk-lead { margin: 0 0 1rem; font-size: 0.85rem; color: var(--color-gray-700); }
@@ -170,5 +177,4 @@ const addTag = (name) => emit('patch', { tags: [...new Set([...props.tags, name]
 .dark .pk-switch__help { color: var(--color-gray-400); }
 .pk-sub { margin: 0.7rem 0 0.1rem; font-size: 0.875rem; color: var(--color-gray-900); }
 .dark .pk-sub { color: var(--color-gray-100); }
-.pk-foot { display: flex; align-items: center; justify-content: space-between; padding-top: 0.25rem; }
 </style>

@@ -29,13 +29,17 @@ use Throwable;
  *   scripts shows a `<noscript>` pixel, which is a request that counts), a frame, an object or a form's action;
  * - a policy on the document lets it load stylesheets, images and fonts from the site itself and nothing from
  *   anywhere else, so an analytics script's host, a pixel or a web font of a third party is never asked;
- * - every link is kept as text with its target remembered (`data-sim-href`) and points nowhere (`href="#"`): the
- *   lead magnet's confirmation link, a download counter and a smartlink are never followed, only shown.
+ * - every link is kept as text with its target remembered (`data-sim-href`) and has no `href` left, so a click does
+ *   nothing: the lead magnet's confirmation link, a download counter and a smartlink are never followed, only shown.
  *
  * Not every page can be rendered here. A page that the application serves through a route of its own (a controller
  * that builds it with a front-end framework) is no Statamic response and is not requested over the network to find
  * out; that, a draft, a protected page and a render that fails answer `unavailable` with the reason, and the caller
  * shows what it has instead (the picture of a funnel step that names the entry, the address).
+ *
+ * One limit: the render runs in the process of the Control Panel request, so what a template reads of "the user" or the
+ * session (`{{ user }}`, a CSRF field) is the Control Panel user's, not an anonymous visitor's. The page is shown to that
+ * same user, and a page that looks different to a signed-in visitor is seen as that user would see it.
  */
 class PagePreview
 {
@@ -61,7 +65,7 @@ class PagePreview
     public const FAILED = 'failed';
 
     /**
-     * @return array{state: 'rendered', url: string, html: string, links: list<array{text: string, url: string}>}|array{state: 'unavailable', reason: string, url: string|null, thumbnail: string|null}
+     * @return array{state: 'rendered', url: string, address: string, html: string, links: list<array{text: string, url: string}>}|array{state: 'unavailable', reason: string, url: string|null, address: string|null, thumbnail: string|null}
      */
     public function render(string $entryId): array
     {
@@ -106,7 +110,7 @@ class PagePreview
 
         $made = $this->safe($html, $request);
 
-        return ['state' => 'rendered', 'url' => $url, 'html' => $made['html'], 'links' => $made['links']];
+        return ['state' => 'rendered', 'url' => $url, 'address' => $this->address($entry), 'html' => $made['html'], 'links' => $made['links']];
     }
 
     /** Whether the front end hands this address to Statamic (the catch-all) and not to a route of the application. */
@@ -262,11 +266,14 @@ class PagePreview
     protected function neutralize(DOMElement $element, string $origin, array &$links): void
     {
         // A browser throws tabs, newlines and control characters out of an address before it reads the scheme.
-        $target = preg_replace('/[\x00-\x20\x7f]+/', '', $element->getAttribute('href')) ?? '';
+        $target = preg_replace('/[\x00-\x20\x7f]+/', '', $element->getAttribute('href') ?: $element->getAttribute('xlink:href')) ?? '';
 
-        $element->removeAttribute('target');
-        $element->removeAttribute('rel');
-        $element->setAttribute('href', '#');
+        // No `href` at all, not even `#`: with the base element in the document, a bare `#` is read against the site and a click on it
+        // would load the site's front page into the frame, which is a visit. A link without an address is not a link; its target is
+        // remembered below, and shown by the screen.
+        foreach (['href', 'xlink:href', 'target', 'rel'] as $name) {
+            $element->removeAttribute($name);
+        }
 
         if ($target === '' || str_starts_with($target, '#') || ! preg_match('~^(https?:|mailto:|tel:|/(?!/))~i', $target)) {
             return;
@@ -290,10 +297,24 @@ class PagePreview
         $links[] = ['text' => $text !== '' ? mb_strimwidth($text, 0, 120, '…') : $shown, 'url' => $shown];
     }
 
-    /** @return array{state: 'unavailable', reason: string, url: string|null, thumbnail: string|null} */
+    /** @return array{state: 'unavailable', reason: string, url: string|null, address: string|null, thumbnail: string|null} */
     protected function unavailable(string $reason, ?string $url, ?StatamicEntry $entry): array
     {
-        return ['state' => 'unavailable', 'reason' => $reason, 'url' => $url, 'thumbnail' => $entry ? $this->thumbnail($entry) : null];
+        return [
+            'state' => 'unavailable',
+            'reason' => $reason,
+            'url' => $url,
+            'address' => $url !== null && $entry ? $this->address($entry) : null,
+            'thumbnail' => $entry ? $this->thumbnail($entry) : null,
+        ];
+    }
+
+    /** The address as a visitor reads it: the host of the site and the path, without the scheme. */
+    protected function address(StatamicEntry $entry): string
+    {
+        $parts = parse_url((string) $entry->absoluteUrl()) ?: [];
+
+        return ($parts['host'] ?? '').(isset($parts['port']) ? ':'.$parts['port'] : '').($parts['path'] ?? '');
     }
 
     /** The picture of a funnel step that shows this entry, when there is one: what stands in for a page that cannot be rendered. */

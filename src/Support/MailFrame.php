@@ -13,6 +13,10 @@ use DOMXPath;
  * nothing). On the screen that reads as a defect in the mail. Here each of those becomes a quiet area with the image's
  * alternative text, which is what a person who has images off sees too. Only markup that is already safe goes in and
  * comes out; nothing is added that loads or runs.
+ *
+ * The frame the mail sits in may read its own height (`sandbox="allow-same-origin"`, no scripts), so a second line of defence stands
+ * here for what brand-context already does: a link that is not `#` and a meta that redirects are taken out again. Whatever got past
+ * the first layer cannot send a same-origin frame to a page of the Control Panel.
  */
 final class MailFrame
 {
@@ -27,7 +31,8 @@ final class MailFrame
      */
     public static function calm(string $html, string $word): string
     {
-        if (! str_contains($html, 'data-sim-blocked')) {
+        // Nothing to do to a mail that has no switched-off image, no address in a link and nothing that redirects.
+        if (! str_contains($html, 'data-sim-blocked') && ! preg_match('/\shref\s*=\s*["\']?(?!#)|http-equiv\s*=\s*["\']?refresh/i', $html)) {
             return $html;
         }
 
@@ -58,9 +63,21 @@ final class MailFrame
             $image->parentNode?->replaceChild($area, $image);
         }
 
+        foreach (iterator_to_array($xpath->query('//*[@href]') ?: []) as $link) {
+            if ($link instanceof DOMElement && trim($link->getAttribute('href')) !== '#') {
+                $link->setAttribute('href', '#');
+            }
+        }
+
+        foreach (iterator_to_array($xpath->query('//meta[@http-equiv]') ?: []) as $meta) {
+            if ($meta instanceof DOMElement && strtolower(trim($meta->getAttribute('http-equiv'))) === 'refresh') {
+                $meta->parentNode?->removeChild($meta);
+            }
+        }
+
         $head = $xpath->query('//head')->item(0);
 
-        if ($head instanceof DOMElement) {
+        if ($head instanceof DOMElement && str_contains($html, 'data-sim-blocked')) {
             $style = $document->createElement('style', self::STYLE);
             $head->appendChild($style);
         }
