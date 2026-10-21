@@ -6,11 +6,12 @@ import { VueFlow, Panel as FlowPanel, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { ControlBar } from '@goldnead/flow-canvas';
 import {
-    Header, Button, Badge, Select, Input, Stack, Field, Heading, Icon, Description, Popover, Panel, Card, Alert, ConfirmationModal,
+    Header, Button, Badge, Select, ToggleGroup, ToggleItem, Input, Stack, Field, Heading, Icon, Description, Popover, Panel, Card, Alert, ConfirmationModal,
 } from '@statamic/cms/ui';
 import MapNode from '../../components/landkarte/MapNode.vue';
 import MapLane from '../../components/landkarte/MapLane.vue';
 import MapEdge from '../../components/landkarte/MapEdge.vue';
+import ProbeTree from '../../components/landkarte/ProbeTree.vue';
 import {
     connectOutcome, dropSlot, flowEdges, kindOf, layoutNodes, moveRef, strokeOf, targetsFor, wayThrough,
 } from '../../support/landkarteLayout.js';
@@ -48,6 +49,8 @@ const props = defineProps({
     connectionRules: { type: Array, default: () => [] },
     previewUrl: { type: String, default: '' },
     connectUrl: { type: String, default: '' },
+    // The dry run: null when the installed Brand Context cannot plan one.
+    probelaufUrl: { type: String, default: null },
     showUrl: { type: String, required: true },
     indexUrl: { type: String, required: true },
     labels: { type: Object, default: () => ({}) },
@@ -58,6 +61,12 @@ const t = (key, fallback = '') => props.labels?.[key] ?? fallback;
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const FLOW = 'landkarte';
 const { fitView, getViewport, setViewport, setNodes } = useVueFlow(FLOW);
+
+// Karte or Probelauf. The board stays mounted underneath, so nothing on it is lost when looking at the dry run.
+const view = ref('map');
+watch(view, (now) => {
+    if (now === 'map') nextTick(() => fitView({ padding: 0.04, minZoom: 0.2, maxZoom: 1 }));
+});
 
 // --- what is stored, as a form -------------------------------------------
 
@@ -783,7 +792,7 @@ const helpLines = computed(() => [
         <Head :title="[landkarte.name, t('landkarten_title', 'Maps')]" />
 
         <Header :title="landkarte.name" icon="travel-map">
-            <span class="lk-save" :class="`lk-save--${saveState}`" role="status" aria-live="polite" data-lk-save-state>
+            <span class="lk-save" :class="[`lk-save--${saveState}`, view !== 'map' && 'lk-off']" role="status" aria-live="polite" data-lk-save-state>
                 {{ saveState === 'saving' ? t('map_saving', 'Saving…') : saveState === 'conflict' || saveState === 'error' ? t('map_not_saved', 'Not saved') : t('map_saved_state', 'Saved') }}
             </span>
             <Popover align="end" class="w-80">
@@ -802,16 +811,22 @@ const helpLines = computed(() => [
                     <p class="text-xs text-gray-600 dark:text-gray-400">{{ mainText }}</p>
                 </div>
             </Popover>
+            <ToggleGroup v-if="probelaufUrl" v-model="view" size="sm" :aria-label="t('probe_title')" data-lk-views>
+                <ToggleItem value="map" :label="t('probe_tab_map')" data-lk-view="map" />
+                <ToggleItem value="probe" :label="t('probe_tab_probe')" data-lk-view="probe" />
+            </ToggleGroup>
             <Select
                 class="w-44"
+                :class="view !== 'map' && 'lk-off'"
+                :inert="view !== 'map'"
                 :model-value="period.days"
                 :options="periodOptions"
                 :disabled="isDirty || saving"
                 :aria-label="t('map_period', 'Period')"
                 @update:model-value="setPeriod"
             />
-            <Button :text="t('map_note_edge', 'Note arrow')" icon="link" :disabled="!displayNodes.length" @click="openLink()" />
-            <Button :text="t('map_add_stage', 'Add phase')" icon="plus" @click="openLane()" />
+            <Button :class="view !== 'map' && 'lk-off'" :inert="view !== 'map'" :text="t('map_note_edge', 'Note arrow')" icon="link" :disabled="!displayNodes.length" @click="openLink()" />
+            <Button :class="view !== 'map' && 'lk-off'" :inert="view !== 'map'" :text="t('map_add_stage', 'Add phase')" icon="plus" @click="openLane()" />
         </Header>
 
         <Description :text="t('landkarten_description')" class="mb-4" />
@@ -824,7 +839,9 @@ const helpLines = computed(() => [
         </Alert>
         <p v-else-if="errors && Object.keys(errors).length" class="mb-3 text-sm text-red-600" role="alert">{{ Object.values(errors)[0] }}</p>
 
-        <div class="lk-board sa-canvas-frame" data-landkarte-board>
+        <ProbeTree v-if="view === 'probe' && probelaufUrl" :url="probelaufUrl" :labels="labels" />
+
+        <div v-show="view === 'map'" class="lk-board sa-canvas-frame" data-landkarte-board>
             <VueFlow
                 :id="FLOW"
                 :nodes="flowNodes"
@@ -1143,6 +1160,7 @@ const helpLines = computed(() => [
 .toasted-container .toasted.lk-toast button.action:hover { color: var(--color-gray-600); }
 .dark .toasted-container .toasted.lk-toast button.action { color: var(--color-white); }
 
+.lk-off { visibility: hidden; }
 .lk-save { font-size: 0.8rem; color: var(--color-gray-600); }
 .dark .lk-save { color: var(--color-gray-400); }
 .lk-save--conflict, .lk-save--error { color: var(--color-red-600); }
