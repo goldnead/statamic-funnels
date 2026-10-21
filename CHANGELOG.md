@@ -6,8 +6,11 @@
 
 The panel asks the owning addon for more (a page's title, address and status; a course's lessons; an
 automation's mails; price and sales) through a new `landkarten/{id}/details` endpoint, once per card
-and period when the panel opens, never for the whole map. Needs `MapObjectRegistry::details()` from
-statamic-brand-context (an older one leaves the panel as it was). Pages show no picture: Statamic keeps
+and period when the panel opens, never for the whole map. The endpoint only answers for objects that lie on
+that map, and each owning addon says with its own right who may read (`detailsAllowed()`): without it the panel
+shows the title and a hint. A draft page needs the right to see its collection. Needs statamic-brand-context
+1.20 (`details()` and `detailsAllowed()`; an older one leaves the panel as it was, and `composer.json` goes to
+`^1.20` once 1.20.0 exists). Pages show no picture: Statamic keeps
 none, and a screenshot per opened panel would need a headless browser.
 
 ## 1.28.0 — 2026-10-20

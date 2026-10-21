@@ -352,6 +352,7 @@ watch(detailsKey, async (key) => {
 
         const response = await fetch(url, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
         if (response.ok) result = { loading: false, failed: false, blocks: (await response.json()).blocks ?? [] };
+        else if (response.status === 403) result = { loading: false, failed: false, restricted: true, blocks: [] };
     } catch {
         // keep the failed result
     }
@@ -921,6 +922,7 @@ const helpLines = computed(() => [
                 </Panel>
 
                 <p v-if="details?.loading" class="text-sm text-gray-600 dark:text-gray-400" data-lk-details-loading>{{ t('map_details_loading') }}</p>
+                <p v-else-if="details?.restricted" class="text-sm text-gray-600 dark:text-gray-400" data-lk-details-restricted>{{ t('map_details_restricted') }}</p>
                 <p v-else-if="details?.failed" class="text-sm text-gray-600 dark:text-gray-400">{{ t('map_details_failed') }}</p>
                 <Panel v-for="(block, i) in details?.blocks ?? []" :key="i" :heading="block.title || undefined" data-lk-details>
                     <Card>

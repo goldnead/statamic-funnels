@@ -66,6 +66,22 @@ class EntryMapObjects implements ProvidesMapObjects
     }
 
     /**
+     * A live page is public, so anyone on the map may see it described; a draft only with the
+     * right to see the entries of its collection.
+     */
+    public function detailsAuthorized(string $id, $user): bool
+    {
+        $entry = Entry::find($id);
+
+        if (! $entry instanceof StatamicEntry) {
+            return false;
+        }
+
+        return $entry->published()
+            || ($user !== null && $user->can('view '.$entry->collectionHandle().' entries'));
+    }
+
+    /**
      * The page in a few words: title, address, whether it is live. No picture:
      * Statamic keeps none for a page, and rendering one per opened panel would
      * mean a headless browser for a glance.

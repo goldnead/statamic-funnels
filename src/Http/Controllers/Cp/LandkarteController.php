@@ -205,15 +205,30 @@ class LandkarteController extends CpController
 
         abort_unless($this->registry->has($data['type']), 404);
 
+        // Only what lies on this map: the endpoint is no way to read any id of any addon.
+        abort_unless(
+            LandkarteRef::query()
+                ->where('type', $data['type'])
+                ->where('ref_id', $data['ref_id'])
+                ->whereHas('stage', fn ($stage) => $stage->where('landkarte_id', $landkarte->id))
+                ->exists(),
+            404,
+        );
+
+        // An older brand-context has no details(): the panel shows what it always did.
+        if (! method_exists($this->registry, 'details') || ! method_exists($this->registry, 'detailsAllowed')) {
+            return response()->json(['blocks' => []]);
+        }
+
+        // The owning addon decides with the right that guards the object in its own CP.
+        if (! $this->registry->detailsAllowed($data['type'], $data['ref_id'], User::current())) {
+            return response()->json(['blocks' => [], 'restricted' => true], 403);
+        }
+
         $days = (int) ($data['days'] ?? 30);
         $days = in_array($days, self::PERIODS, true) ? $days : 30;
 
-        // An older brand-context has no details(): the panel shows what it always did.
-        $blocks = method_exists($this->registry, 'details')
-            ? $this->registry->details($data['type'], $data['ref_id'], MapPeriod::lastDays($days))
-            : null;
-
-        return response()->json(['blocks' => $blocks ?? []]);
+        return response()->json(['blocks' => $this->registry->details($data['type'], $data['ref_id'], MapPeriod::lastDays($days)) ?? []]);
     }
 
     /**
@@ -420,7 +435,7 @@ class LandkarteController extends CpController
             'map_edge_origin_note', 'map_legend_real', 'map_legend_note', 'map_grip_hint', 'map_connect_gone', 'map_connect_none',
             'map_connect_pair', 'map_connect_allowed', 'map_connect_forbidden', 'map_connect_failed', 'map_connect_title',
             'map_disconnect_title', 'map_connect_do', 'map_disconnect_do', 'map_connected', 'map_disconnected', 'map_undo', 'map_undone',
-            'map_disconnect', 'map_connect_conflict', 'map_dead_stub_help', 'map_details_loading', 'map_details_failed', 'map_details_more',
+            'map_disconnect', 'map_connect_conflict', 'map_dead_stub_help', 'map_details_loading', 'map_details_failed', 'map_details_restricted', 'map_details_more',
         ];
 
         return collect($keys)

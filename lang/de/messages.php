@@ -404,6 +404,7 @@ return [
     'edge_hand_label' => 'von Hand',
     'edge_hand_origin' => 'von Hand gezogen',
     'map_details_loading' => 'Lade Details …',
+    'map_details_restricted' => 'Weitere Details siehst du mit dem Recht, das dieses Objekt im Control Panel schützt.',
     'map_details_failed' => 'Die Details konnten nicht geladen werden.',
     'map_details_more' => '+ :count weitere',
     'map_details_title' => 'Titel',
