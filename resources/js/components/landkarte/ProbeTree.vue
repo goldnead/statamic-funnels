@@ -2,6 +2,7 @@
 import { computed, onMounted, provide, ref } from 'vue';
 import { Alert, Description, Heading, Select, ToggleGroup, ToggleItem } from '@statamic/cms/ui';
 import ProbeNode from './ProbeNode.vue';
+import ProbeMailbox from './ProbeMailbox.vue';
 import ProbeTimeline from './ProbeTimeline.vue';
 import { timeInDay as timeInDayText, timeWords as timeText } from '../../support/probelauf.js';
 
@@ -15,11 +16,14 @@ import { timeInDay as timeInDayText, timeWords as timeText } from '../../support
  */
 const props = defineProps({
     url: { type: String, required: true },
+    mailUrl: { type: String, default: null },
     labels: { type: Object, default: () => ({}) },
 });
 
 const state = ref('loading');
 const person = ref('unknown');
+// For the test person: her way as a timeline, or the mails of it as a mailbox.
+const lens = ref('timeline');
 const start = ref(null);
 const starts = ref([]);
 const tree = ref({ roots: [], stats: { nodes: 0, leaves: 0, cut: 0, unreached: [] } });
@@ -85,6 +89,11 @@ function chooseStart(value) {
 
 onMounted(load);
 
+const lensOptions = computed(() => [
+    { value: 'timeline', label: t('probe_lens_timeline') },
+    { value: 'mailbox', label: t('probe_lens_mailbox') },
+]);
+
 const personOptions = computed(() => [
     { value: 'unknown', label: t('probe_person_unknown') },
     { value: 'test', label: t('probe_person_test') },
@@ -125,6 +134,9 @@ const hasContent = computed(() => (person.value === 'test' ? timeline.value.entr
                     <ToggleItem v-for="option in personOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-person-option="option.value" />
                 </ToggleGroup>
             </span>
+            <ToggleGroup v-if="person === 'test' && mailUrl" v-model="lens" size="sm" :aria-label="t('probe_lens_mailbox')" data-pr-lens>
+                <ToggleItem v-for="option in lensOptions" :key="option.value" :value="option.value" :label="option.label" :data-pr-lens-option="option.value" />
+            </ToggleGroup>
             <label v-if="person === 'test' && startOptions.length" class="pr-start">
                 <span class="pr-start__label">{{ t('probe_start_label') }}</span>
                 <Select class="w-96 max-w-full" size="sm" :model-value="start" :options="startOptions" :aria-label="t('probe_start_label')" data-pr-start @update:model-value="chooseStart" />
@@ -136,6 +148,7 @@ const hasContent = computed(() => (person.value === 'test' ? timeline.value.entr
         <p v-else-if="person === 'test' && !startOptions.length" class="pr-status" data-pr-empty>{{ t('probe_start_none') }}</p>
         <p v-else-if="!hasContent" class="pr-status" data-pr-empty>{{ person === 'test' ? t('probe_timeline_empty') : t('probe_empty') }}</p>
 
+        <ProbeMailbox v-else-if="person === 'test' && lens === 'mailbox' && mailUrl" :entries="timeline.entries" :mail-url="mailUrl" :start="start" />
         <ProbeTimeline v-else-if="person === 'test'" :entries="timeline.entries" />
         <ul v-else class="pr-tree" data-pr-tree>
             <ProbeNode v-for="root in tree.roots" :key="root.id" :node="root" />

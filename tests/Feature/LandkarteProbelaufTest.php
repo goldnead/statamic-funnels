@@ -92,8 +92,21 @@ class ProbeAutomations extends ProbeFakeObjects implements ProvidesMapEdges
     public function react(string $id, SimEvent $event, SimPerson $person, CarbonImmutable $at): array
     {
         return $id === 'welcome'
-            ? Effect::chain([Effect::mail('Welcome'), Effect::wait('after 2 days', 2 * 86400), Effect::mail('Follow-up')])
-            : [Effect::mail('Thank you')];
+            ? Effect::chain([Effect::mail('Welcome', null, 0, ['node' => 'm1']), Effect::wait('after 2 days', 2 * 86400), Effect::mail('Follow-up', null, 0, ['node' => 'm2'])])
+            : [Effect::mail('Thank you', null, 0, ['node' => 'm3'])];
+    }
+
+    public function mailPreview(string $id, array $meta, SimPerson $person): ?array
+    {
+        if (($meta['node'] ?? null) === 'm1') {
+            return [
+                'subject' => 'Welcome, friend',
+                'from' => 'hello@example.test',
+                'html' => '<p>Hi</p><script>alert(1)</script><img src="https://track.example/o.gif"><a href="https://track.example/c/1">Go</a>',
+            ];
+        }
+
+        return null;
     }
 }
 
@@ -385,6 +398,94 @@ class LandkarteProbelaufTest extends TestCase
         $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&start=lead_magnet:freebie:requested")->assertOk();
         $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&start=product:masterclass:purchased")->assertOk();
         $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=unknown")->assertOk();
+
+        Mail::assertNothingSent();
+        Queue::assertNothingPushed();
+        $this->assertSame([], $writes);
+    }
+
+    /** The id of the entry with this label in the timeline of the lead magnet start. */
+    protected function entryId(Landkarte $landkarte, string $label): string
+    {
+        $json = $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf?person=test&start=lead_magnet:freebie:requested")->assertOk()->json();
+
+        return collect($json['entries'])->firstWhere('label', $label)['id'];
+    }
+
+    #[Test]
+    public function the_mail_of_an_entry_is_written_and_made_safe(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+        $id = $this->entryId($landkarte, 'Welcome');
+
+        $json = $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry={$id}")->assertOk()->json();
+
+        $this->assertSame('Welcome, friend', $json['subject']);
+        $this->assertSame('hello@example.test', $json['from']);
+        $this->assertStringContainsString('<p>Hi</p>', $json['html']);
+        $this->assertStringNotContainsString('<script', $json['html']);
+        $this->assertDoesNotMatchRegularExpression('/\ssrc="/', $json['html']);
+        $this->assertSame([['text' => 'Go', 'url' => 'https://track.example/c/1']], $json['links']);
+        $this->assertSame(1, $json['blocked_images']);
+        $this->assertStringContainsString('img-src data:', html_entity_decode($json['html'], ENT_QUOTES));
+    }
+
+    #[Test]
+    public function an_entry_that_is_no_mail_or_has_no_mail_to_show_is_not_found(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+        $base = "/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested";
+
+        // The first entry is the card itself; the follow-up mail has no preview in this provider.
+        $this->getJson("{$base}&entry=e1")->assertNotFound();
+        $this->getJson("{$base}&entry=".$this->entryId($landkarte, 'Follow-up'))->assertNotFound();
+        $this->getJson("{$base}&entry=e999")->assertNotFound();
+    }
+
+    #[Test]
+    public function the_mail_endpoint_takes_only_a_start_the_map_offers_and_an_entry_of_the_right_shape(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=automation:welcome:started&entry=e2")->assertStatus(422);
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry=../../x")->assertStatus(422);
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?entry=e2")->assertStatus(422);
+    }
+
+    #[Test]
+    public function a_mail_the_user_may_not_see_is_not_written(): void
+    {
+        $landkarte = $this->landkarte();
+
+        Role::make('plain')->title('Plain')->permissions(['access cp', 'access funnels utility'])->save();
+        $this->actingAs(tap(User::make()->email('plain2@example.com')->assignRole('plain'))->save());
+
+        // Without the right the planner names the card and nothing of what it sends: no entry is a mail.
+        foreach (range(1, 8) as $i) {
+            $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry=e{$i}")->assertNotFound();
+        }
+    }
+
+    #[Test]
+    public function writing_a_mail_writes_nothing_and_sends_nothing(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+        $id = $this->entryId($landkarte, 'Welcome');
+        Mail::fake();
+        Queue::fake();
+
+        $writes = [];
+        DB::listen(function ($query) use (&$writes) {
+            if (! preg_match('/^\s*(select|pragma)\b/i', $query->sql)) {
+                $writes[] = $query->sql;
+            }
+        });
+
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry={$id}")->assertOk();
 
         Mail::assertNothingSent();
         Queue::assertNothingPushed();

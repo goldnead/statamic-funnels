@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added: Probelauf mailbox (part 3: the mails the test person gets)
+
+Next to the timeline the test person has a **Postfach**: every mail that goes out on her way, in order, and the one she
+opens, written for her by the owning addon (`GET landkarten/{id}/probelauf/mail?start=…&entry=eN`). The mail is looked at,
+not delivered: the registry makes it safe (no script, no remote image, no live link, see brand-context 1.23) and the page
+shows it in an `<iframe sandbox="">` with a policy that allows nothing but inline styles and data images. Its links are listed
+as text and lead nowhere; images are switched off and counted. The entry is named by its place in the way the server plans
+itself, never by what the client says, and only a mail the user may see is written. Tested: sanitising, rights, 404/422, no writes.
+Shown in a real browser with a hostile mail: zero requests with the policy and sandbox, six without them (image, script,
+stylesheet, fetch, frame, click). Mails of lead magnets have no preview yet ("no preview in the dry run yet").
+
 ### Added: Probelauf with a test person (part 2: the way by day)
 
 The Probelauf tab has a second view: **Testperson**. Pick a start (a lead magnet asked for, a product bought, or a

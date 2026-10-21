@@ -51,6 +51,7 @@ const props = defineProps({
     connectUrl: { type: String, default: '' },
     // The dry run: null when the installed Brand Context cannot plan one.
     probelaufUrl: { type: String, default: null },
+    probelaufMailUrl: { type: String, default: null },
     showUrl: { type: String, required: true },
     indexUrl: { type: String, required: true },
     labels: { type: Object, default: () => ({}) },
@@ -839,7 +840,7 @@ const helpLines = computed(() => [
         </Alert>
         <p v-else-if="errors && Object.keys(errors).length" class="mb-3 text-sm text-red-600" role="alert">{{ Object.values(errors)[0] }}</p>
 
-        <ProbeTree v-if="view === 'probe' && probelaufUrl" :url="probelaufUrl" :labels="labels" />
+        <ProbeTree v-if="view === 'probe' && probelaufUrl" :url="probelaufUrl" :mail-url="probelaufMailUrl" :labels="labels" />
 
         <div v-show="view === 'map'" class="lk-board sa-canvas-frame" data-landkarte-board>
             <VueFlow
