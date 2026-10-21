@@ -333,10 +333,11 @@ class LandkarteController extends CpController
         $sources = app(PersonSources::class);
 
         if (($data['like'] ?? '') !== '') {
-            $who = $sources->state($data['like'], User::current());
+            $found = $sources->describe($data['like'], User::current());
 
-            abort_if($who === null, 404);
+            abort_if($found === null, 404);
 
+            $who = $found['person'];
             $traits = $who->traits;
             $tags = is_array($traits['contact.tags'] ?? null) ? $traits['contact.tags'] : [];
             $unsubscribed = ($traits['marketing.unsubscribed'] ?? false) === true;
@@ -348,6 +349,8 @@ class LandkarteController extends CpController
                 'ran' => $who->ran,
                 'unsubscribed' => $unsubscribed,
                 'traits' => $traits,
+                // The sources that did not speak (no right, or a failure): a copy silent about a part reads as "none".
+                'missing' => array_map(fn (string $id) => Lang::has('statamic-funnels::messages.probe_source_'.$id) ? __('statamic-funnels::messages.probe_source_'.$id) : $id, $found['missing']),
             ]);
         }
 
@@ -357,75 +360,91 @@ class LandkarteController extends CpController
     }
 
     /**
-     * What a request may say about the test person. Short lists of plain words and one small JSON list of
-     * actions; everything is capped again when it is read ({@see personFrom()}).
+     * What a request may say about the test person: lists of plain words, the traits as one object, the actions as a list.
+     * Each may come as JSON (the page posts it) or, for a plain GET, as a comma list or a JSON string. Everything is capped
+     * when it is read ({@see personFrom()}), to what the places that know real people hand over at most.
      *
      * @return array<string, list<string>>
      */
     protected function personRules(): array
     {
         return [
-            'tags' => ['nullable', 'string', 'max:500'],
-            'access' => ['nullable', 'string', 'max:500'],
-            'ran' => ['nullable', 'array', 'max:20'],
-            'ran.*' => ['string', 'max:191'],
-            'actions' => ['nullable', 'string', 'max:6000'],
-            // Other things a condition can read (`contact.status`, custom fields), as one small JSON object.
-            'traits' => ['nullable', 'string', 'max:6000'],
+            'tags' => ['nullable'],
+            'access' => ['nullable'],
+            'ran' => ['nullable'],
+            'actions' => ['nullable'],
+            // Other things a condition can read (`contact.status`, custom fields).
+            'traits' => ['nullable'],
             'unsubscribed' => ['nullable', 'boolean'],
         ];
     }
 
+    /** What the places that know real people hand over at most: the dry run takes that much, so a copy never needs more. */
+    public const PERSON_TAGS = 30;
+
+    public const PERSON_ACCESS = 50;
+
+    public const PERSON_RAN = 50;
+
+    public const PERSON_TRAITS = 80;
+
     /**
-     * The test person the request describes: her tags (`contact.tags`, what a condition reads), the access she
-     * holds, the automations she has been through, and what she does after which mail. The person lives in
-     * the request and in nobody's database: nothing about her is stored, and no real person is read.
+     * The test person the request describes: her tags (`contact.tags`, what a condition reads), the access she holds, the
+     * automations she has been through, other traits, and what she does after which mail. The person lives in the
+     * request and in nobody's database: nothing about her is stored, and no real person is read here.
      *
      * @param  array<string, mixed>  $data  validated by {@see personRules()}
      */
     protected function personFrom(array $data): SimPerson
     {
-        $words = fn (?string $list, int $max) => collect(explode(',', (string) $list))
-            ->map(fn (string $w) => mb_substr(trim($w), 0, 64))
-            ->filter()
-            ->unique()
-            ->take($max)
-            ->values()
-            ->all();
+        $words = function (mixed $list, int $max): array {
+            $items = is_array($list) ? $list : explode(',', (string) $list);
 
-        $actions = [];
+            return collect($items)
+                ->map(fn ($w) => is_scalar($w) ? mb_substr(trim((string) $w), 0, 64) : '')
+                ->filter()
+                ->unique()
+                ->take($max)
+                ->values()
+                ->all();
+        };
+        $json = function (mixed $value): array {
+            if (is_array($value)) {
+                return $value;
+            }
 
-        if (isset($data['actions']) && $data['actions'] !== '') {
-            $decoded = json_decode((string) $data['actions'], true);
+            if ($value === null || $value === '') {
+                return [];
+            }
+
+            $decoded = json_decode((string) $value, true);
 
             abort_unless(is_array($decoded), 422);
 
-            foreach (array_slice($decoded, 0, SimAction::MAX) as $row) {
-                $action = is_array($row) ? SimAction::fromArray($row) : null;
+            return $decoded;
+        };
 
-                if ($action !== null) {
-                    $actions[] = $action;
-                }
+        $actions = [];
+
+        foreach (array_slice($json($data['actions'] ?? null), 0, SimAction::MAX) as $row) {
+            $action = is_array($row) ? SimAction::fromArray($row) : null;
+
+            if ($action !== null) {
+                $actions[] = $action;
             }
         }
 
         $traits = [];
 
-        if (isset($data['traits']) && $data['traits'] !== '') {
-            $decoded = json_decode((string) $data['traits'], true);
+        foreach (array_slice($json($data['traits'] ?? null), 0, self::PERSON_TRAITS, true) as $key => $value) {
+            $isWords = is_array($value) && count($value) <= self::PERSON_TAGS && array_filter($value, fn ($w) => ! is_scalar($w)) === [];
 
-            abort_unless(is_array($decoded), 422);
-
-            foreach (array_slice($decoded, 0, 40, true) as $key => $value) {
-                $isWords = is_array($value) && count($value) <= 30 && array_filter($value, fn ($w) => ! is_scalar($w)) === [];
-
-                if (is_string($key) && preg_match('/^[a-z0-9_.\-]{1,80}$/i', $key) && (is_scalar($value) || $isWords)) {
-                    $traits[$key] = is_array($value) ? array_values(array_map(fn ($w) => mb_substr((string) $w, 0, 200), $value)) : (is_string($value) ? mb_substr($value, 0, 500) : $value);
-                }
+            if (is_string($key) && preg_match('/^[a-z0-9_.\-]{1,80}$/i', $key) && (is_scalar($value) || $isWords)) {
+                $traits[$key] = is_array($value) ? array_values(array_map(fn ($w) => mb_substr((string) $w, 0, 200), $value)) : (is_string($value) ? mb_substr($value, 0, 500) : $value);
             }
         }
 
-        $tags = $words($data['tags'] ?? null, 20);
+        $tags = $words($data['tags'] ?? null, self::PERSON_TAGS);
 
         if ($tags !== []) {
             $traits['contact.tags'] = $tags;
@@ -437,8 +456,8 @@ class LandkarteController extends CpController
 
         return SimPerson::known(
             $traits,
-            $words($data['access'] ?? null, 20),
-            array_slice(array_values(array_filter(array_map(fn ($h) => is_string($h) ? mb_substr(trim($h), 0, 191) : '', (array) ($data['ran'] ?? [])))), 0, 20),
+            $words($data['access'] ?? null, self::PERSON_ACCESS),
+            $words($data['ran'] ?? null, self::PERSON_RAN),
             $actions,
         );
     }
@@ -732,7 +751,7 @@ class LandkarteController extends CpController
             'map_disconnect', 'map_connect_conflict', 'map_dead_stub_help', 'map_details_loading', 'map_details_failed', 'map_details_restricted', 'map_details_more',
             'probe_tab_map', 'probe_tab_probe', 'probe_title', 'probe_title_test', 'probe_help', 'probe_help_test', 'probe_loading', 'probe_failed', 'probe_empty', 'probe_summary',
             'probe_unreached', 'probe_expand', 'probe_collapse', 'probe_now', 'probe_day', 'probe_hours', 'probe_minutes', 'probe_unavailable',
-            'probe_person_unknown', 'probe_person_test', 'probe_lens_label', 'probe_who_label', 'probe_who_test', 'probe_who_real', 'probe_who_search', 'probe_who_search_hint', 'probe_who_copied', 'probe_who_reset', 'probe_who_none', 'probe_who_read_only', 'probe_unsubscribed_label', 'probe_lens_account', 'probe_lens_pages', 'probe_account_empty', 'probe_account_access', 'probe_account_course', 'probe_account_open_unknown', 'probe_pages_empty', 'probe_pages_note', 'probe_why', 'probe_tags_label', 'probe_tags_placeholder', 'probe_access_label', 'probe_access_placeholder', 'probe_ran_label', 'probe_until_label', 'probe_until_all', 'probe_until_day', 'probe_standing', 'probe_standing_access', 'probe_standing_unsub', 'probe_action_title', 'probe_action_buy', 'probe_action_click', 'probe_action_unsub', 'probe_action_product', 'probe_action_link', 'probe_action_after', 'probe_action_days', 'probe_action_add', 'probe_action_remove', 'probe_action_no_products', 'probe_action_no_links', 'probe_action_help', 'probe_kind_action', 'probe_lens_timeline', 'probe_lens_mailbox', 'probe_mail_from_none', 'probe_mailbox_empty', 'probe_mail_select', 'probe_mail_failed', 'probe_mail_none', 'probe_mail_loading', 'probe_mail_from', 'probe_mail_subject', 'probe_mail_images_one', 'probe_mail_images_many', 'probe_mail_links', 'probe_mail_links_help', 'probe_mail_frame', 'probe_person_label', 'probe_start_label', 'probe_start_none', 'probe_timeline_empty', 'probe_timeline_summary', 'probe_timeline_summary_one', 'probe_kind_decision', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
+            'probe_person_unknown', 'probe_person_test', 'probe_lens_label', 'probe_who_label', 'probe_who_missing', 'probe_who_test', 'probe_who_real', 'probe_who_search', 'probe_who_search_hint', 'probe_who_copied', 'probe_who_reset', 'probe_who_none', 'probe_who_read_only', 'probe_unsubscribed_label', 'probe_lens_account', 'probe_lens_pages', 'probe_account_empty', 'probe_account_access', 'probe_account_course', 'probe_account_open_unknown', 'probe_pages_empty', 'probe_pages_note', 'probe_why', 'probe_tags_label', 'probe_tags_placeholder', 'probe_access_label', 'probe_access_placeholder', 'probe_ran_label', 'probe_until_label', 'probe_until_all', 'probe_until_day', 'probe_standing', 'probe_standing_access', 'probe_standing_unsub', 'probe_action_title', 'probe_action_buy', 'probe_action_click', 'probe_action_unsub', 'probe_action_product', 'probe_action_link', 'probe_action_after', 'probe_action_days', 'probe_action_add', 'probe_action_remove', 'probe_action_no_products', 'probe_action_no_links', 'probe_action_help', 'probe_action_full', 'probe_kind_action', 'probe_lens_timeline', 'probe_lens_mailbox', 'probe_mail_from_none', 'probe_mailbox_empty', 'probe_mail_select', 'probe_mail_failed', 'probe_mail_none', 'probe_mail_loading', 'probe_mail_from', 'probe_mail_subject', 'probe_mail_images_one', 'probe_mail_images_many', 'probe_mail_links', 'probe_mail_links_help', 'probe_mail_frame', 'probe_person_label', 'probe_start_label', 'probe_start_none', 'probe_timeline_empty', 'probe_timeline_summary', 'probe_timeline_summary_one', 'probe_kind_decision', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
             'probe_kind_stop', 'probe_kind_unknown', 'probe_kind_fork', 'probe_kind_rejoin', 'probe_kind_denied', 'probe_kind_more', 'probe_kind_trait',
         ];
 

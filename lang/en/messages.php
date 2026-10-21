@@ -499,6 +499,7 @@ return [
     'probe_action_remove' => 'Remove',
     'probe_action_no_products' => 'No product on the map.',
     'probe_action_no_links' => 'This mail has no link.',
+    'probe_action_full' => 'The dry run takes no more than :max actions.',
     'probe_action_help' => 'Only a choice in the dry run: nothing is bought, clicked or unsubscribed.',
     'probe_kind_action' => 'Action of the person',
     'probe_lens_account' => 'Account',
@@ -522,4 +523,8 @@ return [
     'probe_who_none' => 'Nobody found.',
     'probe_who_read_only' => 'Read only: nothing about the person is changed, sent or saved.',
     'probe_unsubscribed_label' => 'Has unsubscribed',
+    'probe_who_missing' => 'Not read (no right or a failure): :sources. These parts are missing from the copy.',
+    'probe_source_leadhub' => 'CRM',
+    'probe_source_entitlements' => 'Access',
+    'probe_source_automations' => 'Automations',
 ];

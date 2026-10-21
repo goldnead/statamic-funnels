@@ -14,6 +14,7 @@ const props = defineProps({
     links: { type: Array, default: () => [] },
     products: { type: Array, default: () => [] },
     actions: { type: Array, default: () => [] },
+    maxActions: { type: Number, default: 12 },
 });
 
 const emit = defineEmits(['add', 'remove']);
@@ -34,7 +35,9 @@ const typeOptions = computed(() => [
 const productOptions = computed(() => props.products.map((p) => ({ value: p.key, label: p.label })));
 const linkOptions = computed(() => props.links.map((l) => ({ value: l.url, label: l.text })));
 
+const full = computed(() => props.actions.length >= props.maxActions);
 const ready = computed(() => {
+    if (full.value) return false;
     if (type.value === 'buy') return Boolean(product.value ?? productOptions.value[0]);
     if (type.value === 'click') return Boolean(link.value ?? linkOptions.value[0]);
     return true;
@@ -89,6 +92,7 @@ function add() {
             </label>
             <Button size="sm" :text="probe.t('probe_action_add')" :disabled="!ready" data-pa-add @click="add" />
         </div>
+        <p v-if="full" class="pa-note" data-pa-full>{{ probe.t('probe_action_full').replace(':max', () => maxActions) }}</p>
         <p class="pa-note"><Icon name="info" class="size-3.5" /> {{ probe.t('probe_action_help') }}</p>
     </section>
 </template>

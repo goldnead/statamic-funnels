@@ -501,6 +501,7 @@ return [
     'probe_action_remove' => 'Entfernen',
     'probe_action_no_products' => 'Auf der Karte liegt kein Produkt.',
     'probe_action_no_links' => 'Diese Mail hat keinen Link.',
+    'probe_action_full' => 'Mehr als :max Aktionen nimmt der Probelauf nicht.',
     'probe_action_help' => 'Nur eine Wahl im Probelauf: nichts wird gekauft, geklickt oder abbestellt.',
     'probe_kind_action' => 'Aktion der Person',
     'probe_lens_account' => 'Account',
@@ -524,4 +525,8 @@ return [
     'probe_who_none' => 'Niemand gefunden.',
     'probe_who_read_only' => 'Es wird nur gelesen: nichts wird an der Person geändert, verschickt oder gespeichert.',
     'probe_unsubscribed_label' => 'Hat sich abgemeldet',
+    'probe_who_missing' => 'Nicht gelesen (kein Recht oder ein Ausfall): :sources. Diese Teile fehlen in der Kopie.',
+    'probe_source_leadhub' => 'CRM',
+    'probe_source_entitlements' => 'Zugänge',
+    'probe_source_automations' => 'Automatisierungen',
 ];

@@ -1,6 +1,7 @@
 <script setup>
 import { inject, onBeforeUnmount, ref, watch } from 'vue';
 import { Button, Input } from '@statamic/cms/ui';
+import { postJson } from '../../support/landkarteRequest.js';
 
 /**
  * "As for a real person": find her in the CRM and copy what the addons that know her say into the form of the test
@@ -12,6 +13,8 @@ import { Button, Input } from '@statamic/cms/ui';
 const props = defineProps({
     url: { type: String, required: true },
     copiedFrom: { type: String, default: null },
+    // Sources that did not speak when she was copied (no right, or a failure): said, so a missing part is not read as "none".
+    missing: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(['copy', 'reset']);
@@ -21,18 +24,13 @@ const query = ref('');
 const results = ref([]);
 const state = ref('idle');
 
+// POST, so a name or an address typed here is in a body and not in a URL that every access log keeps.
 async function get(params) {
-    const url = new URL(props.url, window.location.origin);
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-
-    const response = await fetch(url, {
-        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        credentials: 'same-origin',
-    });
+    const response = await postJson(props.url, params);
 
     if (!response.ok) throw new Error(String(response.status));
 
-    return response.json();
+    return response.data;
 }
 
 let pause = null;
@@ -42,6 +40,7 @@ watch(query, (value) => {
     clearTimeout(pause);
 
     if (value.trim().length < 2) {
+        ticket++;
         results.value = [];
         state.value = 'idle';
 
@@ -66,6 +65,8 @@ watch(query, (value) => {
 onBeforeUnmount(() => clearTimeout(pause));
 
 async function pick(person) {
+    ticket++;
+
     try {
         const data = await get({ like: person.key });
         emit('copy', { label: person.label, ...data });
@@ -81,7 +82,7 @@ async function pick(person) {
 <template>
     <div class="rp" data-pr-real>
         <div v-if="copiedFrom" class="rp-copied" data-pr-copied>
-            <span>{{ probe.t('probe_who_copied').replace(':name', copiedFrom) }}</span>
+            <span>{{ probe.t('probe_who_copied').replace(':name', () => copiedFrom) }}</span>
             <Button size="xs" variant="ghost" :text="probe.t('probe_who_reset')" data-pr-reset @click="emit('reset')" />
         </div>
         <label v-else class="rp-search">
@@ -96,6 +97,7 @@ async function pick(person) {
         </ul>
         <p v-else-if="state === 'none'" class="rp-note" data-pr-real-none>{{ probe.t('probe_who_none') }}</p>
         <p v-else-if="state === 'failed'" class="rp-note" data-pr-real-failed>{{ probe.t('probe_failed') }}</p>
+        <p v-if="copiedFrom && missing.length" class="rp-note rp-note--warn" data-pr-missing>{{ probe.t('probe_who_missing').replace(':sources', () => missing.join(', ')) }}</p>
         <p class="rp-note">{{ probe.t('probe_who_read_only') }}</p>
     </div>
 </template>
@@ -114,6 +116,8 @@ async function pick(person) {
 .rp-pick:hover { background: var(--color-gray-50); }
 .dark .rp-pick:hover { background: var(--color-gray-800); }
 .rp-pick:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.rp-note--warn { color: var(--color-gray-900) !important; font-weight: 500; }
+.dark .rp-note--warn { color: var(--color-gray-100) !important; }
 .rp-note { margin: 0; font-size: 0.78rem; color: var(--color-gray-600); }
 .dark .rp-note { color: var(--color-gray-400); }
 </style>

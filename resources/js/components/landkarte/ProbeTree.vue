@@ -8,8 +8,9 @@ import ProbePages from './ProbePages.vue';
 import ProbeRealPerson from './ProbeRealPerson.vue';
 import ProbeTimeline from './ProbeTimeline.vue';
 import {
-    encodeActions, standing, timeInDay as timeInDayText, timeWords as timeText, untilDay,
+    standing, timeInDay as timeInDayText, timeWords as timeText, untilDay, words as plainWords,
 } from '../../support/probelauf.js';
+import { postJson } from '../../support/landkarteRequest.js';
 
 /**
  * The dry run of a Landkarte ("Probelauf").
@@ -42,6 +43,7 @@ const until = ref(null);
 const unsubscribed = ref(false);
 const extraTraits = ref({});
 const copiedFrom = ref(null);
+const missing = ref([]);
 const who = ref('test');
 const products = ref([]);
 const automations = ref([]);
@@ -58,17 +60,26 @@ provide('probelauf', {
     timeInDay: (seconds) => timeInDayText(seconds, t),
 });
 
-// Everything that makes her this person, onto a request: the way and her mail are planned from the same query.
-function personQuery(url) {
-    if (tags.value.trim() !== '') url.searchParams.set('tags', tags.value);
-    if (access.value.trim() !== '') url.searchParams.set('access', access.value);
-    ran.value.forEach((handle) => url.searchParams.append('ran[]', handle));
-    if (actions.value.length) url.searchParams.set('actions', encodeActions(actions.value));
-    if (unsubscribed.value) url.searchParams.set('unsubscribed', '1');
-    if (Object.keys(extraTraits.value).length) url.searchParams.set('traits', JSON.stringify(extraTraits.value));
+// Everything that makes her this person, as the body of a request: the way is planned from it and so is her mail. A body, not a URL:
+// what describes a real person must not land in an access log.
+function personBody() {
+    const body = {
+        tags: plainWords(tags.value),
+        access: plainWords(access.value),
+        ran: ran.value,
+        actions: actions.value.map((a) => ({
+            type: a.type, mail: a.mail, product: a.product ?? null, url: a.url ?? null, after_seconds: a.after_seconds ?? 0,
+        })),
+    };
 
-    return url;
+    if (unsubscribed.value) body.unsubscribed = true;
+    if (Object.keys(extraTraits.value).length) body.traits = extraTraits.value;
+
+    return body;
 }
+
+// What the planner takes of a person's actions; the page does not offer more.
+const MAX_ACTIONS = 12;
 
 let ticket = 0;
 
@@ -77,19 +88,14 @@ async function load() {
     state.value = 'loading';
 
     try {
-        const url = new URL(props.url, window.location.origin);
-        url.searchParams.set('person', person.value);
-        if (person.value === 'test' && start.value) url.searchParams.set('start', start.value);
-        if (person.value === 'test') personQuery(url);
+        const body = { person: person.value };
+        if (person.value === 'test') Object.assign(body, personBody(), start.value ? { start: start.value } : {});
 
-        const response = await fetch(url, {
-            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            credentials: 'same-origin',
-        });
+        const response = await postJson(props.url, body);
 
         if (!response.ok) throw new Error(String(response.status));
 
-        const data = await response.json();
+        const data = response.data;
         // A slower answer to an earlier choice must not overwrite the answer to the latest.
         if (mine !== ticket) return;
 
@@ -100,6 +106,10 @@ async function load() {
             start.value = data.start;
             products.value = data.products ?? [];
             automations.value = data.automations ?? [];
+
+            // An action tied to a mail that is no longer on her way (another start, a changed form) has nothing to act on.
+            const keys = new Set(data.entries.map((e) => e.meta?.mail_key).filter(Boolean));
+            if (actions.value.some((a) => !keys.has(a.mail))) actions.value = actions.value.filter((a) => keys.has(a.mail));
         } else {
             tree.value = { roots: data.roots, stats: data.stats };
         }
@@ -125,6 +135,8 @@ function chooseStart(value) {
 
 // What a real person said, into the form. Everything stays editable; the way is planned from the form.
 function copyPerson(data) {
+    copied = true;
+    missing.value = data.missing ?? [];
     tags.value = (data.tags ?? []).join(', ');
     access.value = (data.access ?? []).join(', ');
     ran.value = data.ran ?? [];
@@ -136,6 +148,8 @@ function copyPerson(data) {
 }
 
 function resetPerson() {
+    copied = true;
+    missing.value = [];
     tags.value = '';
     access.value = '';
     ran.value = [];
@@ -157,6 +171,7 @@ function toggleRan(handle, on) {
 }
 
 function addAction(action) {
+    if (actions.value.length >= MAX_ACTIONS) return;
     actions.value = [...actions.value, action];
     load();
 }
@@ -168,7 +183,15 @@ function removeAction(index) {
 
 // Typing in a field plans again once the typing pauses, not at every key.
 let pause = null;
+let copied = false;
 watch([tags, access], () => {
+    // A copy from a real person sets both at once and plans itself: the typing pause is for a hand on the keys.
+    if (copied) {
+        copied = false;
+
+        return;
+    }
+
     clearTimeout(pause);
     pause = setTimeout(load, 450);
 });
@@ -257,6 +280,7 @@ const hasContent = computed(() => (person.value === 'test' ? shown.value.length 
             v-if="person === 'test' && personsUrl && who === 'real'"
             :url="personsUrl"
             :copied-from="copiedFrom"
+            :missing="missing"
             @copy="copyPerson"
             @reset="resetPerson"
         />
@@ -318,7 +342,8 @@ const hasContent = computed(() => (person.value === 'test' ? shown.value.length 
             :entries="shown"
             :mail-url="mailUrl"
             :start="start"
-            :person-query="personQuery"
+            :person-body="personBody"
+            :max-actions="MAX_ACTIONS"
             :products="products"
             :actions="actions"
             @add-action="addAction"
@@ -352,8 +377,8 @@ const hasContent = computed(() => (person.value === 'test' ? shown.value.length 
 .pr-start { display: inline-flex; align-items: center; gap: 0.5rem; }
 .pr-start__label { font-size: 0.8rem; color: var(--color-gray-600); white-space: nowrap; }
 .dark .pr-start__label { color: var(--color-gray-400); }
-.pr-lensrow { margin: -0.25rem 0 0.75rem; }
-.pr-whowrap { margin: 0 0 0.75rem; }
+.pr-lensrow { display: flex; margin: -0.25rem 0 0.75rem; }
+.pr-whowrap { display: flex; margin: 0 0 0.75rem; }
 .pr-who { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem 1.25rem; margin: -0.25rem 0 1rem; }
 .pr-ran { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.25rem 0.9rem; margin: 0; padding: 0; border: 0; min-width: 0; }
 .pr-standing { margin: -0.4rem 0 0.9rem; font-size: 0.8rem; color: var(--color-gray-700); }
