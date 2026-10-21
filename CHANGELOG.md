@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.31.0 — 2026-10-21
+
 ### Added: Probelauf with a test person (part 2: the way by day)
 
 The Probelauf tab has a second view: **Testperson**. Pick a start (a lead magnet asked for, a product bought, or a
