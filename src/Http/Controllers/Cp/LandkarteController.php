@@ -339,6 +339,9 @@ class LandkarteController extends CpController
         $data = $request->validate([
             'start' => ['required', 'string', 'max:300'],
             'entry' => ['required', 'string', 'regex:/^e\d{1,5}$/'],
+            // What the client saw under that entry. The way is planned again for every request, so an entry's
+            // place can move if the map changed in between: a mail under another name is not handed out.
+            'label' => ['required', 'string', 'max:300'],
         ]);
 
         $built = $this->graph->build($landkarte, MapPeriod::lastDays(30));
@@ -355,6 +358,7 @@ class LandkarteController extends CpController
         $entry = collect($timeline['entries'])->firstWhere('id', $data['entry']);
 
         abort_if($entry === null || $entry['kind'] !== 'mail' || ! is_string($entry['owner']), 404);
+        abort_if($entry['label'] !== $data['label'], 409);
 
         [$type, $id] = explode(':', $entry['owner'], 2);
 

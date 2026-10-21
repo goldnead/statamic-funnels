@@ -419,7 +419,7 @@ class LandkarteProbelaufTest extends TestCase
         $this->asAdmin();
         $id = $this->entryId($landkarte, 'Welcome');
 
-        $json = $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry={$id}")->assertOk()->json();
+        $json = $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry={$id}&label=Welcome")->assertOk()->json();
 
         $this->assertSame('Welcome, friend', $json['subject']);
         $this->assertSame('hello@example.test', $json['from']);
@@ -439,9 +439,21 @@ class LandkarteProbelaufTest extends TestCase
         $base = "/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested";
 
         // The first entry is the card itself; the follow-up mail has no preview in this provider.
-        $this->getJson("{$base}&entry=e1")->assertNotFound();
-        $this->getJson("{$base}&entry=".$this->entryId($landkarte, 'Follow-up'))->assertNotFound();
-        $this->getJson("{$base}&entry=e999")->assertNotFound();
+        $this->getJson("{$base}&entry=e1&label=x")->assertNotFound();
+        $this->getJson("{$base}&entry=".$this->entryId($landkarte, 'Follow-up').'&label=Follow-up')->assertNotFound();
+        $this->getJson("{$base}&entry=e999&label=x")->assertNotFound();
+    }
+
+    #[Test]
+    public function a_mail_is_not_handed_out_under_another_name(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+        $id = $this->entryId($landkarte, 'Welcome');
+
+        // The map moved on between the list and the click: the entry under that place is not the one the user saw.
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry={$id}&label=Something+else")->assertStatus(409);
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry={$id}")->assertStatus(422);
     }
 
     #[Test]
@@ -450,9 +462,9 @@ class LandkarteProbelaufTest extends TestCase
         $landkarte = $this->landkarte();
         $this->asAdmin();
 
-        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=automation:welcome:started&entry=e2")->assertStatus(422);
-        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry=../../x")->assertStatus(422);
-        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?entry=e2")->assertStatus(422);
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=automation:welcome:started&entry=e2&label=x")->assertStatus(422);
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry=../../x&label=x")->assertStatus(422);
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?entry=e2&label=x")->assertStatus(422);
     }
 
     #[Test]
@@ -465,7 +477,7 @@ class LandkarteProbelaufTest extends TestCase
 
         // Without the right the planner names the card and nothing of what it sends: no entry is a mail.
         foreach (range(1, 8) as $i) {
-            $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry=e{$i}")->assertNotFound();
+            $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry=e{$i}&label=x")->assertNotFound();
         }
     }
 
@@ -485,7 +497,7 @@ class LandkarteProbelaufTest extends TestCase
             }
         });
 
-        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry={$id}")->assertOk();
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf/mail?start=lead_magnet:freebie:requested&entry={$id}&label=Welcome")->assertOk();
 
         Mail::assertNothingSent();
         Queue::assertNothingPushed();

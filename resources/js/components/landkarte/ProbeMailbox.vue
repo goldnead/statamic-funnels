@@ -35,6 +35,7 @@ async function open(entry) {
         const url = new URL(props.mailUrl, window.location.origin);
         url.searchParams.set('start', props.start ?? '');
         url.searchParams.set('entry', entry.id);
+        url.searchParams.set('label', entry.label);
 
         const response = await fetch(url, {
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
