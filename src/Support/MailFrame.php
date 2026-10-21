@@ -14,8 +14,8 @@ use DOMXPath;
  * alternative text, which is what a person who has images off sees too. Only markup that is already safe goes in and
  * comes out; nothing is added that loads or runs.
  *
- * The frame the mail sits in may read its own height (`sandbox="allow-same-origin"`, no scripts), so a second line of defence
- * stands here for what brand-context already does, and is not trusted to have worked: an address in a link or in an svg link,
+ * The frame the mail sits in has an empty `sandbox` (no origin, no scripts, no popups), and a second line of defence
+ * stands here anyway for what brand-context already does, and is not trusted to have worked: an address in a link or in an svg link,
  * an element the parser reads differently from a browser ({@see DomSafety}) and a meta that redirects are taken out again, and
  * every link that is left opens "in a new window", which a sandbox without `allow-popups` refuses. Whatever got past the first
  * layer cannot send the frame anywhere.

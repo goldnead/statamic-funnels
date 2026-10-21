@@ -13,28 +13,37 @@ use Goldnead\BrandContext\Simulation\SimEvent;
 use Goldnead\BrandContext\Simulation\SimPerson;
 use Goldnead\BrandContext\Simulation\Simulator;
 use Goldnead\StatamicFunnels\Events\FunnelStepEntered;
+use Goldnead\StatamicFunnels\Http\Middleware\KeepPreviewOutOfTheCache;
+use Goldnead\StatamicFunnels\Http\Middleware\MarkPagePreview;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Models\Landkarte;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\PagePreview;
+use Goldnead\StatamicFunnels\Support\PagePreviewToken;
 use Goldnead\StatamicFunnels\Support\ProbePreview;
 use Goldnead\StatamicFunnels\Support\Split;
 use Goldnead\StatamicFunnels\Support\Tracking;
 use Goldnead\StatamicFunnels\Support\TrackingConsent;
 use Goldnead\StatamicFunnels\Tests\TestCase;
+use Goldnead\StatamicFunnels\Tokens\PreviewHandler;
 use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Statamic\Events\ResponseCreated;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Permission;
 use Statamic\Facades\Role;
+use Statamic\Facades\Site;
+use Statamic\Facades\Token;
 use Statamic\Facades\User;
 
 /** A lead magnet whose way ends on a page: the page is what a Probelauf renders. */
@@ -109,6 +118,20 @@ class ProbelaufSeiteTest extends TestCase
         parent::defineRoutes($router);
 
         $router->get('/app-seite', fn () => 'framework page')->name('probe.app');
+
+        // What a framework page of the site does that counts: it asks, for itself, whether this is a look. The `web` group is
+        // where the middleware of the addon sits; the page answers with what it saw.
+        $router->middleware('web')->match(['GET', 'POST'], '/app-zaehler', fn () => response(json_encode([
+            'look' => ProbePreview::active(),
+            'driver' => config('session.driver'),
+            'shared' => view()->shared('probe_preview', false),
+        ]), 200, ['Content-Type' => 'text/html'])->withCookie(cookie('tracked', '1')));
+    }
+
+    /** What `/app-zaehler` saw, for a request that carries the given header (or none). */
+    protected function asked(?string $pass, string $path = '/app-zaehler', string $method = 'GET'): TestResponse
+    {
+        return $this->call($method, $path, [], [], [], $pass === null ? [] : ['HTTP_'.strtoupper(str_replace('-', '_', PagePreviewToken::HEADER)) => $pass]);
     }
 
     protected function page(string $slug = 'masterclass', bool $published = true, string $template = 'funnels-test::probe-page')
@@ -214,6 +237,7 @@ class ProbelaufSeiteTest extends TestCase
             ['text' => 'Download', 'url' => '/!/lead-magnets/download/abc123'],
             ['text' => 'Smartlink', 'url' => '/go/xyz'],
             ['text' => 'Bild-Link', 'url' => '/!/lead-magnets/confirm/svg789'],
+            ['text' => 'Ressource', 'url' => 'https://example.org/ressource'],
         ], $page['links']);
 
         // No link has an address left, not even `#` (with the base element in the document a bare `#` is read against the site, and a
@@ -264,7 +288,232 @@ class ProbelaufSeiteTest extends TestCase
 
         $this->assertSame(['state' => 'unavailable', 'reason' => PagePreview::DRAFT, 'url' => '/entwurf', 'address' => 'localhost/entwurf', 'thumbnail' => null], app(PagePreview::class)->render($draft->id()));
         $this->assertSame(PagePreview::GONE, app(PagePreview::class)->render('nope')['reason']);
+
+        // With the application's own pages switched off, such a page is said not rendered (and nothing is asked of the site).
+        Http::fake();
+        config(['statamic-funnels.page_preview.app_pages' => false]);
         $this->assertSame(PagePreview::APP_ROUTE, app(PagePreview::class)->render($app->id())['reason']);
+        Http::assertNothingSent();
+    }
+
+    // --- a page the application builds itself ---------------------------------------------------------------------------
+
+    #[Test]
+    public function an_application_page_is_asked_of_the_application_with_a_pass_and_is_shown_without_any_script(): void
+    {
+        $this->page('app-seite');
+        $app = Entry::query()->where('slug', 'app-seite')->first();
+        $before = $this->counts();
+        $seen = [];
+
+        Http::fake(function ($request) use (&$seen) {
+            // What the application's server-side rendering answers: the page drawn, its own script, the data it hydrates from.
+            $seen = ['url' => $request->url(), 'host' => $request->header('Host')[0] ?? null, 'pass' => $request->header(PagePreviewToken::HEADER)[0] ?? null];
+
+            return Http::response('<!doctype html><html><head><title>React</title><link rel="stylesheet" href="/build/app.css">'
+                .'<link rel="modulepreload" href="/build/app.js"><script type="module" src="/build/app.js"></script></head>'
+                .'<body><div id="app" data-page=\'{"props":{"geheim":"x"}}\'><h1>Gerenderte Seite</h1><a href="/kontakt">Kontakt</a></div>'
+                .'<script defer src="/analytics/script.js"></script></body></html>', 200, ['Content-Type' => 'text/html; charset=utf-8']);
+        });
+
+        $page = app(PagePreview::class)->render($app->id());
+
+        $this->assertSame('rendered', $page['state']);
+        $this->assertStringContainsString('<h1>Gerenderte Seite</h1>', $page['html']);
+        $this->assertStringNotContainsString('<script', $page['html']);
+        $this->assertStringNotContainsString('analytics', $page['html']);
+        $this->assertStringNotContainsString('modulepreload', $page['html']);
+        $this->assertStringNotContainsString('data-page', $page['html']);
+        $this->assertStringNotContainsString('geheim', $page['html']);
+        $this->assertStringContainsString('href="/build/app.css"', $page['html']);
+        $this->assertSame([['text' => 'Kontakt', 'url' => '/kontakt']], $page['links']);
+
+        // Asked at the entry's own path on the site's own host, with a pass for that path, and nothing else.
+        $this->assertSame('http://localhost/app-seite', $seen['url']);
+        $this->assertSame('localhost', $seen['host']);
+        $this->assertIsString($seen['pass']);
+        $this->assertNotSame('', $seen['pass']);
+        Http::assertSentCount(1);
+
+        // The pass is gone when the answer is in; and no visit, no event.
+        $this->assertSame($before, $this->counts());
+        $this->assertFalse(ProbePreview::active());
+    }
+
+    #[Test]
+    public function an_application_page_can_be_asked_of_the_web_server_itself_with_the_host_as_a_header(): void
+    {
+        $this->page('app-seite');
+        $app = Entry::query()->where('slug', 'app-seite')->first();
+        config(['statamic-funnels.page_preview.url' => 'http://127.0.0.1:8080/']);
+        Http::fake(['*' => Http::response('<h1>ok</h1>', 200, ['Content-Type' => 'text/html'])]);
+
+        app(PagePreview::class)->render($app->id());
+
+        Http::assertSent(fn ($request) => $request->url() === 'http://127.0.0.1:8080/app-seite' && ($request->header('Host')[0] ?? null) === 'localhost');
+    }
+
+    #[Test]
+    public function an_application_page_that_redirects_errors_or_is_not_html_is_no_page_and_one_that_cannot_be_reached_is_failed(): void
+    {
+        $this->page('app-seite');
+        $app = Entry::query()->where('slug', 'app-seite')->first();
+        $tokens = $this->counts()['tokens'];
+
+        foreach ([
+            Http::response('', 302, ['Location' => 'https://elsewhere.example/']),
+            Http::response('nope', 404, ['Content-Type' => 'text/html']),
+            Http::response('{"a":1}', 200, ['Content-Type' => 'application/json']),
+            Http::response('   ', 200, ['Content-Type' => 'text/html']),
+        ] as $answer) {
+            Http::fake(['*' => $answer]);
+            $this->assertSame(PagePreview::NOT_A_PAGE, app(PagePreview::class)->render($app->id())['reason']);
+        }
+
+        Http::fake(['*' => fn () => throw new ConnectionException('cURL error 7 for http://localhost/app-seite')]);
+        $this->assertSame(PagePreview::FAILED, app(PagePreview::class)->render($app->id())['reason']);
+
+        // However it ended, no pass is left lying about.
+        $this->assertSame($tokens, $this->counts()['tokens']);
+    }
+
+    #[Test]
+    public function a_request_with_a_good_pass_is_a_look_and_sets_nothing(): void
+    {
+        $pass = PagePreviewToken::mint('/app-zaehler');
+
+        $response = $this->asked($pass);
+
+        $this->assertSame(['look' => true, 'driver' => 'array', 'shared' => true], json_decode($response->getContent(), true));
+        // No cookie, no cache, no index.
+        $this->assertSame([], $response->headers->getCookies());
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+        $this->assertSame('noindex, nofollow', $response->headers->get('X-Robots-Tag'));
+        // Not for Statamic's static cache either (it reads this on the answer, from inside its own middleware).
+        $this->assertSame('1', $response->headers->get('X-Statamic-Uncacheable'));
+
+        // What the look changed for the request is put back when the answer is out.
+        $this->assertNotSame('array-but-not-ours', config('session.driver'));
+        $this->assertFalse(view()->shared('probe_preview'));
+    }
+
+    #[Test]
+    public function the_pass_is_read_with_the_address_written_out_or_not_and_both_groups_carry_the_middleware(): void
+    {
+        $request = fn (string $uri, string $pass) => Request::create($uri, 'GET', [], [], [], ['HTTP_'.strtoupper(str_replace('-', '_', PagePreviewToken::HEADER)) => $pass]);
+
+        // An address with an umlaut, as the entry gives it and as a browser's request has it.
+        $this->assertSame(PagePreviewToken::GOOD, PagePreviewToken::consume($request('/%C3%BCber-mich', PagePreviewToken::mint('/über-mich'))));
+        $this->assertSame(PagePreviewToken::GOOD, PagePreviewToken::consume($request('/kurs/', PagePreviewToken::mint('/kurs'))));
+        $this->assertSame(PagePreviewToken::GOOD, PagePreviewToken::consume($request('/', PagePreviewToken::mint('/'))));
+        $this->assertSame(PagePreviewToken::MISMATCH, PagePreviewToken::consume($request('/kurs2', PagePreviewToken::mint('/kurs'))));
+        $this->assertSame(PagePreviewToken::NONE, PagePreviewToken::consume($request('/kurs', 'nope')));
+
+        foreach (['web', 'statamic.web'] as $group) {
+            $groups = $this->app['router']->getMiddlewareGroups();
+            $this->assertSame(MarkPagePreview::class, $groups[$group][0], "first in {$group}");
+            $this->assertSame(KeepPreviewOutOfTheCache::class, end($groups[$group]), "last in {$group}");
+        }
+    }
+
+    #[Test]
+    public function the_host_of_an_application_page_must_be_one_the_site_owns_and_an_error_of_the_site_is_a_failure(): void
+    {
+        $this->page('app-seite');
+        $app = Entry::query()->where('slug', 'app-seite')->first();
+        $tokens = $this->counts()['tokens'];
+
+        // A site address of `/` takes the host from whoever asked: a made-up `Host` header must not become the target.
+        $status = 200;
+        Http::fake(function () use (&$status) {
+            return Http::response('x', $status, ['Content-Type' => 'text/html']);
+        });
+        URL::forceRootUrl('http://evil.example');
+        config(['app.url' => 'http://localhost']);
+        Site::setSites(['default' => ['name' => 'Test', 'locale' => 'en_US', 'url' => '/']]);
+        $this->assertSame(PagePreview::FAILED, app(PagePreview::class)->render($app->id())['reason']);
+        Http::assertNothingSent();
+
+        // The site's own host: an answer that is a refusal or an error is a failure (not "what a visitor would see").
+        URL::forceRootUrl(null);
+        Site::setSites(['default' => ['name' => 'Test', 'locale' => 'en_US', 'url' => 'http://localhost/']]);
+
+        foreach ([401, 403, 500, 503] as $status) {
+            $this->assertSame(PagePreview::FAILED, app(PagePreview::class)->render($app->id())['reason'], (string) $status);
+        }
+
+        $status = 404;
+        $this->assertSame(PagePreview::NOT_A_PAGE, app(PagePreview::class)->render($app->id())['reason']);
+        $this->assertSame($tokens, $this->counts()['tokens']);
+    }
+
+    #[Test]
+    public function a_class_on_the_body_does_not_swallow_the_links_of_the_page(): void
+    {
+        $this->page('app-seite');
+        $app = Entry::query()->where('slug', 'app-seite')->first();
+        Http::fake(['*' => Http::response('<html><body class="has-consent"><main><a href="/kontakt">Kontakt</a></main><div class="consent-banner"><a href="/datenschutz">Datenschutz</a></div></body></html>', 200, ['Content-Type' => 'text/html'])]);
+
+        $page = app(PagePreview::class)->render($app->id());
+
+        // The page's own link stays; the banner's does not.
+        $this->assertSame([['text' => 'Kontakt', 'url' => '/kontakt']], $page['links']);
+    }
+
+    #[Test]
+    public function a_pass_is_good_for_one_request(): void
+    {
+        $tokens = $this->counts()['tokens'];
+        $pass = PagePreviewToken::mint('/app-zaehler');
+        $this->assertSame($tokens + 1, $this->counts()['tokens']);
+
+        $this->assertTrue(json_decode($this->asked($pass)->getContent(), true)['look']);
+        // Used up: the same header again is an ordinary visit.
+        $this->assertFalse(json_decode($this->asked($pass)->getContent(), true)['look']);
+        $this->assertSame($tokens, $this->counts()['tokens']);
+    }
+
+    #[Test]
+    public function a_pass_is_good_for_its_own_path_only_and_a_made_up_one_marks_nothing(): void
+    {
+        $tokens = $this->counts()['tokens'];
+        $other = PagePreviewToken::mint('/anderswo');
+
+        // Wrong path: the page is not served at all (a look that is mistaken for a visit would count), the pass is gone anyway.
+        $refused = $this->asked($other);
+        $refused->assertNotFound();
+        $this->assertSame('', $refused->getContent());
+        $this->assertSame($tokens, $this->counts()['tokens']);
+
+        foreach (['', 'abc', str_repeat('a', 32), '../../etc/passwd'] as $made) {
+            $answer = json_decode($this->asked($made)->getContent(), true);
+
+            $this->assertFalse($answer['look']);
+            $this->assertSame(config('session.driver') === 'array', $answer['driver'] === 'array');
+        }
+
+        // Without any header, an ordinary visit: it sets what a visit sets.
+        $visit = $this->asked(null);
+        $this->assertFalse(json_decode($visit->getContent(), true)['look']);
+        $this->assertNotEmpty($visit->headers->getCookies());
+    }
+
+    #[Test]
+    public function a_pass_of_another_kind_or_an_expired_one_marks_nothing_and_only_a_get_is_ever_marked(): void
+    {
+        // The pass of the funnel editor is a token too; it opens nothing here.
+        $editor = Token::make(null, PreviewHandler::class, ['path' => '/app-zaehler']);
+        $editor->expireAt(now()->addMinutes(5));
+        $editor->save();
+        $this->assertFalse(json_decode($this->asked($editor->token())->getContent(), true)['look']);
+
+        $expired = PagePreviewToken::mint('/app-zaehler');
+        $this->travel(3)->minutes();
+        $this->assertFalse(json_decode($this->asked($expired)->getContent(), true)['look']);
+        $this->travelBack();
+
+        $post = PagePreviewToken::mint('/app-zaehler');
+        $this->assertFalse(json_decode($this->asked($post, method: 'POST')->getContent(), true)['look']);
     }
 
     #[Test]
@@ -509,7 +758,7 @@ class ProbelaufSeiteTest extends TestCase
         $this->assertSame('rendered', $json['state']);
         $this->assertSame('/masterclass', $json['url']);
         $this->assertStringContainsString('<h1>Masterclass</h1>', $json['html']);
-        $this->assertCount(4, $json['links']);
+        $this->assertCount(5, $json['links']);
         $this->assertSame($before, $this->counts());
         // Nothing asked of the network: no link of the page, no tracking host, no stylesheet.
         Http::assertNothingSent();
