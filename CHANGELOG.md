@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.32.0 — 2026-10-21
+
 ### Added: Probelauf mailbox (part 3: the mails the test person gets)
 
 Next to the timeline the test person has a **Postfach**: every mail that goes out on her way, in order, and the one she
