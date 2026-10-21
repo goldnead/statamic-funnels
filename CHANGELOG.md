@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added: "Probelauf", the dry run of a Landkarte (part 1: the tree of every way)
+
+A second view next to the map: **Probelauf** shows the tree of every way through the Landkarte, planned by
+brand-context's `Simulator` from what the owning addons say they would do (automations: their mails, waits, forks
+at branch, filter and switch, calls to other automations). After every mail a fork opens (opened, clicked, bought,
+nothing); ways that lead to the same place are merged, the tree is capped ("n more ways") and cards no way reaches
+are named. A simulation: nothing is sent, started or written (`GET landkarten/{id}/probelauf` reads only, tested
+with a query log and `Mail`, `Queue` and `Event` fakes). Each addon decides with its own right what the signed-in
+user may see of it; the rest is named, not shown. Cards of addons that cannot say what they do show "Wirkung
+unbekannt". Needs brand-context 1.21; with an older one the tab does not appear. German and English wording.
+
 ## 1.29.0 — 2026-10-21
 
 ### Added: richer details in a Landkarte card's panel

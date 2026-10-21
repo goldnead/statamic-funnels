@@ -5,6 +5,8 @@ namespace Goldnead\StatamicFunnels\Http\Controllers\Cp;
 use DomainException;
 use Goldnead\BrandContext\Map\MapObjectRegistry;
 use Goldnead\BrandContext\Map\MapPeriod;
+use Goldnead\BrandContext\Simulation\SimPerson;
+use Goldnead\BrandContext\Simulation\Simulator;
 use Goldnead\StatamicFunnels\Models\Landkarte;
 use Goldnead\StatamicFunnels\Models\LandkarteRef;
 use Goldnead\StatamicFunnels\Support\LandkarteGraph;
@@ -113,6 +115,7 @@ class LandkarteController extends CpController
             'connectionRules' => $this->graph->connectionRules(),
             'previewUrl' => cp_route('statamic-funnels.landkarten.connections.preview', $landkarte->id),
             'connectUrl' => cp_route('statamic-funnels.landkarten.connections.store', $landkarte->id),
+            'probelaufUrl' => class_exists(Simulator::class) ? cp_route('statamic-funnels.landkarten.probelauf', $landkarte->id) : null,
             'showUrl' => $showUrl,
             'indexUrl' => cp_route('statamic-funnels.landkarten.index'),
             'labels' => $this->labels(),
@@ -224,6 +227,50 @@ class LandkarteController extends CpController
         $days = in_array($days, self::PERIODS, true) ? $days : 30;
 
         return response()->json(['blocks' => $this->registry->details($data['type'], $data['ref_id'], MapPeriod::lastDays($days)) ?? []]);
+    }
+
+    /**
+     * The dry run ("Probelauf"): the tree of every way through this map, planned from the graphs the owning
+     * addons describe. Reads, never does: no mail, no run, no write. Each addon decides with its own right
+     * what the signed-in user may see of it; what she may not see is named, not shown.
+     */
+    public function probelauf(Landkarte $landkarte)
+    {
+        $this->authorizeAccess();
+
+        abort_unless(class_exists(Simulator::class), 404);
+
+        $built = $this->graph->build($landkarte, MapPeriod::lastDays(30));
+
+        $nodes = collect($built['nodes'])
+            ->reject(fn (array $n) => $n['ghost'] ?? false)
+            ->map(fn (array $n) => ['type' => $n['type'], 'id' => (string) $n['ref_id']])
+            ->values()
+            ->all();
+
+        $edges = collect($built['edges'])
+            ->map(function (array $e) {
+                [$fromType, $fromId] = explode(':', $e['source'], 2);
+                [$toType, $toId] = explode(':', $e['target'], 2);
+
+                return ['from_type' => $fromType, 'from_id' => $fromId, 'to_type' => $toType, 'to_id' => $toId, 'kind' => $e['kind']];
+            })
+            ->all();
+
+        $tree = (new Simulator($this->registry))->tree($nodes, $edges, SimPerson::unknown(), User::current());
+
+        $labels = [];
+
+        foreach ($tree['stats']['unreached'] as $key) {
+            [$type, $id] = explode(':', $key, 2);
+            $card = collect($built['nodes'])->firstWhere('key', $key);
+            $labels[] = ['key' => $key, 'label' => $card['label'] ?? $id, 'type_label' => $card['type_label'] ?? $type];
+        }
+
+        return response()->json([
+            'roots' => $tree['roots'],
+            'stats' => [...$tree['stats'], 'unreached' => $labels],
+        ]);
     }
 
     /**
@@ -431,6 +478,10 @@ class LandkarteController extends CpController
             'map_connect_pair', 'map_connect_allowed', 'map_connect_forbidden', 'map_connect_failed', 'map_connect_title',
             'map_disconnect_title', 'map_connect_do', 'map_disconnect_do', 'map_connected', 'map_disconnected', 'map_undo', 'map_undone',
             'map_disconnect', 'map_connect_conflict', 'map_dead_stub_help', 'map_details_loading', 'map_details_failed', 'map_details_restricted', 'map_details_more',
+            'probe_tab_map', 'probe_tab_probe', 'probe_title', 'probe_help', 'probe_loading', 'probe_failed', 'probe_empty', 'probe_summary',
+            'probe_unreached', 'probe_expand', 'probe_collapse', 'probe_now', 'probe_day', 'probe_hours', 'probe_minutes', 'probe_unavailable',
+            'probe_person_unknown', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
+            'probe_kind_stop', 'probe_kind_unknown', 'probe_kind_fork', 'probe_kind_rejoin', 'probe_kind_denied', 'probe_kind_more', 'probe_kind_trait',
         ];
 
         return collect($keys)

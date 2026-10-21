@@ -1,0 +1,317 @@
+<?php
+
+namespace Goldnead\StatamicFunnels\Tests\Feature;
+
+use Carbon\CarbonImmutable;
+use Goldnead\BrandContext\Contracts\ProvidesMapEdges;
+use Goldnead\BrandContext\Contracts\ProvidesMapObjects;
+use Goldnead\BrandContext\Map\MapEdge;
+use Goldnead\BrandContext\Map\MapMetric;
+use Goldnead\BrandContext\Map\MapObject;
+use Goldnead\BrandContext\Map\MapObjectRegistry;
+use Goldnead\BrandContext\Map\MapPeriod;
+use Goldnead\BrandContext\Simulation\Effect;
+use Goldnead\BrandContext\Simulation\SimEvent;
+use Goldnead\BrandContext\Simulation\SimPerson;
+use Goldnead\BrandContext\Simulation\Simulator;
+use Goldnead\StatamicFunnels\Models\Landkarte;
+use Goldnead\StatamicFunnels\Tests\TestCase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
+use PHPUnit\Framework\Attributes\Test;
+use Statamic\Facades\Permission;
+use Statamic\Facades\Role;
+use Statamic\Facades\User;
+
+/** One kind of object: label is "<TYPE> <id>", rights are "see probe". */
+abstract class ProbeFakeObjects implements ProvidesMapObjects
+{
+    public function typeLabel(): string
+    {
+        return ucfirst($this->type());
+    }
+
+    public function objects(?string $query = null, int $limit = 50): array
+    {
+        return [];
+    }
+
+    public function find(string $id): ?MapObject
+    {
+        return new MapObject($this->type(), $id, ucfirst($this->type()).' '.$id);
+    }
+
+    public function metric(string $id, MapPeriod $period): ?MapMetric
+    {
+        return null;
+    }
+
+    public function simulationAuthorized(string $id, $user): bool
+    {
+        return $user !== null && $user->can('see probe');
+    }
+}
+
+class ProbeLeadMagnets extends ProbeFakeObjects implements ProvidesMapEdges
+{
+    public function type(): string
+    {
+        return 'lead_magnet';
+    }
+
+    public function edges(): iterable
+    {
+        yield new MapEdge('lead_magnet', 'freebie', 'automation', 'welcome', 'triggers', 'starts', 'test');
+    }
+
+    public function paths(string $id): array
+    {
+        return [new SimEvent(SimEvent::REQUESTED)];
+    }
+
+    public function react(string $id, SimEvent $event, SimPerson $person, CarbonImmutable $at): array
+    {
+        return Effect::chain([Effect::mail('Please confirm')], [Effect::emit(new SimEvent(SimEvent::GRANTED, via: ['triggers']))]);
+    }
+}
+
+class ProbeAutomations extends ProbeFakeObjects implements ProvidesMapEdges
+{
+    public function type(): string
+    {
+        return 'automation';
+    }
+
+    public function edges(): iterable
+    {
+        yield new MapEdge('product', 'masterclass', 'automation', 'thanks', 'triggers', 'starts', 'test');
+    }
+
+    public function react(string $id, SimEvent $event, SimPerson $person, CarbonImmutable $at): array
+    {
+        return $id === 'welcome'
+            ? Effect::chain([Effect::mail('Welcome'), Effect::wait('after 2 days', 2 * 86400), Effect::mail('Follow-up')])
+            : [Effect::mail('Thank you')];
+    }
+}
+
+class ProbeProducts extends ProbeFakeObjects
+{
+    public function type(): string
+    {
+        return 'product';
+    }
+
+    public function paths(string $id): array
+    {
+        return [new SimEvent(SimEvent::PURCHASED)];
+    }
+
+    public function react(string $id, SimEvent $event, SimPerson $person, CarbonImmutable $at): array
+    {
+        return [Effect::access('Access to the course'), Effect::emit(new SimEvent(SimEvent::GRANTED, via: ['triggers']))];
+    }
+}
+
+/** The dry run of a map: the tree of every way, planned from what the owners say they would do. */
+class LandkarteProbelaufTest extends TestCase
+{
+    protected $admin = null;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        if (! class_exists(Simulator::class)) {
+            $this->markTestSkipped('needs statamic-brand-context 1.21 (the dry run planner)');
+        }
+
+        Permission::register('see probe');
+
+        $registry = app(MapObjectRegistry::class);
+
+        foreach ([ProbeLeadMagnets::class, ProbeAutomations::class, ProbeProducts::class] as $provider) {
+            $registry->register($provider);
+        }
+    }
+
+    /** The map of the test: a lead magnet, its automation, a product and the automation that thanks for it. */
+    protected function landkarte(): Landkarte
+    {
+        $landkarte = Landkarte::query()->create(['name' => 'CVT']);
+        $stage = $landkarte->stages()->create(['name' => 'Phase 1', 'position' => 0]);
+
+        foreach ([['lead_magnet', 'freebie'], ['automation', 'welcome'], ['product', 'masterclass'], ['automation', 'thanks']] as $i => [$type, $id]) {
+            $stage->refs()->create(['type' => $type, 'ref_id' => $id, 'position' => $i]);
+        }
+
+        return $landkarte;
+    }
+
+    protected function asAdmin()
+    {
+        Role::make('prober')->title('Prober')->permissions(['access cp', 'access funnels utility', 'see probe'])->save();
+
+        return $this->actingAs($this->admin ??= tap(User::make()->email('studio@example.com')->assignRole('prober'))->save());
+    }
+
+    /** "kind:label" of the tree, depth first. */
+    protected function flat(array $nodes): array
+    {
+        $out = [];
+
+        foreach ($nodes as $node) {
+            $out[] = $node['kind'].':'.$node['label'];
+            array_push($out, ...$this->flat($node['children']));
+        }
+
+        return $out;
+    }
+
+    #[Test]
+    public function the_tree_follows_the_map_in_order(): void
+    {
+        $landkarte = $this->landkarte();
+
+        $json = $this->asAdmin()->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf")->assertOk()->json();
+
+        // The lead magnet and the product are started by nobody on the map: two roots, in the map's order.
+        $this->assertSame(['enter:Lead_magnet freebie', 'enter:Product masterclass'], array_map(fn ($r) => $r['kind'].':'.$r['label'], $json['roots']));
+
+        $this->assertSame([
+            'enter:Lead_magnet freebie',
+            'mail:Please confirm',
+            'fork:After this mail',
+            'alt:opened · clicked · nothing: the sequence goes on',
+            'enter:Automation welcome',
+            'mail:Welcome',
+            'fork:After this mail',
+            'alt:opened · clicked · nothing: the sequence goes on',
+            'wait:after 2 days',
+            'mail:Follow-up',
+            'fork:After this mail',
+            'alt:opened · clicked · nothing: the sequence goes on',
+            'alt:bought: Product masterclass',
+            'enter:Product masterclass',
+            'access:Access to the course',
+            'enter:Automation thanks',
+            'mail:Thank you',
+            'fork:After this mail',
+            'alt:opened · clicked · nothing: the sequence goes on',
+            'rejoin:the sequence goes on as above',
+            'alt:bought: Product masterclass',
+            'enter:Product masterclass',
+            'access:Access to the course',
+            'enter:Automation thanks',
+            'mail:Thank you',
+            'fork:After this mail',
+            'alt:opened · clicked · nothing: the sequence goes on',
+            'rejoin:the sequence goes on as above',
+            'alt:bought: Product masterclass',
+            'enter:Product masterclass',
+            'access:Access to the course',
+            'enter:Automation thanks',
+            'mail:Thank you',
+            'fork:After this mail',
+            'alt:opened · clicked · nothing: the sequence goes on',
+            'rejoin:the sequence goes on as above',
+        ], $this->flat([$json['roots'][0]]));
+
+        // The second root is the product bought on its own, without any mail before it.
+        $this->assertSame([
+            'enter:Product masterclass',
+            'access:Access to the course',
+            'enter:Automation thanks',
+            'mail:Thank you',
+            'fork:After this mail',
+            'alt:opened · clicked · nothing: the sequence goes on',
+        ], $this->flat([$json['roots'][1]]));
+    }
+
+    #[Test]
+    public function the_leaves_the_nodes_and_the_unreached_are_counted(): void
+    {
+        $landkarte = $this->landkarte();
+
+        $stats = $this->asAdmin()->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf")->assertOk()->json('stats');
+
+        $this->assertSame(0, $stats['cut']);
+        $this->assertSame([], $stats['unreached']);
+        $this->assertSame(42, $stats['nodes']);
+        $this->assertSame(12, $stats['leaves']);
+    }
+
+    #[Test]
+    public function a_card_nobody_reaches_is_named(): void
+    {
+        $landkarte = $this->landkarte();
+        $landkarte->stages()->first()->refs()->create(['type' => 'automation', 'ref_id' => 'lonely', 'position' => 9]);
+
+        $stats = $this->asAdmin()->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf")->assertOk()->json('stats');
+
+        $this->assertSame([['key' => 'automation:lonely', 'label' => 'Automation lonely', 'type_label' => 'Automation']], $stats['unreached']);
+    }
+
+    #[Test]
+    public function only_what_the_user_may_see_is_shown(): void
+    {
+        $landkarte = $this->landkarte();
+        Role::make('plain')->title('Plain')->permissions(['access cp', 'access funnels utility'])->save();
+
+        $this->actingAs(tap(User::make()->email('plain@example.com')->assignRole('plain'))->save());
+
+        $response = $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf")->assertOk();
+        $flat = $this->flat($response->json('roots'));
+
+        $this->assertContains('denied:'.__('brand-context::messages.sim_denied'), $flat);
+        $this->assertNotContains('mail:Please confirm', $flat);
+        $this->assertNotContains('mail:Welcome', $flat);
+    }
+
+    #[Test]
+    public function without_the_funnels_right_there_is_nothing(): void
+    {
+        $landkarte = $this->landkarte();
+        Role::make('nobody')->title('Nobody')->permissions(['access cp'])->save();
+
+        $this->actingAs(tap(User::make()->email('nobody@example.com')->assignRole('nobody'))->save())
+            ->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf")
+            ->assertForbidden();
+    }
+
+    #[Test]
+    public function the_dry_run_writes_nothing_sends_nothing_and_dispatches_nothing(): void
+    {
+        $landkarte = $this->landkarte();
+        $this->asAdmin();
+        Mail::fake();
+        Queue::fake();
+        Event::fake();
+
+        $writes = [];
+        DB::listen(function ($query) use (&$writes) {
+            if (! preg_match('/^\s*(select|pragma)\b/i', $query->sql)) {
+                $writes[] = $query->sql;
+            }
+        });
+
+        $this->getJson("/cp/funnels/landkarten/{$landkarte->id}/probelauf")->assertOk();
+
+        Mail::assertNothingSent();
+        Mail::assertNothingQueued();
+        Queue::assertNothingPushed();
+        $this->assertSame([], $writes);
+    }
+
+    #[Test]
+    public function the_map_page_offers_the_dry_run(): void
+    {
+        $landkarte = $this->landkarte();
+
+        $this->asAdmin()->get("/cp/funnels/landkarten/{$landkarte->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('probelaufUrl', cp_route('statamic-funnels.landkarten.probelauf', $landkarte->id)));
+    }
+}
