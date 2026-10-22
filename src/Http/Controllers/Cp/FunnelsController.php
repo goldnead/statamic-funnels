@@ -154,7 +154,7 @@ class FunnelsController extends CpController
             'labels' => $this->labels(),
             'saveUrl' => cp_route('utilities.funnels.update', $funnel->id),
             'indexUrl' => cp_route('utilities.funnels'),
-            'publicUrl' => route('statamic-funnels.entry', $funnel->handle),
+            'publicUrl' => $funnel->publicUrl(),
             // Was ausser dem Graphen am Funnel haengt (F3, F4, F6, F7).
             'settings' => FunnelSettings::of($funnel),
             // Die Schnipsel zum Einbetten auf fremden Seiten (F4).
@@ -742,7 +742,7 @@ class FunnelsController extends CpController
             'steps_count' => $funnel->steps_count,
             'visits_count' => $funnel->visits_count,
             'edit_url' => cp_route('utilities.funnels.edit', $funnel->id),
-            'public_url' => route('statamic-funnels.entry', $funnel->handle),
+            'public_url' => $funnel->publicUrl(),
             // Handed over rather than fetched: the row menu would otherwise ask
             // the server the moment it is opened.
             'actions' => Action::for($funnel, []),
