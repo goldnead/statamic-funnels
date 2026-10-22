@@ -91,7 +91,8 @@ class FunnelController
         $model = $this->funnel($funnel);
         $step = $model->stepBySlug($slug);
 
-        abort_unless($step !== null && ! $step->disabled, 404);
+        // A step that only the outside reaches (see Funnel::isOutsideOnly) is not a page anybody opens.
+        abort_unless($step !== null && ! $step->disabled && ! $model->isOutsideOnly($step), 404);
 
         if ($request->query->has(Embed::RETURN)) {
             return $this->returned($request, $model);

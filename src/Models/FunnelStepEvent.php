@@ -31,6 +31,9 @@ class FunnelStepEvent extends Model
     /** The address was proven (or no proof was asked for) and the visitor went on. */
     public const LEAD_MAGNET_CONFIRMED = 'lead_magnet_confirmed';
 
+    /** The automation an `external` step waits for ran to its end for this visitor. */
+    public const AUTOMATION_FINISHED = 'automation_finished';
+
     protected $guarded = [];
 
     protected function casts(): array

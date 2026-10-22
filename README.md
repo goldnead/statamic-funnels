@@ -119,6 +119,50 @@ Needs a lead-magnets release with the return URL (`Support\ReturnUrl`); an older
 installed. In your own templates: `funnel:lead_magnet:status` is `waiting`, `no_email`, `unavailable` or
 `failed`; `funnel:lead_magnet:email` is the address the mail went to.
 
+### A journey that does not run on the funnel's pages (the outside step)
+
+A funnel can describe a journey whose parts live elsewhere: a landing page of your site with its own form, a
+lead magnet, a course that is a mail automation. The **Outside step** (`external`) puts such a part on the map
+and in the numbers without the funnel rendering anything. It has no URL under `/f`.
+
+```
+Landing page (external, path)  ->  Confirmation (lead_magnet)  ->  Course (external, automation)  ->  End (finish)
+```
+
+1. **A page of the site.** Give the step the `path` of the page and put the route middleware in front of the page:
+
+   ```php
+   Route::get('/my-landing-page', MyController::class)->middleware('statamic-funnels.track:my-funnel,landing');
+   ```
+
+   The page is served as it always was; after the answer the middleware enters the step. It counts one person
+   opening the page once per walk, and counts nothing for a reload, a crawler, a link preview, an uptime
+   monitor (user agents in `page_tracking.ignore_user_agents`, a request without a user agent, any request with
+   the `X-Funnels-Ignore` header), a prefetch, a partial reload or a script request, a non-`GET` or a response
+   other than `200`, the Probelauf, a funnel that is not published or a step that is switched off. An Inertia
+   *visit* (a click from another page of the site) is a page view and counts. The middleware never changes the
+   response and logs and swallows every failure. A page that is served from a full static cache never reaches the
+   middleware and is not counted; leave such a page out of the cache.
+
+   The walk is the usual first-party cookie. Where the site asks for consent, set
+   `page_tracking.consent_service` to the service of the consent addon: until it is granted no cookie is set
+   and nothing is counted.
+2. **A lead magnet.** A `lead_magnet` step whose only ways in are outside steps is answered by statamic-lead-magnets
+   itself: the site's own form asks for the resource, and the step records *requested* and, with the click in
+   the mail (or at once without double opt-in), *confirmed*, each once, and the walk carries on. The visitor
+   is found by the browser's cookie while the form is sent, and by the address after that (the click comes days
+   later, on another device). The address comes from a form, so a request without the browser's cookie is put on the
+   latest walk that carries that address: a weak proof, and the reason a person who types somebody else's address
+   shows up on that walk. Somebody who was never counted on the page is not made up. A lead magnet step behind
+   a form of the funnel works as described above and is not touched.
+3. **An automation.** Give an outside step the `automation` handle. The step before hands the visitor over;
+   when a run of that automation goes to its end for the visitor's address (statamic-automations 2.42,
+   `AutomationRunFinished`), the step records *automation finished* and the walk moves on, and ends if an end step
+   follows.
+
+Everything shows in *Where people stop* and on the map like any other step; nothing here needs a site-specific
+line in the addon.
+
 ### Mail nodes
 
 A mail is drawn on the same canvas as the steps, as a branch beside the way on — and that is the

@@ -156,6 +156,7 @@ return [
     'metric_event_completed' => 'Completed',
     'metric_event_lead_magnet_requested' => 'Resource requested',
     'metric_event_lead_magnet_confirmed' => 'Resource confirmed',
+    'metric_event_automation_finished' => 'Automation finished',
     'metric_no_funnel_id' => 'No funnel',
     'metric_no_event' => 'No kind',
 

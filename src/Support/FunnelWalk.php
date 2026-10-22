@@ -203,7 +203,13 @@ class FunnelWalk
             ? ['variant' => Split::variantFor($step, $visit)]
             : [];
 
-        $visit->record($step->node_key, FunnelStepEvent::ENTERED, $payload);
+        // Claimed in the database, not checked: two requests of one browser (a
+        // double click, two tabs, a reload while the page is still loading) can
+        // both have looked before either wrote. The loser finds the arrival
+        // written and moves nothing, so the step is entered, and told about, once.
+        if (! $visit->recordOnce($step->node_key, FunnelStepEvent::ENTERED, $payload)) {
+            return;
+        }
 
         FunnelStepEntered::dispatch($visit, $step);
     }
@@ -244,6 +250,32 @@ class FunnelWalk
         }
 
         return $next;
+    }
+
+    /**
+     * Arrive on a step that nobody opens in a browser.
+     *
+     * A page step is entered when its page is rendered. A step that happens
+     * somewhere else (the opt-in page of the site, the end of a mail course)
+     * is reached by the thing that knows: this is the one way in for those.
+     * It enters the step, and where the step is the end of the walk it ends
+     * the walk, the way the page of an end step does.
+     *
+     * A step that is a page of the site (an `external` step with a `path`) is
+     * left alone: the visitor reaches it by opening the page, and a step
+     * entered ahead of that would show a visit that never happened.
+     */
+    public function reach(FunnelVisit $visit, FunnelStep $step): void
+    {
+        if ($step->type === 'external' && trim((string) $step->config('path')) !== '') {
+            return;
+        }
+
+        $this->enter($visit, $step);
+
+        if ($step->type === 'finish') {
+            $this->complete($visit, $step);
+        }
     }
 
     public function complete(FunnelVisit $visit, FunnelStep $step): void

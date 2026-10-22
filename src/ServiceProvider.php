@@ -11,6 +11,8 @@ use Goldnead\StatamicFunnels\Http\Controllers\Cp\FunnelsController;
 use Goldnead\StatamicFunnels\Http\Controllers\Cp\LandkarteController;
 use Goldnead\StatamicFunnels\Http\Middleware\KeepPreviewOutOfTheCache;
 use Goldnead\StatamicFunnels\Http\Middleware\MarkPagePreview;
+use Goldnead\StatamicFunnels\Http\Middleware\TrackPage;
+use Goldnead\StatamicFunnels\Integrations\ExternalSteps;
 use Goldnead\StatamicFunnels\Integrations\Insights\Completed;
 use Goldnead\StatamicFunnels\Integrations\Insights\CompletionRate;
 use Goldnead\StatamicFunnels\Integrations\Insights\StepEvents;
@@ -112,6 +114,12 @@ class ServiceProvider extends AddonServiceProvider
                 $this->app['router']->pushMiddlewareToGroup($group, KeepPreviewOutOfTheCache::class);
             }
         });
+
+        // `statamic-funnels.track:{funnel},{nodeKey}` on a route of the site: opening the page is arriving at an `external` step.
+        $this->app['router']->aliasMiddleware('statamic-funnels.track', TrackPage::class);
+
+        // What happens outside the funnel (lead-magnets, automations) and the funnel hears of it. String listeners: no sibling is required.
+        app(ExternalSteps::class)->subscribe($this->app['events']);
 
         // What the funnel map can point at from here: funnels, their steps and
         // Statamic entries. The other addons register their own.
