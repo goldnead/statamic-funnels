@@ -106,7 +106,7 @@ function personBody() {
 }
 
 // What she is, without what she does next: another person is another mail and page, a click after the mail is not.
-const personSig = computed(() => JSON.stringify([tags.value, access.value, ran.value, unsubscribed.value, extraTraits.value, freebie.value]));
+const personSig = computed(() => JSON.stringify([tags.value, access.value, ran.value, unsubscribed.value, extraTraits.value, freebie.value, freebieAge.value]));
 
 let ticket = 0;
 
