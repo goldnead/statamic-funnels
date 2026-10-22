@@ -205,6 +205,12 @@ return [
     // path), counted by the `statamic-funnels.track:{funnel},{nodeKey}` route
     // middleware.
     'page_tracking' => [
+        // `cookie`: the walk is a first-party cookie (see `consent_service`).
+        // `cookieless`: no cookie and no consent; the visit is a hash of the day, the funnel, the IP and the user
+        // agent that changes every day, and nothing of the IP or the agent is stored. The same person reloading
+        // on the same day is one visit; the next day is a new one.
+        'mode' => env('STATAMIC_FUNNELS_PAGE_TRACKING_MODE', 'cookie'),
+
         // The consent service the visitor must have agreed to before the walk's
         // cookie is set and a visit is written. Empty: nothing asks. With
         // statamic-consent installed, the service is looked up there; without

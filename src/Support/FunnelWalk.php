@@ -67,6 +67,21 @@ class FunnelWalk
     }
 
     /**
+     * The walk under a token the caller made (see {@see DailyToken}): no cookie is read and none is set.
+     */
+    public function visitFor(Funnel $funnel, string $token): FunnelVisit
+    {
+        if (ProbePreview::active($this->request())) {
+            return (new FunnelVisit(['funnel_id' => $funnel->id, 'current_node_key' => $funnel->entryStep()?->node_key]))->setRelation('funnel', $funnel);
+        }
+
+        return FunnelVisit::firstOrCreate(
+            ['funnel_id' => $funnel->id, 'token' => $token],
+            ['current_node_key' => $funnel->entryStep()?->node_key],
+        );
+    }
+
+    /**
      * The token for this browser.
      *
      * Read from the cookie if there is one, otherwise made up here and queued
