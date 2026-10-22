@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.38.0 — 2026-10-22
+
 ### Added: the outside step, a page of the site (and a course) as part of a funnel
 
 A funnel can now describe a journey that does not run on its own pages: a landing page of the site, a lead magnet, a mail course.
