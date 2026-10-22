@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.38.1 — 2026-10-22
+
+### Fixed: the editor's "Live" link for a funnel that starts on a page of the site
+
+A funnel without an entry step (its first step is an outside step with a path) answers 404 at `/f/{handle}`, and that was the address the editor and the list linked to. They now link to the page of the outside step. Funnels with an entry step are unchanged.
+
 ## 1.38.0 — 2026-10-22
 
 ### Added: the outside step, a page of the site (and a course) as part of a funnel

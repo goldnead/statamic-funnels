@@ -82,6 +82,29 @@ class Funnel extends Model
         return $this->steps->firstWhere('type', 'entry');
     }
 
+    /**
+     * The address the editor links to.
+     *
+     * The funnel's own `/f/{handle}` where an entry step answers there. A funnel
+     * that starts on a page of the site (an `external` step with a `path`) has
+     * no entry and `/f/{handle}` is a 404: then the page itself.
+     */
+    public function publicUrl(): string
+    {
+        if ($this->entryStep() === null) {
+            $path = trim((string) $this->steps
+                ->where('type', 'external')
+                ->map(fn (FunnelStep $step) => (string) $step->config('path'))
+                ->first(fn (string $path) => trim($path) !== ''));
+
+            if ($path !== '') {
+                return url('/'.ltrim($path, '/'));
+            }
+        }
+
+        return route('statamic-funnels.entry', $this->handle);
+    }
+
     public function stepByKey(string $nodeKey): ?FunnelStep
     {
         return $this->steps->firstWhere('node_key', $nodeKey);

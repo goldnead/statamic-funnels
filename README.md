@@ -146,7 +146,8 @@ Landing page (external, path)  ->  Confirmation (lead_magnet)  ->  Course (exter
 
    The walk is the usual first-party cookie. Where the site asks for consent, set
    `page_tracking.consent_service` to the service of the consent addon: until it is granted no cookie is set
-   and nothing is counted.
+   and nothing is counted. The check runs on every request of the page, so a visitor who agrees *after* landing is
+   counted on the next view of the page; nothing is made up for the view before.
 2. **A lead magnet.** A `lead_magnet` step whose only ways in are outside steps is answered by statamic-lead-magnets
    itself: the site's own form asks for the resource, and the step records *requested* and, with the click in
    the mail (or at once without double opt-in), *confirmed*, each once, and the walk carries on. The visitor
