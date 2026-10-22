@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.37.0 — 2026-10-22
+
 ### Added: "Person anpassen" says how she came: through a freebie, or not
 
 - A new group in the stack of the Probelauf: a switch "Über ein Freebie gekommen" and, when on, the choice of the freebie (the lead
