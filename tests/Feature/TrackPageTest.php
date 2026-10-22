@@ -2,6 +2,7 @@
 
 namespace Goldnead\StatamicFunnels\Tests\Feature;
 
+use Goldnead\StatamicFunnels\Events\FunnelStepEntered;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
@@ -11,6 +12,7 @@ use Goldnead\StatamicFunnels\Support\TrackingConsent;
 use Goldnead\StatamicFunnels\Tests\Support\WalksAFunnel;
 use Goldnead\StatamicFunnels\Tests\TestCase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\Attributes\Test;
 
 /** What `MarkPagePreview` does to a request that came with a good pass. */
@@ -97,6 +99,38 @@ class TrackPageTest extends TestCase
 
         $this->assertSame(1, $this->entered());
         $this->assertSame(1, FunnelVisit::count());
+    }
+
+    #[Test]
+    public function two_requests_that_both_looked_before_either_wrote_still_make_one_arrival(): void
+    {
+        $funnel = $this->reise();
+        $step = $funnel->steps()->where('node_key', 'optin')->first();
+        $entered = 0;
+        Event::listen(FunnelStepEntered::class, function () use (&$entered): void {
+            $entered++;
+        });
+
+        $visit = FunnelVisit::create(['funnel_id' => $funnel->id, 'token' => $this->token]);
+
+        // Both requests passed the "has she been here" check: the check says no, every time.
+        $blind = new class extends FunnelVisit
+        {
+            protected $table = 'funnel_visits';
+
+            public function hasReached(string $nodeKey): bool
+            {
+                return false;
+            }
+        };
+        $blind->setRawAttributes($visit->getAttributes(), true);
+        $blind->exists = true;
+
+        app(FunnelWalk::class)->enter($blind, $step);
+        app(FunnelWalk::class)->enter($blind, $step);
+
+        $this->assertSame(1, $this->entered());
+        $this->assertSame(1, $entered);
     }
 
     #[Test]

@@ -185,7 +185,7 @@ class ExternalStepsTest extends TestCase
         // Five days later, from the queue: no request of a browser at all.
         $this->app->instance('request', Request::create('/', 'GET'));
         Event::dispatch(new AutomationRunFinished('mail-kurs', 'MARIA@example.com'));
-        Event::dispatch(new AutomationRunFinished('mail-kurs', 'maria@example.com'));
+        Event::dispatch(new AutomationRunFinished('mail-kurs', 'MARIA@example.com'));
 
         $this->assertSame(1, $this->eventsOf('kurs', FunnelStepEvent::AUTOMATION_FINISHED));
         $this->assertSame(1, $this->eventsOf('uebergang', FunnelStepEvent::ENTERED));

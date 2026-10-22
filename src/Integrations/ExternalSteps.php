@@ -143,9 +143,9 @@ class ExternalSteps
     protected function automationFinished(object $event): void
     {
         $handle = (string) $event->handle();
-        $email = $event->email();
+        $email = mb_strtolower(trim((string) $event->email()));
 
-        if ($handle === '' || $email === null) {
+        if ($handle === '' || $email === '') {
             return;
         }
 

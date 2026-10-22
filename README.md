@@ -141,7 +141,8 @@ Landing page (external, path)  ->  Confirmation (lead_magnet)  ->  Course (exter
    the `X-Funnels-Ignore` header), a prefetch, a partial reload or a script request, a non-`GET` or a response
    other than `200`, the Probelauf, a funnel that is not published or a step that is switched off. An Inertia
    *visit* (a click from another page of the site) is a page view and counts. The middleware never changes the
-   response and logs and swallows every failure.
+   response and logs and swallows every failure. A page that is served from a full static cache never reaches the
+   middleware and is not counted; leave such a page out of the cache.
 
    The walk is the usual first-party cookie. Where the site asks for consent, set
    `page_tracking.consent_service` to the service of the consent addon: until it is granted no cookie is set
@@ -150,7 +151,9 @@ Landing page (external, path)  ->  Confirmation (lead_magnet)  ->  Course (exter
    itself: the site's own form asks for the resource, and the step records *requested* and, with the click in
    the mail (or at once without double opt-in), *confirmed*, each once, and the walk carries on. The visitor
    is found by the browser's cookie while the form is sent, and by the address after that (the click comes days
-   later, on another device). Somebody who was never counted on the page is not made up. A lead magnet step behind
+   later, on another device). The address comes from a form, so a request without the browser's cookie is put on the
+   latest walk that carries that address: a weak proof, and the reason a person who types somebody else's address
+   shows up on that walk. Somebody who was never counted on the page is not made up. A lead magnet step behind
    a form of the funnel works as described above and is not touched.
 3. **An automation.** Give an outside step the `automation` handle. The step before hands the visitor over;
    when a run of that automation goes to its end for the visitor's address (statamic-automations 2.42,

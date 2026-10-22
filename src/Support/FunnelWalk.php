@@ -203,7 +203,13 @@ class FunnelWalk
             ? ['variant' => Split::variantFor($step, $visit)]
             : [];
 
-        $visit->record($step->node_key, FunnelStepEvent::ENTERED, $payload);
+        // Claimed in the database, not checked: two requests of one browser (a
+        // double click, two tabs, a reload while the page is still loading) can
+        // both have looked before either wrote. The loser finds the arrival
+        // written and moves nothing, so the step is entered, and told about, once.
+        if (! $visit->recordOnce($step->node_key, FunnelStepEvent::ENTERED, $payload)) {
+            return;
+        }
 
         FunnelStepEntered::dispatch($visit, $step);
     }
