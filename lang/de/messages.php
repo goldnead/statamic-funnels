@@ -158,6 +158,7 @@ return [
     'metric_event_completed' => 'Abgeschlossen',
     'metric_event_lead_magnet_requested' => 'Geschenk angefordert',
     'metric_event_lead_magnet_confirmed' => 'Geschenk bestätigt',
+    'metric_event_automation_finished' => 'Automation durchlaufen',
     'metric_no_funnel_id' => 'Ohne Funnel',
     'metric_no_event' => 'Ohne Art',
 

@@ -87,6 +87,26 @@ class Funnel extends Model
         return $this->steps->firstWhere('node_key', $nodeKey);
     }
 
+    /**
+     * Whether a step is only ever reached from outside the funnel's own pages.
+     *
+     * Every way in is an `external` step: the visitor gets there because a page
+     * of the site, lead-magnets or an automation says so, never by opening an
+     * address under `/f`. Such a step is not a public page. Opened by hand it
+     * would write a visit and an arrival for somebody who was never on the
+     * journey, and the numbers of the map would count people who guessed a URL.
+     */
+    public function isOutsideOnly(FunnelStep $step): bool
+    {
+        $from = $this->edges->where('to_node_key', $step->node_key)->pluck('from_node_key');
+
+        if ($from->isEmpty()) {
+            return false;
+        }
+
+        return $from->every(fn (string $key) => $this->stepByKey($key)?->type === 'external');
+    }
+
     public function stepBySlug(string $slug): ?FunnelStep
     {
         return $this->steps->firstWhere('slug', $slug);

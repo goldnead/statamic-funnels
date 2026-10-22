@@ -201,6 +201,30 @@ return [
         ],
     ],
 
+    // Pages of the site that are steps of a funnel (the `external` step with a
+    // path), counted by the `statamic-funnels.track:{funnel},{nodeKey}` route
+    // middleware.
+    'page_tracking' => [
+        // The consent service the visitor must have agreed to before the walk's
+        // cookie is set and a visit is written. Empty: nothing asks. With
+        // statamic-consent installed, the service is looked up there; without
+        // it, `tracking.without_consent_addon` decides (block by default).
+        'consent_service' => env('STATAMIC_FUNNELS_PAGE_CONSENT_SERVICE'),
+
+        // A request whose user agent contains one of these (case-insensitive)
+        // is not a visitor. A request without a user agent is not one either.
+        'ignore_user_agents' => [
+            'bot', 'crawl', 'spider', 'slurp', 'scan', 'monitor', 'uptime', 'pingdom', 'statuscake', 'zabbix', 'nagios',
+            'headless', 'lighthouse', 'pagespeed', 'curl/', 'wget', 'python', 'httpclient', 'http-client', 'go-http',
+            'node-fetch', 'axios', 'libwww', 'java/', 'okhttp', 'preview', 'facebookexternalhit', 'whatsapp', 'telegram',
+            'skype', 'slack', 'discord', 'twitterbot', 'linkedin', 'embedly', 'probe', 'check_http',
+        ],
+
+        // Any request that carries this header is ignored. For a monitor of
+        // your own that cannot change its user agent.
+        'ignore_header' => 'X-Funnels-Ignore',
+    ],
+
     'integrations' => [
         // Hand a captured address to goldnead/statamic-leadhub as a contact.
         'leadhub' => false,

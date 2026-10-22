@@ -102,6 +102,26 @@ namespace Goldnead\LeadMagnets\Support {
     }
 }
 
+namespace Goldnead\LeadMagnets\Events {
+    use Goldnead\LeadMagnets\Models\Grant;
+
+    // The two events the funnels addon listens to (`Integrations\ExternalSteps`). The stand-in's
+    // `request()` does not fire them; a test does, the way GrantService does in the sibling.
+    if (! class_exists(ResourceRequested::class)) {
+        class ResourceRequested
+        {
+            public function __construct(public readonly Grant $grant) {}
+        }
+    }
+
+    if (! class_exists(ResourceConfirmed::class)) {
+        class ResourceConfirmed
+        {
+            public function __construct(public readonly Grant $grant) {}
+        }
+    }
+}
+
 namespace Goldnead\LeadMagnets\Facades {
     use Goldnead\LeadMagnets\Models\Grant;
     use Goldnead\LeadMagnets\Models\Resource;

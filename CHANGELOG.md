@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added: the outside step, a page of the site (and a course) as part of a funnel
+
+A funnel can now describe a journey that does not run on its own pages: a landing page of the site, a lead magnet, a mail course.
+
+- **Outside step** (`external`), with a `path` (a page of the site) and an `automation` (the handle of an automation). It renders nothing and has no URL.
+- **`statamic-funnels.track:{funnel},{nodeKey}`**, a route middleware: opening the page enters the step, once per walk. It never changes the response, ignores crawlers, monitors, prefetches, partial reloads, script requests, non-GET, non-200, the Probelauf and unpublished funnels, and logs and swallows every failure. `page_tracking.consent_service` makes the cookie wait for consent.
+- **lead-magnets** asking for a resource and proving the address are recorded (once each) on a `lead_magnet` step whose ways in are all outside steps, on the walk found by cookie, then by address. The walk carries on.
+- **statamic-automations** (`AutomationRunFinished`, 2.42): the end of a run leaves the outside step that names the automation, and ends the walk when an end step follows. New step event `automation_finished`.
+- No backfill, no change for existing funnels.
+
 ## 1.37.1 — 2026-10-22
 
 ### Fixed: a copied freebie that is not fresh says what that means

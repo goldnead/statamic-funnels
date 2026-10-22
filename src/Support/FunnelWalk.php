@@ -246,6 +246,32 @@ class FunnelWalk
         return $next;
     }
 
+    /**
+     * Arrive on a step that nobody opens in a browser.
+     *
+     * A page step is entered when its page is rendered. A step that happens
+     * somewhere else (the opt-in page of the site, the end of a mail course)
+     * is reached by the thing that knows: this is the one way in for those.
+     * It enters the step, and where the step is the end of the walk it ends
+     * the walk, the way the page of an end step does.
+     *
+     * A step that is a page of the site (an `external` step with a `path`) is
+     * left alone: the visitor reaches it by opening the page, and a step
+     * entered ahead of that would show a visit that never happened.
+     */
+    public function reach(FunnelVisit $visit, FunnelStep $step): void
+    {
+        if ($step->type === 'external' && trim((string) $step->config('path')) !== '') {
+            return;
+        }
+
+        $this->enter($visit, $step);
+
+        if ($step->type === 'finish') {
+            $this->complete($visit, $step);
+        }
+    }
+
     public function complete(FunnelVisit $visit, FunnelStep $step): void
     {
         if (ProbePreview::active($this->request()) || $visit->completed_at) {

@@ -7,6 +7,7 @@ use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Nodes\AccountStep;
 use Goldnead\StatamicFunnels\Nodes\CaptureStep;
 use Goldnead\StatamicFunnels\Nodes\EntryStep;
+use Goldnead\StatamicFunnels\Nodes\ExternalStep;
 use Goldnead\StatamicFunnels\Nodes\FinishStep;
 use Goldnead\StatamicFunnels\Nodes\LeadMagnetStep;
 use Goldnead\StatamicFunnels\Nodes\MailStep;
@@ -30,7 +31,7 @@ class StepRegistry
 
     public function __construct()
     {
-        foreach ([EntryStep::class, CaptureStep::class, PageStep::class, OfferStep::class, AccountStep::class, FinishStep::class, MailStep::class] as $class) {
+        foreach ([EntryStep::class, CaptureStep::class, PageStep::class, OfferStep::class, AccountStep::class, FinishStep::class, MailStep::class, ExternalStep::class] as $class) {
             $this->register($class);
         }
 
