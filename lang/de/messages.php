@@ -602,6 +602,11 @@ return [
     'probe_access_none' => 'Diese Karte vergibt keinen Zugang.',
     'probe_path_title' => 'Bisheriger Weg',
     'probe_unsub_help' => 'Mails dieser Person werden übersprungen.',
+    'probe_freebie_title' => 'Wie sie dazukam',
+    'probe_freebie_label' => 'Über ein Freebie gekommen',
+    'probe_freebie_help' => 'Der Newsletter fragt beim Eintritt, ob sie gerade etwas freigeschaltet bekommen hat.',
+    'probe_freebie_which' => 'Welches Freebie',
+    'probe_freebie_age' => 'Vor :minutes Minuten freigeschaltet.',
     'probe_reset' => 'Zurücksetzen',
     'probe_done' => 'Fertig',
 ];

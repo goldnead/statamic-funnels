@@ -600,6 +600,11 @@ return [
     'probe_access_none' => 'This map grants no access.',
     'probe_path_title' => 'Her way so far',
     'probe_unsub_help' => 'This person’s mails are skipped.',
+    'probe_freebie_title' => 'How she arrived',
+    'probe_freebie_label' => 'Came through a freebie',
+    'probe_freebie_help' => 'The newsletter asks on entry whether she has just been given something.',
+    'probe_freebie_which' => 'Which freebie',
+    'probe_freebie_age' => 'Unlocked :minutes minutes ago.',
     'probe_reset' => 'Reset',
     'probe_done' => 'Done',
 ];

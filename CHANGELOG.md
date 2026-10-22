@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added: "Person anpassen" says how she came: through a freebie, or not
+
+- A new group in the stack of the Probelauf: a switch "Über ein Freebie gekommen" and, when on, the choice of the freebie (the lead
+  magnets of the map that give access, by the title a reader knows). It answers the question the newsletter's welcome series asks on entry
+  ("Gerade etwas freigeschaltet?", "Über ein Freebie gekommen?"), which no map can know on its own. The page only sends the trait
+  `entitlements.recent_grant` (and `…_age` for a real person); the addon that owns the question (statamic-automations 2.40) reads it. Off is
+  the default: she came to the newsletter directly, which assumes no freebie. A real person from the contact list brings her own: the
+  switch is on with her freebie and says how long ago. The list comes from the lead magnets addon (`simulationFreebie()`, 3.19), asked
+  by name and only when it is there. The group is not shown when the map gives no freebie.
+
 ## 1.36.0 — 2026-10-21
 
 ### Added: `page_preview.address_field` for pages with no route

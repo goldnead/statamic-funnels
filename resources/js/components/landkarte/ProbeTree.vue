@@ -51,6 +51,9 @@ const actions = ref([]);
 const unsubscribed = ref(false);
 // "As for a real person": what was copied from her beyond the form's fields, and who she is for the page.
 const extraTraits = ref({});
+// How she came: the freebie she was given just now ('' = she was not), and how many minutes ago when that was copied from a real person.
+const freebie = ref('');
+const freebieAge = ref(null);
 const copiedFrom = ref(null);
 const missing = ref([]);
 const stackOpen = ref(false);
@@ -65,10 +68,14 @@ const start = ref(null);
 const starts = ref([]);
 const products = ref([]);
 const automations = ref([]);
-const options = ref({ access: [], tags: [] });
+const options = ref({ access: [], tags: [], freebies: [] });
 const timeline = ref({ entries: [], stats: { entries: 0, days: [], cut: 0 } });
 const tree = ref(null);
 const treeState = ref('idle');
+
+// The traits that say how she came, read by the step "did she just unlock something".
+const FRESH = 'entitlements.recent_grant';
+const FRESH_AGE = 'entitlements.recent_grant_age';
 
 // What the planner takes of a person's actions; the page does not offer more.
 const MAX_ACTIONS = 12;
@@ -86,13 +93,20 @@ function personBody() {
     };
 
     if (unsubscribed.value) body.unsubscribed = true;
-    if (Object.keys(extraTraits.value).length) body.traits = extraTraits.value;
+
+    // The freebie is a trait the addon that owns the question reads (`entitlements.recent_grant`); this page only says which.
+    const traits = { ...extraTraits.value };
+    if (freebie.value) {
+        traits[FRESH] = freebie.value;
+        if (freebieAge.value !== null) traits[FRESH_AGE] = freebieAge.value;
+    }
+    if (Object.keys(traits).length) body.traits = traits;
 
     return body;
 }
 
 // What she is, without what she does next: another person is another mail and page, a click after the mail is not.
-const personSig = computed(() => JSON.stringify([tags.value, access.value, ran.value, unsubscribed.value, extraTraits.value]));
+const personSig = computed(() => JSON.stringify([tags.value, access.value, ran.value, unsubscribed.value, extraTraits.value, freebie.value]));
 
 let ticket = 0;
 
@@ -114,7 +128,7 @@ async function load() {
         start.value = data.start;
         products.value = data.products ?? [];
         automations.value = data.automations ?? [];
-        options.value = data.options ?? { access: [], tags: [] };
+        options.value = data.options ?? { access: [], tags: [], freebies: [] };
 
         // An action tied to a mail that is no longer on her way (another start, a changed person) has nothing to act on.
         const keys = new Set(data.entries.map((e) => e.meta?.mail_key).filter(Boolean));
@@ -166,6 +180,11 @@ function onPatch(patch) {
     if ('access' in patch) access.value = patch.access;
     if ('ran' in patch) ran.value = patch.ran;
     if ('unsubscribed' in patch) unsubscribed.value = patch.unsubscribed;
+    if ('freebie' in patch) {
+        freebie.value = patch.freebie ?? '';
+        // A freebie chosen here is one she was given just now, whatever her copied one said.
+        freebieAge.value = null;
+    }
 
     planSoon();
 }
@@ -177,7 +196,10 @@ function copyPerson(data) {
     access.value = data.access ?? [];
     ran.value = data.ran ?? [];
     unsubscribed.value = Boolean(data.unsubscribed);
-    extraTraits.value = data.traits ?? {};
+    const { [FRESH]: came, [FRESH_AGE]: age, ...rest } = data.traits ?? {};
+    extraTraits.value = rest;
+    freebie.value = typeof came === 'string' ? came : '';
+    freebieAge.value = freebie.value && Number.isFinite(age) ? age : null;
     copiedFrom.value = data.label;
     actions.value = [];
     load();
@@ -190,6 +212,8 @@ function resetPerson() {
     ran.value = [];
     unsubscribed.value = false;
     extraTraits.value = {};
+    freebie.value = '';
+    freebieAge.value = null;
     copiedFrom.value = null;
     actions.value = [];
     who.value = 'test';
@@ -431,6 +455,8 @@ async function showTree() {
             :access="access"
             :ran="ran"
             :unsubscribed="unsubscribed"
+            :freebie="freebie"
+            :freebie-age="freebieAge"
             :options="options"
             :automations="automations"
             @who="chooseWho"
