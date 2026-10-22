@@ -606,7 +606,7 @@ return [
     'probe_freebie_label' => 'Über ein Freebie gekommen',
     'probe_freebie_help' => 'Der Newsletter fragt beim Eintritt, ob sie gerade etwas freigeschaltet bekommen hat.',
     'probe_freebie_which' => 'Welches Freebie',
-    'probe_freebie_age' => 'Vor :minutes Minuten freigeschaltet.',
+    'probe_freebie_age' => 'Vor :minutes Minuten freigeschaltet. Der Newsletter zählt nur frische Freischaltungen (meist die letzte Stunde), sonst geht sie den Weg ohne Freebie. Schalter aus und wieder an: als frisch behandeln.',
     'probe_reset' => 'Zurücksetzen',
     'probe_done' => 'Fertig',
 ];
