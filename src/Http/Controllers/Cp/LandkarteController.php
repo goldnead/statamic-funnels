@@ -382,11 +382,13 @@ class LandkarteController extends CpController
     {
         $leadMagnets = 'Goldnead\\LeadMagnets\\Integrations\\Map\\LeadMagnetMapObjects';
 
-        if (! class_exists($leadMagnets) || ! method_exists($leadMagnets, 'simulationFreebie')) {
+        $provider = class_exists($leadMagnets) ? app($leadMagnets) : null;
+
+        // An older release of the addon has no such method: nothing to offer.
+        if ($provider === null || ! method_exists($provider, 'simulationFreebie')) {
             return [];
         }
 
-        $provider = app($leadMagnets);
         $freebies = [];
 
         foreach ($nodes->where('type', 'lead_magnet') as $node) {
