@@ -144,7 +144,13 @@ Landing page (external, path)  ->  Confirmation (lead_magnet)  ->  Course (exter
    response and logs and swallows every failure. A page that is served from a full static cache never reaches the
    middleware and is not counted; leave such a page out of the cache.
 
-   The walk is the usual first-party cookie. Where the site asks for consent, set
+   **Cookieless:** with `page_tracking.mode = cookieless` there is no cookie and no consent question. The visit is a
+   keyed hash of the app key, the day, the funnel, the IP and the user agent (changes every day; nothing of the IP
+   or the agent is stored). One person reloading on the same day is one visit; the next day is a new visit, so a
+   person who comes back on another day counts again. The request of the form finds the walk by the same hash,
+   everything later by the address.
+
+   In the default `cookie` mode the walk is the usual first-party cookie. Where the site asks for consent, set
    `page_tracking.consent_service` to the service of the consent addon: until it is granted no cookie is set
    and nothing is counted. The check runs on every request of the page, so a visitor who agrees *after* landing is
    counted on the next view of the page; nothing is made up for the view before.

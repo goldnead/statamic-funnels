@@ -7,6 +7,7 @@ use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Nodes\ExternalStep;
+use Goldnead\StatamicFunnels\Support\DailyToken;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\ProbePreview;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -216,7 +217,18 @@ class ExternalSteps
      */
     protected function visitOfRequest(Funnel $funnel, string $email): ?FunnelVisit
     {
-        $token = app()->bound('request') ? app('request')->cookie(FunnelWalk::COOKIE) : null;
+        $request = app()->bound('request') ? app('request') : null;
+
+        // Cookieless: the walk of today is the hash of this browser's address and agent.
+        if ($request !== null && DailyToken::enabled()) {
+            $visit = FunnelVisit::query()->where('funnel_id', $funnel->id)->where('token', DailyToken::for($request, $funnel))->first();
+
+            if ($visit !== null) {
+                return $visit;
+            }
+        }
+
+        $token = $request?->cookie(FunnelWalk::COOKIE);
 
         if (is_string($token) && preg_match('/^[A-Za-z0-9]{32}$/', $token) === 1) {
             $visit = FunnelVisit::query()->where('funnel_id', $funnel->id)->where('token', $token)->first();

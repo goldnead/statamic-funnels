@@ -11,6 +11,7 @@ use Goldnead\StatamicAutomations\Events\AutomationRunFinished;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicFunnels\Support\DailyToken;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\StepStats;
 use Goldnead\StatamicFunnels\Tests\Support\LeadMagnetsSchema;
@@ -131,6 +132,29 @@ class ExternalStepsTest extends TestCase
         $this->assertSame(0, $this->eventsOf('bestaetigung', FunnelStepEvent::LEAD_MAGNET_CONFIRMED));
         $this->assertSame('maria@example.com', strtolower($visit->fresh()->email));
         $this->assertSame($grant->id, $visit->fresh()->meta['lead_magnet']['bestaetigung']['grant_id']);
+    }
+
+    #[Test]
+    public function without_a_cookie_the_request_finds_the_walk_of_the_day_and_the_click_finds_it_by_address(): void
+    {
+        config()->set('statamic-funnels.page_tracking.mode', 'cookieless');
+        $funnel = $this->journey();
+        $request = Request::create('/api/resources/geschenk/optin', 'POST', [], [], [], ['REMOTE_ADDR' => '203.0.113.7', 'HTTP_USER_AGENT' => 'Mozilla/5.0 Test']);
+        $visit = $this->onThePage(DailyToken::for($request, $funnel));
+        $grant = $this->grant($this->resource());
+
+        $this->app->instance('request', $request);
+        Event::dispatch(new ResourceRequested($grant));
+
+        $this->assertSame(1, $this->eventsOf('bestaetigung', FunnelStepEvent::LEAD_MAGNET_REQUESTED));
+        $this->assertSame('maria@example.com', strtolower($visit->fresh()->email));
+
+        // Another device, another day: only the address is left.
+        $this->app->instance('request', Request::create('/bestaetigen/abc', 'GET', [], [], [], ['REMOTE_ADDR' => '198.51.100.9']));
+        Event::dispatch(new ResourceConfirmed($grant));
+
+        $this->assertSame(1, $this->eventsOf('bestaetigung', FunnelStepEvent::LEAD_MAGNET_CONFIRMED));
+        $this->assertSame(1, $this->eventsOf('kurs', FunnelStepEvent::ENTERED));
     }
 
     #[Test]

@@ -4,6 +4,7 @@ namespace Goldnead\StatamicFunnels\Http\Middleware;
 
 use Closure;
 use Goldnead\StatamicFunnels\Models\Funnel;
+use Goldnead\StatamicFunnels\Support\DailyToken;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\ProbePreview;
 use Goldnead\StatamicFunnels\Support\TrackingConsent;
@@ -83,6 +84,13 @@ class TrackPage
         $step = $funnel?->stepByKey($nodeKey);
 
         if (! $funnel || ! $step || $step->type !== 'external' || $step->disabled) {
+            return;
+        }
+
+        if (DailyToken::enabled()) {
+            // No cookie and no consent: the visit is the hash of the day.
+            $this->walk->enter($this->walk->visitFor($funnel, DailyToken::for($request, $funnel)), $step);
+
             return;
         }
 

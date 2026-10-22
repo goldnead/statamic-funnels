@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.39.0 — 2026-10-22
+
+### Added: page counting without a cookie (`page_tracking.mode = cookieless`)
+
+The `statamic-funnels.track` middleware can count a page with no cookie and no consent question. The visit is a keyed hash of the app key, the day, the funnel, the IP and the user agent, changing every day; nothing of the IP or the agent is stored. The same person reloading on the same day is one visit and one `entered`, the next day is a new visit. Later steps (lead magnet requested, the walk after the confirmation click, the end of an automation) attach through the address, as before. `cookie` stays the default, with `consent_service`. Set `STATAMIC_FUNNELS_PAGE_TRACKING_MODE=cookieless` or the config key.
+
 ## 1.38.1 — 2026-10-22
 
 ### Fixed: the editor's "Live" link for a funnel that starts on a page of the site
