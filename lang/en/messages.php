@@ -604,7 +604,7 @@ return [
     'probe_freebie_label' => 'Came through a freebie',
     'probe_freebie_help' => 'The newsletter asks on entry whether she has just been given something.',
     'probe_freebie_which' => 'Which freebie',
-    'probe_freebie_age' => 'Unlocked :minutes minutes ago.',
+    'probe_freebie_age' => 'Unlocked :minutes minutes ago. The newsletter only counts fresh unlocks (usually the last hour); otherwise she takes the way without a freebie. Switch off and on again: treat as fresh.',
     'probe_reset' => 'Reset',
     'probe_done' => 'Done',
 ];

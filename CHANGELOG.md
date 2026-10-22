@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.37.1 — 2026-10-22
+
+### Fixed: a copied freebie that is not fresh says what that means
+
+A real person whose freebie was unlocked days ago showed the switch "Über ein Freebie gekommen" on, and the way went the plain route: true to
+the newsletter (it counts only the last hour), but it read as a contradiction. The line under the freebie now says so, and says that switching
+off and on again treats the freebie as fresh.
+
 ## 1.37.0 — 2026-10-22
 
 ### Added: "Person anpassen" says how she came: through a freebie, or not
