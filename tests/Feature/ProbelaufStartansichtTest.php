@@ -103,6 +103,13 @@ if (! class_exists(AutomationMapObjects::class)) {
     }');
 }
 
+// The lead magnets addon is no dependency either: "came through which freebie" is asked of its provider, by name, only when it is there.
+if (! class_exists('Goldnead\LeadMagnets\Integrations\Map\LeadMagnetMapObjects')) {
+    eval('namespace Goldnead\LeadMagnets\Integrations\Map; class LeadMagnetMapObjects extends \Goldnead\StatamicFunnels\Tests\Feature\StartViewLeadMagnet {
+        public function simulationFreebie(string $id): ?array { return $id === "freebie" ? ["value" => "kurs-freebie", "label" => "Das Freebie"] : null; }
+    }');
+}
+
 /** The dry run opens on one person: who starts where, what she can be given to choose from, and how a mail looks. */
 class ProbelaufStartansichtTest extends TestCase
 {
@@ -199,6 +206,29 @@ class ProbelaufStartansichtTest extends TestCase
         // The list of the stand-in has "Chorleitung" and "chorleitung": a tag is a word, and two spellings are two words; the
         // same word from two automations is one.
         $this->assertSame(['Chorleitung', 'Solo', 'chorleitung', 'Newsletter'], $this->plan($landkarte)['options']['tags']);
+    }
+
+    #[Test]
+    public function the_freebies_a_person_can_have_come_through_come_from_the_lead_magnets_on_the_map(): void
+    {
+        if (! is_subclass_of('Goldnead\LeadMagnets\Integrations\Map\LeadMagnetMapObjects', StartViewObjects::class)) {
+            $this->markTestSkipped('the real lead magnets addon is installed; its own suite proves its freebies');
+        }
+
+        $landkarte = $this->landkarte([['lead_magnet', 'freebie'], ['lead_magnet', 'datei'], ['product', 'masterclass']]);
+        $this->asProber();
+
+        // The name of the grant a step reads (`product_slug`) and the title she knows it by; a lead magnet that gives no access is no freebie.
+        $this->assertSame([['value' => 'kurs-freebie', 'label' => 'Das Freebie']], $this->plan($landkarte)['options']['freebies']);
+    }
+
+    #[Test]
+    public function the_freebies_are_empty_without_a_lead_magnet_that_gives_access(): void
+    {
+        $landkarte = $this->landkarte([['product', 'masterclass']]);
+        $this->asProber();
+
+        $this->assertSame([], $this->plan($landkarte)['options']['freebies']);
     }
 
     #[Test]

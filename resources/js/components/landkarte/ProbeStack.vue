@@ -1,6 +1,6 @@
 <script setup>
 import { computed, inject } from 'vue';
-import { Button, Card, Checkbox, Combobox, Panel, Radio, RadioGroup, Stack, StackContent, StackFooter, Switch } from '@statamic/cms/ui';
+import { Button, Card, Checkbox, Combobox, Panel, Radio, RadioGroup, Select, Stack, StackContent, StackFooter, Switch } from '@statamic/cms/ui';
 import { freeTags } from '../../support/probelauf.js';
 import ProbeRealPerson from './ProbeRealPerson.vue';
 
@@ -20,8 +20,11 @@ const props = defineProps({
     access: { type: Array, default: () => [] },
     ran: { type: Array, default: () => [] },
     unsubscribed: { type: Boolean, default: false },
+    // How she came: the grant name of the freebie she was given just now ('' = she was not), and minutes ago if copied from a real person.
+    freebie: { type: String, default: '' },
+    freebieAge: { type: Number, default: null },
     // What the map offers: access by name and kind, the tags its conditions ask for.
-    options: { type: Object, default: () => ({ access: [], tags: [] }) },
+    options: { type: Object, default: () => ({ access: [], tags: [], freebies: [] }) },
     automations: { type: Array, default: () => [] },
 });
 
@@ -44,6 +47,13 @@ const accessRows = computed(() => {
         ...(props.options.access ?? []),
         ...props.access.filter((slug) => !known.has(slug)).map((slug) => ({ value: slug, label: slug, kind: '' })),
     ];
+});
+
+// The freebies the map gives; the one she has is always a row, so a copied freebie the map does not mention is not lost from the field.
+const freebieRows = computed(() => {
+    const rows = props.options.freebies ?? [];
+
+    return props.freebie && !rows.some((f) => f.value === props.freebie) ? [...rows, { value: props.freebie, label: props.freebie }] : rows;
 });
 
 const toggle = (key, list, value, on) => emit('patch', { [key]: on ? [...new Set([...list, value])] : list.filter((v) => v !== value) });
@@ -109,6 +119,37 @@ const addTag = (name) => emit('patch', { tags: [...new Set([...props.tags, name]
                 </Card>
             </Panel>
 
+            <Panel v-if="freebieRows.length" :heading="probe.t('probe_freebie_title')">
+                <Card>
+                    <div class="pk-switch" :class="{ 'pk-switch--bare': !freebie }">
+                        <div>
+                            <p class="pk-switch__label">{{ probe.t('probe_freebie_label') }}</p>
+                            <p class="pk-switch__help">{{ probe.t('probe_freebie_help') }}</p>
+                        </div>
+                        <Switch
+                            :model-value="Boolean(freebie)"
+                            :aria-label="probe.t('probe_freebie_label')"
+                            data-pk-freebie
+                            @update:model-value="emit('patch', { freebie: $event ? freebieRows[0].value : '' })"
+                        />
+                    </div>
+                    <template v-if="freebie">
+                        <p class="pk-sub">{{ probe.t('probe_freebie_which') }}</p>
+                        <Select
+                            v-if="freebieRows.length > 1"
+                            size="sm"
+                            :model-value="freebie"
+                            :options="freebieRows"
+                            :aria-label="probe.t('probe_freebie_which')"
+                            data-pk-freebie-which
+                            @update:model-value="$event && emit('patch', { freebie: $event })"
+                        />
+                        <p v-else class="pk-none" data-pk-freebie-only>{{ freebieRows[0].label }}</p>
+                        <p v-if="freebieAge !== null" class="pk-switch__help" data-pk-freebie-age>{{ probe.t('probe_freebie_age').replace(':minutes', String(freebieAge)) }}</p>
+                    </template>
+                </Card>
+            </Panel>
+
             <Panel :heading="probe.t('probe_path_title')">
                 <Card>
                     <div class="pk-switch">
@@ -171,6 +212,8 @@ const addTag = (name) => emit('patch', { tags: [...new Set([...props.tags, name]
 .dark .pk-none { color: var(--color-gray-400); }
 .pk-switch { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-bottom: 0.6rem; border-bottom: 1px solid var(--color-gray-200); }
 .dark .pk-switch { border-bottom-color: var(--color-gray-700); }
+/* Switched off, nothing sits under it: no rule and no space below. */
+.pk-switch.pk-switch--bare { padding-bottom: 0; border-bottom: 0; }
 .pk-switch__label { margin: 0; font-size: 0.875rem; color: var(--color-gray-900); }
 .dark .pk-switch__label { color: var(--color-gray-100); }
 .pk-switch__help { margin: 0.1rem 0 0; font-size: 0.78rem; color: var(--color-gray-600); }

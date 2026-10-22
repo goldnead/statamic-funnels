@@ -18,6 +18,7 @@ use Goldnead\StatamicFunnels\Support\Setup;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\Validator;
@@ -328,7 +329,7 @@ class LandkarteController extends CpController
      * condition of an addon that cannot name its own is still a tag a person may have.
      *
      * @param  array<string, mixed>  $built  {@see LandkarteGraph::build()}
-     * @return array{access: list<array{value: string, label: string, kind: string}>, tags: list<string>}
+     * @return array{access: list<array{value: string, label: string, kind: string}>, tags: list<string>, freebies: list<array{value: string, label: string}>}
      */
     protected function pickerOptions(array $built): array
     {
@@ -362,7 +363,50 @@ class LandkarteController extends CpController
             }
         }
 
-        return ['access' => $access, 'tags' => array_slice(array_values($tags), 0, self::PERSON_TAGS)];
+        return [
+            'access' => $access,
+            'tags' => array_slice(array_values($tags), 0, self::PERSON_TAGS),
+            'freebies' => $this->freebieOptions($nodes),
+        ];
+    }
+
+    /**
+     * The freebies a person can have come through: the lead magnets of the map that give access, by the name of the grant (what
+     * a step that asks "did she just unlock something" reads) and the title she knows. The lead magnets addon says which
+     * (`simulationFreebie()`), when it is there and has the method; funnels knows no lead magnet's fields.
+     *
+     * @param  Collection<int, array<string, mixed>>  $nodes  the map's cards, without ghosts
+     * @return list<array{value: string, label: string}>
+     */
+    protected function freebieOptions($nodes): array
+    {
+        $leadMagnets = 'Goldnead\\LeadMagnets\\Integrations\\Map\\LeadMagnetMapObjects';
+
+        $provider = class_exists($leadMagnets) ? app($leadMagnets) : null;
+
+        // An older release of the addon has no such method: nothing to offer.
+        if ($provider === null || ! method_exists($provider, 'simulationFreebie')) {
+            return [];
+        }
+
+        $freebies = [];
+
+        foreach ($nodes->where('type', 'lead_magnet') as $node) {
+            try {
+                $freebie = $provider->simulationFreebie((string) $node['ref_id']);
+            } catch (Throwable $e) {
+                // A freebie that cannot be named is one fewer choice, not a failed page.
+                report($e);
+
+                continue;
+            }
+
+            if (is_array($freebie) && is_string($freebie['value'] ?? null) && $freebie['value'] !== '' && is_string($freebie['label'] ?? null)) {
+                $freebies[$freebie['value']] = ['value' => $freebie['value'], 'label' => $freebie['label']];
+            }
+        }
+
+        return array_slice(array_values($freebies), 0, self::PERSON_ACCESS);
     }
 
     /**
@@ -842,7 +886,7 @@ class LandkarteController extends CpController
             'probe_unreached', 'probe_expand', 'probe_collapse', 'probe_now', 'probe_day', 'probe_hours', 'probe_minutes', 'probe_unavailable',
             'probe_person_unknown', 'probe_person_test', 'probe_lens_label', 'probe_who_label', 'probe_who_missing', 'probe_who_test', 'probe_who_real', 'probe_who_search', 'probe_who_search_hint', 'probe_who_copied', 'probe_who_reset', 'probe_who_none', 'probe_who_read_only', 'probe_unsubscribed_label', 'probe_lens_account', 'probe_lens_pages', 'probe_account_empty', 'probe_account_access', 'probe_account_course', 'probe_account_open_unknown', 'probe_pages_empty', 'probe_pages_note', 'probe_why', 'probe_tags_label', 'probe_tags_placeholder', 'probe_access_label', 'probe_access_placeholder', 'probe_ran_label', 'probe_until_label', 'probe_until_all', 'probe_until_day', 'probe_standing', 'probe_standing_access', 'probe_standing_unsub', 'probe_action_title', 'probe_action_buy', 'probe_action_click', 'probe_action_unsub', 'probe_action_product', 'probe_action_link', 'probe_action_after', 'probe_action_days', 'probe_action_add', 'probe_action_remove', 'probe_action_no_products', 'probe_action_no_links', 'probe_action_help', 'probe_action_full', 'probe_kind_action', 'probe_lens_timeline', 'probe_lens_mailbox', 'probe_mail_from_none', 'probe_mailbox_empty', 'probe_mail_select', 'probe_mail_failed', 'probe_mail_none', 'probe_mail_loading', 'probe_mail_from', 'probe_mail_subject', 'probe_mail_images_one', 'probe_mail_images_many', 'probe_mail_links', 'probe_mail_links_help', 'probe_mail_frame', 'probe_person_label', 'probe_start_label', 'probe_start_none', 'probe_timeline_empty', 'probe_timeline_summary', 'probe_timeline_summary_one', 'probe_kind_decision', 'probe_merged', 'probe_kind_enter', 'probe_kind_mail', 'probe_kind_wait', 'probe_kind_access', 'probe_kind_page',
             'probe_kind_stop', 'probe_kind_unknown', 'probe_kind_fork', 'probe_kind_rejoin', 'probe_kind_denied', 'probe_kind_more', 'probe_kind_trait',
-            'probe_event_requested', 'probe_event_purchased', 'probe_event_started', 'probe_event_entered', 'probe_event_granted', 'probe_badge', 'probe_adjust', 'probe_all_ways', 'probe_all_ways_plain', 'probe_back', 'probe_person_find', 'probe_sentence_requested', 'probe_sentence_purchased', 'probe_sentence_started', 'probe_sentence_entered', 'probe_sentence_granted', 'probe_sees', 'probe_pick_step', 'probe_why_title', 'probe_skip_to', 'probe_skip_reset', 'probe_count_mail_one', 'probe_count_mail_many', 'probe_count_access_one', 'probe_count_access_many', 'probe_count_page_one', 'probe_count_page_many', 'probe_unknown_foot', 'probe_and', 'probe_do_label', 'probe_do_opens', 'probe_do_clicks', 'probe_do_clicks_menu', 'probe_do_buys', 'probe_do_buys_named', 'probe_do_buys_many', 'probe_do_unsub', 'probe_do_when', 'probe_do_now', 'probe_do_after_one', 'probe_do_after_many', 'probe_do_no_products', 'probe_mail_image_word', 'probe_page_desktop', 'probe_page_phone', 'probe_page_device', 'probe_page_width', 'probe_page_links', 'probe_page_link_goal', 'probe_page_loading', 'probe_page_failed', 'probe_page_frame', 'probe_page_thumb_alt', 'probe_page_thumb_note', 'probe_page_unavailable_app_route', 'probe_page_unavailable_draft', 'probe_page_unavailable_gone', 'probe_page_unavailable_no_address', 'probe_page_unavailable_not_a_page', 'probe_page_unavailable_too_big', 'probe_page_unavailable_failed', 'probe_stack_title', 'probe_stack_help', 'probe_who_title', 'probe_who_test_option', 'probe_who_test_desc', 'probe_who_real_option', 'probe_who_real_desc', 'probe_traits_title', 'probe_traits_from_map', 'probe_traits_add', 'probe_traits_free', 'probe_access_title', 'probe_access_none', 'probe_path_title', 'probe_unsub_help', 'probe_reset', 'probe_done',
+            'probe_event_requested', 'probe_event_purchased', 'probe_event_started', 'probe_event_entered', 'probe_event_granted', 'probe_badge', 'probe_adjust', 'probe_all_ways', 'probe_all_ways_plain', 'probe_back', 'probe_person_find', 'probe_sentence_requested', 'probe_sentence_purchased', 'probe_sentence_started', 'probe_sentence_entered', 'probe_sentence_granted', 'probe_sees', 'probe_pick_step', 'probe_why_title', 'probe_skip_to', 'probe_skip_reset', 'probe_count_mail_one', 'probe_count_mail_many', 'probe_count_access_one', 'probe_count_access_many', 'probe_count_page_one', 'probe_count_page_many', 'probe_unknown_foot', 'probe_and', 'probe_do_label', 'probe_do_opens', 'probe_do_clicks', 'probe_do_clicks_menu', 'probe_do_buys', 'probe_do_buys_named', 'probe_do_buys_many', 'probe_do_unsub', 'probe_do_when', 'probe_do_now', 'probe_do_after_one', 'probe_do_after_many', 'probe_do_no_products', 'probe_mail_image_word', 'probe_page_desktop', 'probe_page_phone', 'probe_page_device', 'probe_page_width', 'probe_page_links', 'probe_page_link_goal', 'probe_page_loading', 'probe_page_failed', 'probe_page_frame', 'probe_page_thumb_alt', 'probe_page_thumb_note', 'probe_page_unavailable_app_route', 'probe_page_unavailable_draft', 'probe_page_unavailable_gone', 'probe_page_unavailable_no_address', 'probe_page_unavailable_not_a_page', 'probe_page_unavailable_too_big', 'probe_page_unavailable_failed', 'probe_stack_title', 'probe_stack_help', 'probe_who_title', 'probe_who_test_option', 'probe_who_test_desc', 'probe_who_real_option', 'probe_who_real_desc', 'probe_traits_title', 'probe_traits_from_map', 'probe_traits_add', 'probe_traits_free', 'probe_access_title', 'probe_access_none', 'probe_path_title', 'probe_freebie_title', 'probe_freebie_label', 'probe_freebie_help', 'probe_freebie_which', 'probe_freebie_age', 'probe_unsub_help', 'probe_reset', 'probe_done',
         ];
 
         return collect($keys)
