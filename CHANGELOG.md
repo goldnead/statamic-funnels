@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- Control Panel: the detail pages (the funnel edit, preview and update, and every Landkarte page: show, update, delete, objects, details, probelauf and connections, plus the legacy map address) show the same setup screen as the listing when the addon's tables are missing, instead of a query error (HTTP 500). They carry the `brand.setup-guard` middleware of statamic-brand-context 1.27, which runs before route-model binding.
+
+### Upgrading
+
+- Requires statamic-brand-context 1.27 or newer. No migration, no new config key.
+
 ## 1.39.0 — 2026-10-22
 
 ### Added: page counting without a cookie (`page_tracking.mode = cookieless`)

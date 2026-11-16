@@ -117,4 +117,74 @@ class SetupGuardTest extends TestCase
 
         $this->assertSame('statamic-funnels::Funnels/Index', $response->viewData('page')['component']);
     }
+
+    /**
+     * The Landkarten live under their own addresses and carry their own tables,
+     * so the setup guard of their listing does not cover them.
+     */
+    private function dropLandkartenTables(): void
+    {
+        Schema::dropIfExists('funnel_landkarte_edges');
+        Schema::dropIfExists('funnel_landkarte_refs');
+        Schema::dropIfExists('funnel_landkarte_stages');
+        Schema::dropIfExists('funnel_landkarten');
+    }
+
+    #[Test]
+    public function the_funnel_edit_page_shows_the_setup_screen_when_its_tables_are_missing(): void
+    {
+        $this->dropAddonTables();
+
+        $response = $this->actingAs($this->admin())
+            ->get(cp_route('utilities.funnels.edit', 1))
+            ->assertOk();
+
+        $this->assertSame('statamic-funnels::SetupRequired', $response->viewData('page')['component']);
+    }
+
+    #[Test]
+    public function a_stranger_is_sent_to_the_login_on_a_funnel_detail_page_when_its_tables_are_missing(): void
+    {
+        $this->dropAddonTables();
+
+        $this->get(cp_route('utilities.funnels.edit', 1))
+            ->assertRedirect();
+    }
+
+    #[Test]
+    public function a_migrated_install_still_404s_an_unknown_funnel(): void
+    {
+        $this->actingAs($this->admin())
+            ->get(cp_route('utilities.funnels.edit', 999))
+            ->assertNotFound();
+    }
+
+    #[Test]
+    public function the_landkarte_page_shows_the_setup_screen_when_its_tables_are_missing(): void
+    {
+        $this->dropLandkartenTables();
+
+        $response = $this->actingAs($this->admin())
+            ->get(cp_route('statamic-funnels.landkarten.show', 1))
+            ->assertOk();
+
+        $this->assertSame('statamic-funnels::SetupRequired', $response->viewData('page')['component']);
+    }
+
+    #[Test]
+    public function a_stranger_is_sent_to_the_login_on_a_landkarte_page_when_its_tables_are_missing(): void
+    {
+        $this->dropLandkartenTables();
+
+        $this->get(cp_route('statamic-funnels.landkarten.show', 1))
+            ->assertRedirect();
+    }
+
+    #[Test]
+    public function a_migrated_install_still_404s_an_unknown_landkarte(): void
+    {
+        $this->actingAs($this->admin())
+            ->get(cp_route('statamic-funnels.landkarten.show', 999))
+            ->assertNotFound();
+    }
 }
