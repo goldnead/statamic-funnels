@@ -129,6 +129,19 @@ class ProbelaufSeiteTest extends TestCase
     }
 
     /** What `/app-zaehler` saw, for a request that carries the given header (or none). */
+    /**
+     * The fixture holds `<a/href="…">`. libxml before 2.15 reads that as an anchor without an address, from 2.15 on (HTML5 tokenizer, like
+     * a browser) as a link. Both are safe, the address is stripped either way (asserted on the html); only the list of links differs,
+     * so the tests compare it without that one entry.
+     *
+     * @param  array<int, array{text: string, url: string}>  $links
+     * @return array<int, array{text: string, url: string}>
+     */
+    protected function withoutOddLink(array $links): array
+    {
+        return array_values(array_filter($links, fn (array $link) => $link['text'] !== 'Seltsam'));
+    }
+
     protected function asked(?string $pass, string $path = '/app-zaehler', string $method = 'GET'): TestResponse
     {
         return $this->call($method, $path, [], [], [], $pass === null ? [] : ['HTTP_'.strtoupper(str_replace('-', '_', PagePreviewToken::HEADER)) => $pass]);
@@ -242,7 +255,7 @@ class ProbelaufSeiteTest extends TestCase
             ['text' => 'Zum Angebot', 'url' => '/angebot-hier'],
             ['text' => 'Zweiter Weg', 'url' => '/zweiter-weg'],
             ['text' => 'Ressource', 'url' => 'https://example.org/ressource'],
-        ], $page['links']);
+        ], $this->withoutOddLink($page['links']));
 
         // No link has an address left, not even `#` (with the base element in the document a bare `#` is read against the site, and a
         // click on it would load the front page into the frame: a visit). What a click would do is only remembered, in `data-sim-href`.
@@ -817,7 +830,7 @@ class ProbelaufSeiteTest extends TestCase
         $this->assertSame('rendered', $json['state']);
         $this->assertSame('/masterclass', $json['url']);
         $this->assertStringContainsString('<h1>Masterclass</h1>', $json['html']);
-        $this->assertCount(7, $json['links']);
+        $this->assertCount(7, $this->withoutOddLink($json['links']));
         $this->assertSame($before, $this->counts());
         // Nothing asked of the network but the site's own stylesheet: no link of the page, no tracking host.
         Http::assertSent(fn ($request) => str_starts_with($request->url(), 'http://localhost/'));
