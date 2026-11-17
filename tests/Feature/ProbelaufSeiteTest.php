@@ -277,7 +277,7 @@ class ProbelaufSeiteTest extends TestCase
         // a sandbox without `allow-popups` refuses.
         $this->assertDoesNotMatchRegularExpression('/<a[^>]*target=/', $page['html']);
         $this->assertStringContainsString('<base href="http://localhost/" target="_blank">', $page['html']);
-        $this->assertStringNotContainsString('odd111', str_replace('data-sim-href', '', $page['html']));
+        $this->assertStringNotContainsString('odd111', preg_replace('/data-sim-href="[^"]*"/', '', $page['html']));
     }
 
     #[Test]
