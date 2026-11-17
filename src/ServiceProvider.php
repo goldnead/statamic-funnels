@@ -2,6 +2,7 @@
 
 namespace Goldnead\StatamicFunnels;
 
+use Goldnead\BrandContext\Http\Middleware\GuardSetup;
 use Goldnead\BrandContext\Map\MapObjectRegistry;
 use Goldnead\BrandContext\Settings\SettingsRegistry;
 use Goldnead\StatamicFunnels\Contracts\ConversionSender;
@@ -27,6 +28,7 @@ use Goldnead\StatamicFunnels\Registries\StepRegistry;
 use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicFunnels\Support\PaymentsDoor;
 use Goldnead\StatamicFunnels\Support\Settings;
+use Goldnead\StatamicFunnels\Support\Setup;
 use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
 use Goldnead\StatamicPayments\Cp\SuiteNav;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -378,6 +380,11 @@ class ServiceProvider extends AddonServiceProvider
 
     protected function registerUtility(): void
     {
+        // The same lists the listing's index() hands to Setup::guard(), so a detail page
+        // shows the same setup screen when a table is missing.
+        $funnelGuard = GuardSetup::using(Setup::class, 'statamic-funnels::messages.utility_nav', 'funnels', 'funnel_steps', 'funnel_visits');
+        $landkarteGuard = GuardSetup::using(Setup::class, 'statamic-funnels::messages.landkarten_title', 'funnel_landkarten', 'funnel_landkarte_stages', 'funnel_landkarte_refs', 'funnel_landkarte_edges');
+
         Utility::register('funnels')
             ->action([FunnelsController::class, 'index'])
             ->title(__('statamic-funnels::messages.utility_title'))
@@ -385,7 +392,7 @@ class ServiceProvider extends AddonServiceProvider
             ->icon('timeline-roadmap-vertical')
             ->description(__('statamic-funnels::messages.utility_description'))
             ->docsUrl('https://github.com/goldnead/statamic-funnels#readme')
-            ->routes(function ($router) {
+            ->routes(function ($router) use ($funnelGuard, $landkarteGuard) {
                 $router->post('/', [FunnelsController::class, 'store'])->name('store');
                 // What the listing's row menu and its bulk toolbar post to.
                 // Above `{funnel}` on purpose, so `actions` is never read as a
@@ -395,12 +402,12 @@ class ServiceProvider extends AddonServiceProvider
                 // 1.26 had the Landkarten here; the old addresses go to the new ones.
                 // Above `{funnel}`, so `maps` is never read as a funnel id.
                 $router->get('maps', [LandkarteController::class, 'legacyIndex'])->name('maps');
-                $router->get('maps/{landkarte}', [LandkarteController::class, 'legacyShow'])->name('maps.show');
-                $router->post('{funnel}/preview', [FunnelsController::class, 'preview'])->name('preview');
-                $router->get('{funnel}/edit', [FunnelsController::class, 'edit'])->name('edit');
+                $router->get('maps/{landkarte}', [LandkarteController::class, 'legacyShow'])->name('maps.show')->middleware($landkarteGuard);
+                $router->post('{funnel}/preview', [FunnelsController::class, 'preview'])->name('preview')->middleware($funnelGuard);
+                $router->get('{funnel}/edit', [FunnelsController::class, 'edit'])->name('edit')->middleware($funnelGuard);
                 // 1.25 had one map per funnel at this address; bookmarks land on the Landkarten.
                 $router->get('{funnel}/map', [LandkarteController::class, 'legacy'])->name('map');
-                $router->patch('{funnel}', [FunnelsController::class, 'update'])->name('update');
+                $router->patch('{funnel}', [FunnelsController::class, 'update'])->name('update')->middleware($funnelGuard);
             });
     }
 }
