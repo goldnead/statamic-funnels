@@ -13,7 +13,8 @@ use Statamic\Console\RunsInPlease;
  * Eine Zeile steht je (Besuch, Knoten) und ist damit die Idempotenz; eine als
  * fehlgeschlagen markierte Zeile wurde deshalb nie wieder gestellt, auch wenn
  * die Queue oder der Mailserver laengst zurueck war. Dieser Befehl stellt sie
- * erneut, hoechstens `--max-tries` mal je Mail und erst nach `--min-age`
+ * erneut, solange sie insgesamt (Job-Backoff und dieser Befehl zusammen)
+ * weniger als `--max-tries` Sendeversuche hatte, und erst nach `--min-age`
  * Minuten Ruhe seit dem letzten Fehlschlag. Gesendete Mails fasst er nie an.
  */
 class RetryFailedMails extends Command
@@ -21,7 +22,7 @@ class RetryFailedMails extends Command
     use RunsInPlease;
 
     protected $signature = 'funnels:retry-mails
-        {--max-tries=3 : Wie oft eine Mail hoechstens erneut gestellt wird}
+        {--max-tries=3 : Sendeversuche je Mail insgesamt, Job-Backoff eingerechnet}
         {--min-age=10 : Minuten seit dem letzten Fehlschlag, bevor sie wieder drankommt}';
 
     protected $description = 'Queue funnel mails that failed again, a limited number of times.';
@@ -46,10 +47,10 @@ class RetryFailedMails extends Command
                 // solange er laeuft oder wartet, steht die Zeile nicht als
                 // fehlgeschlagen da, und dieser Befehl fasst sie nicht an.
                 // Erst wenn der Job endgueltig aufgibt (`markFailed`), kommt
-                // sie wieder in Frage. Je Mail also hoechstens `--max-tries`
-                // Neustarts mal drei Versuche, nie zwei Quellen gleichzeitig.
+                // sie wieder in Frage. Gezaehlt wird jeder echte Sendeversuch
+                // im Job (`attempts`): je Mail insgesamt hoechstens
+                // `--max-tries` Versuche, nie zwei Quellen gleichzeitig.
                 $delivery->forceFill([
-                    'attempts' => $delivery->attempts + 1,
                     'failed_at' => null,
                     'queued_at' => now(),
                 ])->save();

@@ -42,6 +42,9 @@ class SendFunnelMail implements ShouldQueue
      */
     public int $tries = 3;
 
+    /** Sendeversuche je Mail insgesamt, Job-Backoff und Nachhol-Laeufe zusammen. */
+    public const MAX_ATTEMPTS = 3;
+
     /** Sekunden bis zum naechsten Versuch, je Versuch. */
     public const BACKOFF = [60, 300];
 
@@ -87,17 +90,22 @@ class SendFunnelMail implements ShouldQueue
             return;
         }
 
+        // Jeder echte Sendeversuch zaehlt in der Zeile mit, ueber alle Laeufe
+        // hinweg (Backoff-Versuche des Jobs und Nachhol-Laeufe von
+        // `funnels:retry-mails`): insgesamt hoechstens MAX_ATTEMPTS.
+        $delivery->increment('attempts');
+        $attempt = (int) $delivery->attempts;
+
         try {
             Mail::to($to)->send(new FunnelMail($mail['subject'], $mail['html']));
         } catch (Throwable $e) {
-            $attempt = $this->attempts();
 
             // Ohne Warteschlange dahinter (direkt aufgerufen) oder auf der
             // Sync-Queue gibt es keinen zweiten Versuch: dort verpufft ein
             // `release()`, also ist dieser Versuch der letzte.
             $wiederholbar = $this->job && ! $this->job instanceof SyncJob;
 
-            if ($wiederholbar && $attempt < $this->tries) {
+            if ($wiederholbar && $attempt < self::MAX_ATTEMPTS) {
                 Log::warning('statamic-funnels: a funnel mail could not be sent; it will be retried.', [
                     'delivery' => $delivery->getKey(),
                     'node' => $step->node_key,

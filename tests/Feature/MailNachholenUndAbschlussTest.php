@@ -8,14 +8,18 @@ use Goldnead\StatamicFunnels\Listeners\AdvanceOnPayment;
 use Goldnead\StatamicFunnels\Models\Funnel;
 use Goldnead\StatamicFunnels\Models\FunnelMailDelivery;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicFunnels\Support\FunnelMailRenderer;
 use Goldnead\StatamicFunnels\Tests\Support\WalksAFunnel;
 use Goldnead\StatamicFunnels\Tests\TestCase;
 use Goldnead\StatamicPayments\Events\PaymentPaid;
 use Goldnead\StatamicPayments\Models\Payment;
+use Illuminate\Queue\Jobs\FakeJob;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Mail;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\ExpectationFailedException;
 
 /**
  * Zwei stille Fehler: eine fehlgeschlagene Mail wurde nie wieder gestellt, und
@@ -51,7 +55,8 @@ class MailNachholenUndAbschlussTest extends TestCase
         $this->artisan('funnels:retry-mails')->assertSuccessful();
 
         Bus::assertDispatched(SendFunnelMail::class, fn ($job) => $job->deliveryId === $delivery->id);
-        $this->assertSame(1, $delivery->fresh()->attempts);
+        // Der Befehl zaehlt nicht selbst: gezaehlt wird jeder echte Sendeversuch im Job.
+        $this->assertSame(0, $delivery->fresh()->attempts);
     }
 
     #[Test]
@@ -89,6 +94,55 @@ class MailNachholenUndAbschlussTest extends TestCase
         $this->artisan('funnels:retry-mails')->assertSuccessful();
 
         Bus::assertNotDispatched(SendFunnelMail::class);
+    }
+
+    /** Ein Job auf einer Fake-Queue, dessen Versand immer scheitert. */
+    protected function scheiterndenVersandLaufenLassen(FunnelMailDelivery $delivery): FakeJob|SendFunnelMail
+    {
+        $job = (new SendFunnelMail($delivery->id))->withFakeQueueInteractions();
+        $renderer = \Mockery::mock(FunnelMailRenderer::class);
+        $renderer->shouldReceive('render')->andReturn(['subject' => 'Hallo', 'html' => '<p>Hallo</p>']);
+        $job->handle($renderer);
+
+        return $job;
+    }
+
+    #[Test]
+    public function eine_mail_scheitert_insgesamt_nach_hoechstens_drei_versuchen(): void
+    {
+        $versuche = 0;
+        Mail::shouldReceive('to')->andReturnUsing(function () use (&$versuche) {
+            $versuche++;
+            throw new \RuntimeException('SMTP weg');
+        });
+
+        $funnel = Funnel::create(['handle' => 'kurs', 'title' => 'Kurs', 'published' => true]);
+        $funnel->steps()->create(['node_key' => 'mail_1', 'type' => 'mail', 'label' => 'Mail', 'slug' => null, 'config' => ['recipient' => 'visitor']]);
+        $visit = FunnelVisit::create(['funnel_id' => $funnel->id, 'token' => $this->token, 'email' => 'k@example.com']);
+        $delivery = FunnelMailDelivery::create(['visit_id' => $visit->id, 'funnel_id' => $funnel->id, 'node_key' => 'mail_1', 'queued_at' => now()]);
+
+        // Erster Lauf (Job mit Backoff) und danach alle Nachhol-Laeufe, solange etwas eingereiht wird.
+        for ($runde = 0; $runde < 12; $runde++) {
+            $delivery->refresh();
+            if ($delivery->sent_at || ($delivery->failed_at === null && $runde > 0 && $delivery->attempts >= 3)) {
+                break;
+            }
+            $job = $this->scheiterndenVersandLaufenLassen($delivery);
+            $delivery->refresh();
+            if ($delivery->failed_at === null) {
+                continue; // freigegeben, naechster Versuch im Backoff
+            }
+            Bus::fake();
+            $this->artisan('funnels:retry-mails', ['--min-age' => 0])->assertSuccessful();
+            try {
+                Bus::assertNotDispatched(SendFunnelMail::class);
+                break;
+            } catch (ExpectationFailedException) {
+                // wurde erneut eingereiht, der naechste Durchlauf simuliert den Job
+            }
+        }
+
+        $this->assertSame(3, $versuche);
     }
 
     #[Test]
