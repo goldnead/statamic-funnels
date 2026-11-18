@@ -5,6 +5,7 @@ namespace Goldnead\StatamicFunnels\Listeners;
 use Goldnead\StatamicFunnels\Events\FunnelOfferAccepted;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicPayments\Events\PaymentPaid;
 use Goldnead\StatamicPayments\Models\Payment;
 use Illuminate\Support\Facades\DB;
@@ -82,12 +83,32 @@ class AdvanceOnPayment
                 $visit->forceFill(['current_node_key' => $next->node_key])->save();
             }
 
+            // End of the path: like the ordinary walk (`advance()`, the page of
+            // a finish step) the visit is closed here. A buyer who closes the
+            // tab after paying never opens the thank-you page.
+            $closing = ! $next ? $step : ($next->type === 'finish' ? $next : null);
+
             // After the commit, so a listener never sees a purchase that is
             // rolled back a moment later; inside a caller's transaction, after
-            // the outermost one. The listeners (mail, LeadHub, webhooks) guard
+            // the outermost one. That goes for closing the visit too:
+            // `complete()` fires FunnelCompleted, which must not run inside
+            // the transaction. The listeners (mail, LeadHub, webhooks) guard
             // themselves; if one throws anyway, the purchase stays recorded and
             // the failure goes to the log instead of vanishing behind the guard.
-            DB::afterCommit(function () use ($visit, $step, $payment): void {
+            DB::afterCommit(function () use ($visit, $step, $payment, $closing): void {
+                if ($closing) {
+                    try {
+                        app(FunnelWalk::class)->complete($visit, $closing);
+                    } catch (Throwable $e) {
+                        Log::error('statamic-funnels: the purchase was recorded, but closing the funnel visit failed.', [
+                            'payment_id' => $payment->getKey(),
+                            'visit_id' => $visit->getKey(),
+                            'node_key' => $closing->node_key,
+                            'exception' => $e,
+                        ]);
+                    }
+                }
+
                 try {
                     FunnelOfferAccepted::dispatch($visit->fresh() ?? $visit, $step, $payment);
                 } catch (Throwable $e) {
