@@ -55,12 +55,12 @@ class AdvanceOnPayment
         // Record and advance in one transaction. Written separately, a save
         // that threw after the ACCEPTED row was in would leave a purchase that
         // looks handled, and the guard below would refuse every redelivery.
-        $advanced = DB::transaction(function () use ($visit, $step, $payment): bool {
+        DB::transaction(function () use ($visit, $step, $payment): void {
             // Once. A provider redelivers by design, and a funnel that advanced
             // per delivery would march somebody through three steps for one
             // purchase.
             if ($visit->events()->where('node_key', $step->node_key)->where('event', FunnelStepEvent::ACCEPTED)->exists()) {
-                return false;
+                return;
             }
 
             // The read above is the fast path; the unique `once_key` decides.
@@ -69,7 +69,7 @@ class AdvanceOnPayment
             if (! $visit->recordOnce($step->node_key, FunnelStepEvent::ACCEPTED, [
                 'payment_id' => $payment->getKey(),
             ])) {
-                return false;
+                return;
             }
 
             // Move the walk on as well as noting it. The buyer is on their way
@@ -82,27 +82,24 @@ class AdvanceOnPayment
                 $visit->forceFill(['current_node_key' => $next->node_key])->save();
             }
 
-            return true;
+            // After the commit, so a listener never sees a purchase that is
+            // rolled back a moment later; inside a caller's transaction, after
+            // the outermost one. The listeners (mail, LeadHub, webhooks) guard
+            // themselves; if one throws anyway, the purchase stays recorded and
+            // the failure goes to the log instead of vanishing behind the guard.
+            DB::afterCommit(function () use ($visit, $step, $payment): void {
+                try {
+                    FunnelOfferAccepted::dispatch($visit->fresh() ?? $visit, $step, $payment);
+                } catch (Throwable $e) {
+                    Log::error('statamic-funnels: the purchase was recorded, but a listener of FunnelOfferAccepted failed.', [
+                        'payment_id' => $payment->getKey(),
+                        'visit_id' => $visit->getKey(),
+                        'node_key' => $step->node_key,
+                        'exception' => $e,
+                    ]);
+                }
+            });
         });
-
-        if (! $advanced) {
-            return;
-        }
-
-        // After the commit, so a listener never sees a purchase that is rolled
-        // back a moment later. The listeners (mail, LeadHub, webhooks) guard
-        // themselves; if one throws anyway, the purchase stays recorded and
-        // the failure goes to the log instead of vanishing behind the guard.
-        try {
-            FunnelOfferAccepted::dispatch($visit->fresh() ?? $visit, $step, $payment);
-        } catch (Throwable $e) {
-            Log::error('statamic-funnels: the purchase was recorded, but a listener of FunnelOfferAccepted failed.', [
-                'payment_id' => $payment->getKey(),
-                'visit_id' => $visit->getKey(),
-                'node_key' => $step->node_key,
-                'exception' => $e,
-            ]);
-        }
     }
 
     /**

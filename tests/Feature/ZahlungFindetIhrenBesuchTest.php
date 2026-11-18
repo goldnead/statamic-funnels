@@ -135,6 +135,35 @@ class ZahlungFindetIhrenBesuchTest extends TestCase
     }
 
     #[Test]
+    public function zwei_gleichzeitige_webhooks_ruecken_nur_einmal_vor(): void
+    {
+        [$erste] = $this->upsellVorDemWebhook();
+        Event::fake([FunnelOfferAccepted::class]);
+
+        // Die andere Zustellung schreibt genau zwischen dem Lesen ("noch nicht
+        // da") und dem Schreiben dieser hier, wie zwei Worker im selben Moment.
+        $einmal = true;
+        FunnelStepEvent::creating(function (FunnelStepEvent $row) use (&$einmal) {
+            if ($einmal && $row->event === FunnelStepEvent::ACCEPTED) {
+                $einmal = false;
+                FunnelStepEvent::query()->insert([
+                    'visit_id' => $row->visit_id,
+                    'node_key' => $row->node_key,
+                    'event' => $row->event,
+                    'once_key' => $row->visit_id.':'.$row->node_key.':'.$row->event,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        });
+
+        event(new PaymentPaid($erste->fresh()));
+
+        $this->assertSame(1, $this->besuch()->events()->where('event', FunnelStepEvent::ACCEPTED)->count(), 'Zwei ACCEPTED fuer eine Zahlung.');
+        Event::assertNotDispatched(FunnelOfferAccepted::class);
+    }
+
+    #[Test]
     public function scheitert_das_vorruecken_bleibt_der_kauf_nicht_als_angenommen_stehen(): void
     {
         [$erste] = $this->upsellVorDemWebhook();
