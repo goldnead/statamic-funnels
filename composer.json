@@ -14,7 +14,7 @@
     "goldnead/statamic-brand-context": "^1.27",
     "goldnead/statamic-flow-canvas": "^1.6.1",
     "goldnead/statamic-offers": "^1.15",
-    "goldnead/statamic-payments": "^1.25"
+    "goldnead/statamic-payments": "^1.30"
   },
   "require-dev": {
     "larastan/larastan": "^3.0",
