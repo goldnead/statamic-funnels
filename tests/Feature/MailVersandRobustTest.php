@@ -184,7 +184,9 @@ class MailVersandRobustTest extends TestCase
         Log::spy();
 
         $job = (new SendFunnelMail($delivery->id))->withFakeQueueInteractions();
-        $job->job->attempts = $job->tries;
+        // Gezaehlt wird in der Zeile: zwei Versuche liegen hinter uns, dies ist der dritte.
+        $delivery->forceFill(['attempts' => SendFunnelMail::MAX_ATTEMPTS - 1])->save();
+        $job->job->attempts = 1;
         $job->handle(app(FunnelMailRenderer::class));
 
         $job->assertNotReleased();
