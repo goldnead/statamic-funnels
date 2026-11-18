@@ -118,6 +118,37 @@ class MailVersandRobustTest extends TestCase
     }
 
     #[Test]
+    public function wirft_das_notieren_nach_dem_versand_wird_nicht_noch_einmal_verschickt(): void
+    {
+        Mail::fake();
+        $funnel = $this->funnel();
+        $visit = $this->visit($funnel);
+        $delivery = FunnelMailDelivery::create([
+            'visit_id' => $visit->id, 'funnel_id' => $funnel->id, 'node_key' => 'mail_a',
+            'template' => 'willkommen', 'queued_at' => now(),
+        ]);
+
+        // Die Datenbank bricht genau beim Notieren von sent_at weg.
+        FunnelMailDelivery::saving(function (FunnelMailDelivery $row) {
+            if ($row->isDirty('sent_at') && $row->sent_at !== null) {
+                throw new RuntimeException('db weg beim notieren');
+            }
+        });
+
+        Log::spy();
+
+        $job = (new SendFunnelMail($delivery->id))->withFakeQueueInteractions();
+        $job->job->attempts = 1;
+        $job->handle(app(FunnelMailRenderer::class));
+
+        Mail::assertSentCount(1);
+        $job->assertNotReleased();
+        $job->assertNotFailed();
+        $this->assertNull($delivery->fresh()->failed_at, 'Eine verschickte Mail ist kein Fehlschlag.');
+        Log::shouldHaveReceived('error')->withArgs(fn ($m) => str_contains($m, 'marking it as sent failed'))->once();
+    }
+
+    #[Test]
     public function auf_der_sync_queue_ist_der_erste_versuch_der_letzte(): void
     {
         $funnel = $this->funnel();

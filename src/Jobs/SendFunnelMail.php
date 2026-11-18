@@ -122,7 +122,19 @@ class SendFunnelMail implements ShouldQueue
             return;
         }
 
-        $delivery->markSent($to);
+        // Die Mail ist draussen. Wirft jetzt das Notieren, darf daraus kein
+        // zweiter Versuch werden: ein Retry schickte dieselbe Mail noch einmal.
+        // Also ins Log, nicht nach aussen.
+        try {
+            $delivery->markSent($to);
+        } catch (Throwable $e) {
+            Log::error('statamic-funnels: a funnel mail was sent, but marking it as sent failed; it will not be retried.', [
+                'delivery' => $delivery->getKey(),
+                'node' => $step->node_key,
+                'to' => $to,
+                'exception' => $e,
+            ]);
+        }
     }
 
     /**
