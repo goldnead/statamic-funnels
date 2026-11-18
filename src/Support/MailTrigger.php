@@ -7,6 +7,7 @@ use Goldnead\StatamicFunnels\Models\FunnelMailDelivery;
 use Goldnead\StatamicFunnels\Models\FunnelStep;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
 use Goldnead\StatamicFunnels\Nodes\MailStep;
+use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -40,18 +41,33 @@ class MailTrigger
         $queued = 0;
 
         try {
-            foreach ($visit->funnel->mailStepsFrom($parent->node_key, $output) as $mail) {
-                if ($this->queue($visit, $mail)) {
-                    $queued++;
-                }
-            }
+            $mails = $visit->funnel->mailStepsFrom($parent->node_key, $output);
         } catch (Throwable $e) {
-            Log::warning('statamic-funnels: a mail node could not be queued; the walk continues.', [
+            Log::warning('statamic-funnels: the mail nodes of a step could not be read; the walk continues.', [
                 'visit' => $visit->getKey(),
                 'step' => $parent->node_key,
                 'output' => $output,
                 'exception' => $e->getMessage(),
             ]);
+
+            return 0;
+        }
+
+        // Je Mail einzeln: scheitert die erste, geht die zweite trotzdem raus.
+        foreach ($mails as $mail) {
+            try {
+                if ($this->queue($visit, $mail)) {
+                    $queued++;
+                }
+            } catch (Throwable $e) {
+                Log::warning('statamic-funnels: a mail node could not be queued; the walk continues.', [
+                    'visit' => $visit->getKey(),
+                    'step' => $parent->node_key,
+                    'node' => $mail->node_key,
+                    'output' => $output,
+                    'exception' => $e->getMessage(),
+                ]);
+            }
         }
 
         return $queued;
@@ -88,8 +104,30 @@ class MailTrigger
 
         $delay = MailStep::delaySeconds((array) ($mail->config ?? []));
 
-        SendFunnelMail::dispatch($delivery->getKey())
-            ->delay($delay > 0 ? now()->addSeconds($delay) : null);
+        // Die Zeile steht schon. Kommt der Job nicht in die Warteschlange
+        // (Redis weg, Tabelle fehlt), muss sie das sagen; sonst zeigt der
+        // Editor „ausgeloest" fuer eine Mail, die nie jemand verschickt, und
+        // `firstOrCreate` oben sperrt jeden zweiten Anlauf.
+        //
+        // Ueber den Dispatcher statt `SendFunnelMail::dispatch()`: dessen
+        // PendingDispatch stellt den Job erst im Destruktor, und ein Fehler
+        // dort floege an diesem catch vorbei.
+        try {
+            app(Dispatcher::class)->dispatch(
+                (new SendFunnelMail($delivery->getKey()))->delay($delay > 0 ? now()->addSeconds($delay) : null),
+            );
+        } catch (Throwable $e) {
+            $delivery->markFailed($e->getMessage());
+
+            Log::error('statamic-funnels: a funnel mail could not be queued and is marked as failed.', [
+                'delivery' => $delivery->getKey(),
+                'visit' => $visit->getKey(),
+                'node' => $mail->node_key,
+                'exception' => $e,
+            ]);
+
+            return false;
+        }
 
         return true;
     }
