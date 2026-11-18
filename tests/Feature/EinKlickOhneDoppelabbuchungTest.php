@@ -135,6 +135,53 @@ class EinKlickOhneDoppelabbuchungTest extends TestCase
         Exceptions::assertReported(fn (RuntimeException $e) => $e->getMessage() === 'nach der Abbuchung');
     }
 
+    /**
+     * Ein FollowUp, das eine Gratis-Zeile anlegt (der Gutschein deckt alles)
+     * und wirft, bevor `fulfilFree()` sie bezahlt meldet.
+     */
+    protected function wirftAufDemGratisWeg(): void
+    {
+        $this->app->instance(FollowUp::class, new class($this->gateway) extends FollowUp
+        {
+            public function accept(Payment $original, string $productHandle, array $context = [], array|PaymentDetails $details = [], ?string $buyerEmail = null, ?Discount $discount = null): ?Payment
+            {
+                $gratis = $original->replicate();
+                $gratis->forceFill([
+                    'provider' => 'free',
+                    'provider_id' => 'free-'.uniqid(),
+                    'checkout_key' => null,
+                    'product' => $productHandle,
+                    'amount_cent' => 0,
+                    'status' => Payment::STATUS_INITIATED,
+                    'paid_at' => null,
+                    'fulfilled_at' => null,
+                    'parent_payment_id' => $original->getKey(),
+                ])->save();
+
+                throw new RuntimeException('gratis geworfen');
+            }
+        });
+    }
+
+    #[Test]
+    public function eine_unbezahlte_gratis_zeile_laesst_nicht_auf_einen_webhook_warten(): void
+    {
+        $this->funnel();
+        $this->wirftAufDemGratisWeg();
+        $this->paysOnce('erste@example.com');
+        Exceptions::fake();
+
+        $this->asVisitor()->get('/f/fruehlingskurs/noch-etwas');
+        $antwort = $this->asVisitor()->post('/f/fruehlingskurs/offer_2/advance', ['accept' => '1', 'confirmed' => '1']);
+
+        // Kein Anbieter, kein Webhook, nichts belastet: Warten hiesse fuer
+        // immer warten. Es geht ueber die Kasse weiter.
+        $antwort->assertSessionMissing('statamic-funnels.waiting');
+        $this->assertStringContainsString('checkout.example', (string) $antwort->headers->get('Location'));
+
+        Exceptions::assertReported(fn (RuntimeException $e) => $e->getMessage() === 'gratis geworfen');
+    }
+
     #[Test]
     public function wirft_es_vor_der_abbuchung_geht_es_weiter_ueber_die_kasse(): void
     {
