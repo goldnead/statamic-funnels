@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.40.0 — 2026-11-18
+
+### Added
+
+- `funnels:retry-mails` (options `--max-tries=3`, `--min-age=10`, scheduled every 15 minutes with the addon's other jobs) puts failed funnel mails back on the queue, a mail waiting in its backoff at most once. A mail is tried at most three times in total (`SendFunnelMail::MAX_ATTEMPTS`); the new column `attempts` on `funnel_mail_deliveries` counts every real send attempt. Migration `2026_11_18_100000_add_attempts_to_funnel_mail_deliveries_table`.
+
+### Changed
+
+- A funnel mail either goes out or stands as a failure in the delivery table; a failing `markSent` after the send no longer causes a second send.
+- `FunnelCompleted` fires after the transaction has committed (`DB::afterCommit`), also when two webhooks arrive at the same time. A purchase that arrives by webhook closes its funnel.
+
+### Fixed
+
+- A webhook finds its visit again after an upsell click, and an unpaid free line no longer makes a funnel wait for a webhook.
+- After a one-click charge the upsell does not open a second checkout path.
+
+### Upgrading
+
+- Run `php artisan migrate` (one new column `attempts`, default 0, no data change). Requires statamic-payments 1.30 or newer. No new config key. The retry runs by itself every 15 minutes as soon as the host runs `schedule:run`.
+
 ## 1.39.1 — 2026-11-17
 
 ### Fixed
