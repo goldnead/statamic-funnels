@@ -805,17 +805,54 @@ class AdvanceController
                 $args[] = $basket->discount();
             }
 
+            // Die hoechste Zahlungs-ID vor dem Versuch: was danach unter dieser
+            // Erstzahlung fuer dieses Produkt entsteht, kommt aus genau diesem
+            // Klick und aus keinem frueheren.
+            $vorher = (int) Payment::query()->max('id');
+
             try {
                 $payment = $this->followUp->accept(...$args);
             } catch (Throwable $e) {
-                // Wirft der Ein-Klick-Weg, ist das wie eine Ablehnung: Code
-                // zurueck, Grund ins Log, weiter ueber die Kasse.
-                Log::warning('statamic-funnels: der Ein-Klick-Kauf hat geworfen, es geht ueber die Kasse weiter.', [
-                    'funnel' => $funnel->handle,
-                    'step' => $step->node_key,
-                    'error' => $e->getMessage(),
-                ]);
-                $payment = null;
+                // Ein Wurf ist keine Ablehnung (die kommt als `null`), sondern
+                // ein Fehler, und der gehoert in die Fehlerberichte.
+                report($e);
+
+                // **Erst nachsehen, ob schon belastet wurde.** `accept()` legt
+                // die Zeile an, ruft den Anbieter und arbeitet danach weiter.
+                // Wirft es erst dann, liegt das Geld schon beim Anbieter, und
+                // die Kasse unten liesse dieselbe Sache ein zweites Mal zahlen.
+                // Eine Zeile, die nicht `failed` ist, heisst: der Anbieter hat
+                // sie womoeglich angenommen; ihr Webhook entscheidet, wie auf
+                // dem Weg ohne Fehler.
+                $payment = Payment::query()
+                    ->where('id', '>', $vorher)
+                    ->where('parent_payment_id', $previous->getKey())
+                    ->where('product', $buyHandle)
+                    ->where('status', '!=', Payment::STATUS_FAILED)
+                    ->latest('id')
+                    ->first();
+
+                // Eine Gratis-Zeile (der Gutschein deckte alles) kennt keinen
+                // Anbieter und keinen Webhook. Ist sie nicht bezahlt, wurde
+                // nichts belastet, und Warten hiesse fuer immer warten.
+                if ($payment && $payment->provider === 'free' && ! $payment->isPaid()) {
+                    $payment = null;
+                }
+
+                // Steht noch der Platzhalter statt der Kennung des Anbieters da,
+                // ist offen, ob er belastet hat. Lieber kein zweiter Kassenweg
+                // als zweimal Geld; im Log steht es als unklar.
+                $unklar = $payment && str_starts_with((string) $payment->provider_id, Payment::PLACEHOLDER_PROVIDER_PREFIX);
+
+                Log::warning($payment
+                    ? 'statamic-funnels: der Ein-Klick-Kauf hat nach dem Anlegen der Zahlung geworfen; kein zweiter Kassenweg, der Webhook entscheidet.'
+                    : 'statamic-funnels: der Ein-Klick-Kauf hat geworfen, es geht ueber die Kasse weiter.', [
+                        'funnel' => $funnel->handle,
+                        'step' => $step->node_key,
+                        'payment_id' => $payment?->getKey(),
+                        'charge_unclear' => $unklar,
+                        'error' => $e->getMessage(),
+                    ]);
             }
 
             if (! $payment && $mitRabatt) {
