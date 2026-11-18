@@ -31,6 +31,7 @@ use Goldnead\StatamicFunnels\Support\Settings;
 use Goldnead\StatamicFunnels\Support\Setup;
 use Goldnead\StatamicFunnels\Thumbnails\Thumbnails;
 use Goldnead\StatamicPayments\Cp\SuiteNav;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
@@ -63,6 +64,15 @@ class ServiceProvider extends AddonServiceProvider
     protected $modifiers = [
         Modifiers\FunnelsMarkdown::class,
     ];
+
+    /**
+     * Fehlgeschlagene Funnel-Mails stellt der Scheduler erneut, begrenzt durch
+     * die Versuchszahl des Befehls. Greift, sobald die Site `schedule:run` hat.
+     */
+    protected function schedule(Schedule $schedule): void
+    {
+        $schedule->command('funnels:retry-mails')->everyFifteenMinutes()->withoutOverlapping();
+    }
 
     public function register()
     {

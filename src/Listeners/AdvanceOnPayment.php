@@ -5,6 +5,7 @@ namespace Goldnead\StatamicFunnels\Listeners;
 use Goldnead\StatamicFunnels\Events\FunnelOfferAccepted;
 use Goldnead\StatamicFunnels\Models\FunnelStepEvent;
 use Goldnead\StatamicFunnels\Models\FunnelVisit;
+use Goldnead\StatamicFunnels\Support\FunnelWalk;
 use Goldnead\StatamicPayments\Events\PaymentPaid;
 
 /**
@@ -56,6 +57,15 @@ class AdvanceOnPayment
 
         if ($next) {
             $visit->forceFill(['current_node_key' => $next->node_key])->save();
+        }
+
+        // Ende des Wegs: wie im normalen Durchlauf (`advance()`, Seite eines
+        // Finish-Schritts) wird der Besuch hier abgeschlossen. Wer nach dem
+        // Kauf den Tab schliesst, oeffnet die Danke-Seite nie.
+        if (! $next) {
+            app(FunnelWalk::class)->complete($visit, $step);
+        } elseif ($next->type === 'finish') {
+            app(FunnelWalk::class)->complete($visit, $next);
         }
 
         FunnelOfferAccepted::dispatch($visit->fresh() ?? $visit, $step, $event->payment);
