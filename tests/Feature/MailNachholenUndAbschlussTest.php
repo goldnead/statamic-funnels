@@ -2,6 +2,7 @@
 
 namespace Goldnead\StatamicFunnels\Tests\Feature;
 
+use Goldnead\StatamicFunnels\Events\FunnelCompleted;
 use Goldnead\StatamicFunnels\Jobs\SendFunnelMail;
 use Goldnead\StatamicFunnels\Listeners\AdvanceOnPayment;
 use Goldnead\StatamicFunnels\Models\Funnel;
@@ -12,6 +13,7 @@ use Goldnead\StatamicFunnels\Tests\TestCase;
 use Goldnead\StatamicPayments\Events\PaymentPaid;
 use Goldnead\StatamicPayments\Models\Payment;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -53,6 +55,20 @@ class MailNachholenUndAbschlussTest extends TestCase
     }
 
     #[Test]
+    public function eine_mail_im_backoff_wird_nicht_ein_zweites_mal_gestellt(): void
+    {
+        Bus::fake();
+        $this->delivery();
+
+        // Der Job laeuft (hier: noch nicht) und wartet im Backoff von
+        // SendFunnelMail; der naechste Lauf darf ihn nicht verdoppeln.
+        $this->artisan('funnels:retry-mails', ['--min-age' => 0])->assertSuccessful();
+        $this->artisan('funnels:retry-mails', ['--min-age' => 0])->assertSuccessful();
+
+        Bus::assertDispatchedTimes(SendFunnelMail::class, 1);
+    }
+
+    #[Test]
     public function nach_der_grenze_wird_nicht_mehr_eingereiht(): void
     {
         Bus::fake();
@@ -86,5 +102,27 @@ class MailNachholenUndAbschlussTest extends TestCase
         $this->bezahlen(Payment::query()->firstOrFail());
 
         $this->assertNotNull($this->besuch()->completed_at);
+    }
+
+    #[Test]
+    public function der_abschluss_laeuft_erst_nach_dem_commit_des_kaufs(): void
+    {
+        Event::listen(PaymentPaid::class, [AdvanceOnPayment::class, 'handle']);
+        $this->kasse();
+
+        $this->bisZurKasse();
+        $this->asVisitor()->post('/f/kurs/kasse/advance', ['accept' => '1', 'confirmed' => '1']);
+
+        // Der Test selbst laeuft in einer Transaktion; maßgeblich ist, dass
+        // der Listener keine zusaetzliche, noch offene Ebene sieht.
+        $basis = DB::transactionLevel();
+        $ebenen = [];
+        Event::listen(FunnelCompleted::class, function () use (&$ebenen) {
+            $ebenen[] = DB::transactionLevel();
+        });
+
+        $this->bezahlen(Payment::query()->firstOrFail());
+
+        $this->assertSame([$basis], $ebenen, 'FunnelCompleted muss genau einmal und ausserhalb der Kauf-Transaktion laufen.');
     }
 }

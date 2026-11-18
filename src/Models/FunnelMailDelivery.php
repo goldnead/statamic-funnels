@@ -27,6 +27,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $sent_at
  * @property Carbon|null $failed_at
  * @property string|null $error
+ * @property int $attempts
  */
 class FunnelMailDelivery extends Model
 {

@@ -40,7 +40,19 @@ class RetryFailedMails extends Command
             ->where('failed_at', '<=', now()->subMinutes($minAge))
             ->orderBy('id')
             ->each(function (FunnelMailDelivery $delivery) use (&$count) {
-                $delivery->increment('attempts');
+                // Die Zeile gilt ab jetzt wieder als unterwegs: `failed_at`
+                // weg, `queued_at` neu. Der Job hat selbst bis zu drei
+                // Versuche mit Backoff (SendFunnelMail::BACKOFF, 60 s + 300 s);
+                // solange er laeuft oder wartet, steht die Zeile nicht als
+                // fehlgeschlagen da, und dieser Befehl fasst sie nicht an.
+                // Erst wenn der Job endgueltig aufgibt (`markFailed`), kommt
+                // sie wieder in Frage. Je Mail also hoechstens `--max-tries`
+                // Neustarts mal drei Versuche, nie zwei Quellen gleichzeitig.
+                $delivery->forceFill([
+                    'attempts' => $delivery->attempts + 1,
+                    'failed_at' => null,
+                    'queued_at' => now(),
+                ])->save();
                 SendFunnelMail::dispatch($delivery->getKey());
                 $count++;
             });
